@@ -1,0 +1,615 @@
+<title>Order Label Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<style>
+/* Layout: the order on the left (slip upload, product lines, options), the printed sheets on the right
+   as they will come out of the printer. The accent follows the chosen brand: Deccan red, Millet Bank olive, slate for others. */
+:root {
+  --bg: #eef0ee;
+  --surface: #ffffff;
+  --ink: #1a1d1b;
+  --muted: #5e6660;
+  --line: #d6dbd7;
+  --field: #f6f7f6;
+  --mb: #4b5d27;
+  --dc: #9b1c23;
+  --ot: #3d4f63;
+  --accent: var(--mb);
+  --on-accent: #ffffff;
+  --ok: #1f7a4d;
+  --warn: #a35b00;
+  --warn-soft: #fdf1dc;
+  --f-display: "Archivo", "Arial Narrow", Arial, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121513; --surface: #1b1f1c; --ink: #e7ebe8; --muted: #9aa49d; --line: #2e3530; --field: #232824;
+    --mb: #9cb565; --dc: #e0656b; --ot: #8fa6bf; --ok: #5fcf96; --warn: #f0b456; --warn-soft: #3a2b12; --on-accent: #111412; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121513; --surface: #1b1f1c; --ink: #e7ebe8; --muted: #9aa49d; --line: #2e3530; --field: #232824;
+  --mb: #9cb565; --dc: #e0656b; --ot: #8fa6bf; --ok: #5fcf96; --warn: #f0b456; --warn-soft: #3a2b12; --on-accent: #111412; color-scheme: dark;
+}
+.app[data-brand="deccan"] { --accent: var(--dc); }
+.app[data-brand="other"] { --accent: var(--ot); }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app { padding-inline: 16px; padding-block: 18px 40px; max-width: 1480px; margin: 0 auto; display: grid; gap: 16px; }
+
+header.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+.title h1 { margin: 0; font-family: var(--f-display); font-weight: 800; font-stretch: 75%; font-size: 30px; line-height: 1; letter-spacing: .01em; text-transform: uppercase; }
+.title p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.brands { display: flex; gap: 8px; flex-wrap: wrap; }
+.brands button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 14px 6px 8px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 600; }
+.brands button img { height: 38px; width: auto; border-radius: 4px; background: #fff; }
+.brands button .noimg { width: 38px; height: 38px; border-radius: 4px; border: 1.5px dashed var(--line); display: grid; place-items: center; font-size: 11px; color: var(--muted); }
+.brands button[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.stack { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+h2 { margin: 0; font-family: var(--f-display); font-weight: 700; font-stretch: 80%; font-size: 19px; text-transform: uppercase; letter-spacing: .02em; }
+.hint { margin: 0; color: var(--muted); font-size: 13px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+.drop { display: grid; gap: 4px; place-items: center; text-align: center; padding: 18px 12px; border: 1.5px dashed var(--line); border-radius: 8px; background: var(--field); cursor: pointer; }
+.drop.over { border-color: var(--accent); }
+.drop strong { font-weight: 600; }
+.drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.status { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+.status.warn { color: var(--warn); }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .spinner { animation: spin .8s linear infinite; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.slipfacts { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+.slipfacts b { font-weight: 600; }
+.check { font-size: 13px; padding: 6px 10px; border-radius: 6px; }
+.check.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.check.bad { color: var(--warn); background: var(--warn-soft); }
+
+input[type="text"], input[type="number"], input[type="search"], select, textarea { border: 1px solid var(--line); border-radius: 6px; background: var(--field); padding: 7px 9px; min-width: 0; }
+textarea { width: 100%; resize: vertical; min-height: 54px; }
+.orderhead { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+#orderName { flex: 1; min-width: 220px; }
+.example { font-size: 12px; color: var(--accent); border: 1px solid var(--accent); border-radius: 10px; padding: 1px 8px; }
+.adder { position: relative; display: flex; gap: 8px; flex-wrap: wrap; }
+#search { flex: 1; min-width: 220px; }
+.results { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; width: min(560px, 100%); max-height: 300px; overflow-y: auto; margin: 0; padding: 4px; list-style: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 28px rgb(0 0 0 / .18); }
+.results li { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; gap: 10px; padding: 6px 8px; border-radius: 5px; cursor: pointer; align-items: baseline; }
+.results li.hl { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.results .code { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.results .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.results .nm small { color: var(--muted); }
+.results .sz { font-family: var(--f-mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.btn { border: 1px solid var(--line); background: var(--field); border-radius: 6px; padding: 7px 12px; font-weight: 500; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.tablewrap { overflow-x: auto; }
+table.lines { width: 100%; min-width: 580px; table-layout: fixed; border-collapse: collapse; font-size: 13.5px; }
+table.lines th:last-child { width: 40px; }
+table.lines th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.lines td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.lines td input { width: 100%; }
+table.lines .num { width: 96px; }
+table.lines .num input { text-align: right; font-variant-numeric: tabular-nums; }
+table.lines .sz { width: 120px; }
+table.lines .code { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); display: block; margin-top: 2px; }
+table.lines .flag { color: var(--warn); font-size: 11.5px; display: block; margin-top: 2px; }
+table.lines .rm { border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 6px; }
+table.lines tfoot td { font-weight: 600; border-bottom: 0; }
+.empty { color: var(--muted); padding: 14px 6px; text-align: center; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+details.card > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+details.card > summary::after { content: "+"; font-family: var(--f-mono); color: var(--muted); }
+details.card[open] > summary::after { content: "–"; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 20px; }
+.opt { display: grid; gap: 6px; align-content: start; }
+.opt > span { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.opt label { display: flex; gap: 8px; align-items: center; }
+.nudge { display: flex; gap: 8px; align-items: center; }
+.nudge input { width: 76px; }
+
+aside.preview { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); display: grid; gap: 12px; min-width: 0; }
+@media (max-width: 1000px) { aside.preview { position: static; } }
+.previewhead { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.count { font-family: var(--f-display); font-weight: 700; font-stretch: 80%; font-size: 20px; }
+.count small { font-family: var(--f-body); font-weight: 400; font-size: 13px; color: var(--muted); }
+.pages { display: grid; gap: 12px; max-height: calc(100vh - 170px); overflow-y: auto; padding: 2px; }
+@media (max-width: 1000px) { .pages { max-height: none; } }
+.page { position: relative; background: #fff; border-radius: 2px; box-shadow: 0 1px 3px rgb(0 0 0 / .25), 0 6px 18px rgb(0 0 0 / .08); }
+.page canvas { display: block; width: 100%; height: auto; }
+.page .pno { position: absolute; right: 8px; bottom: 6px; font-size: 11px; color: #777; font-family: var(--f-mono); }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 9px 14px; border-radius: 6px; font-size: 13px; max-width: calc(100% - 32px); z-index: 50; }
+</style>
+
+<div class="app" id="app" data-brand="milletbank">
+  <header class="top">
+    <div class="title">
+      <h1>Order Label Maker</h1>
+      <p>3 × 2 in labels, 10 per US Letter sheet. Print at Actual size (100%).</p>
+    </div>
+    <div class="brands" role="radiogroup" aria-label="Brand" id="brands"></div>
+  </header>
+
+  <div class="cols">
+    <div class="stack">
+      <section class="card" aria-labelledby="slipH">
+        <h2 id="slipH">Read an order slip</h2>
+        <label class="drop" id="drop" for="slipFile">
+          <strong>Drop the order slip here, or choose a file</strong>
+          <span class="hint">PDF, JPG or PNG. Claude reads the products and cases and fills in the order below.</span>
+          <input type="file" id="slipFile" accept="application/pdf,.pdf,image/jpeg,image/png,image/webp">
+        </label>
+        <div class="status" id="slipStatus" hidden></div>
+        <div id="slipResult" hidden></div>
+      </section>
+
+      <section class="card" aria-labelledby="orderH">
+        <div class="orderhead">
+          <h2 id="orderH">Order</h2>
+          <span class="example" id="exampleTag" hidden>Example order</span>
+          <input type="text" id="orderName" placeholder="Order name, e.g. Order 6 – Balaji Super Market" aria-label="Order name (used for the file name)">
+          <button class="btn" id="clearBtn">Clear order</button>
+        </div>
+        <div class="adder">
+          <input type="search" id="search" autocomplete="off" placeholder="Add a product: type a name or code" aria-label="Add a product" aria-controls="results">
+          <button class="btn" id="addCustom">Add an unlisted product</button>
+          <ul class="results" id="results" hidden role="listbox"></ul>
+        </div>
+        <div class="tablewrap">
+          <table class="lines">
+            <thead><tr><th>Product name on label</th><th class="sz">Size</th><th class="num">Units / case</th><th class="num">Labels</th><th aria-label="Remove"></th></tr></thead>
+            <tbody id="lines"></tbody>
+            <tfoot><tr><td colspan="2">Total</td><td class="num tnum" id="totUnits"></td><td class="num tnum" id="totLabels"></td><td></td></tr></tfoot>
+          </table>
+        </div>
+        <p class="hint">One label per case. Change "Labels" to print more or fewer.</p>
+      </section>
+
+      <details class="card" id="optsCard" open>
+        <summary><h2>Label options</h2></summary>
+        <div class="opts">
+          <div class="opt"><span>Units per case</span>
+            <label><input type="radio" name="units" id="unitsPrint" value="print"> Print the number</label>
+            <label><input type="radio" name="units" id="unitsBlank" value="blank"> Leave a blank to write in</label>
+          </div>
+          <div class="opt"><span>Extra lines</span>
+            <label><input type="checkbox" id="showGroup"> Product group above the name</label>
+            <label><input type="checkbox" id="showCode"> Item code</label>
+            <label><input type="checkbox" id="bbOn"> Best before</label>
+            <input type="text" id="bbText" placeholder="e.g. DEC 2027 (leave empty for a blank)" aria-label="Best before date">
+          </div>
+          <div class="opt"><span>Bottom lines for this brand</span>
+            <textarea id="footer" rows="2" aria-label="Bottom lines" placeholder="e.g. Product of India"></textarea>
+          </div>
+          <div class="opt"><span>Sheet</span>
+            <label for="start">Start at label</label>
+            <select id="start"></select>
+            <span class="hint">Use this on a sheet that already has labels peeled off. Labels count left to right, top to bottom.</span>
+          </div>
+          <div class="opt"><span>Fine-tune position</span>
+            <div class="nudge"><label for="nx">Right</label><input type="number" id="nx" step="0.5" value="0"> mm</div>
+            <div class="nudge"><label for="ny">Down</label><input type="number" id="ny" step="0.5" value="0"> mm</div>
+            <span class="hint">Leave at 0 for your current sheets. Negative numbers move left or up.</span>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <aside class="preview" aria-label="Printed sheets">
+      <div class="previewhead">
+        <div class="count" id="count"></div>
+        <div class="row">
+          <button class="btn" id="alignBtn">Alignment test</button>
+          <button class="btn primary" id="downloadBtn">Download labels PDF</button>
+        </div>
+      </div>
+      <div class="pages" id="pages"></div>
+    </aside>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const DATA = /*DATA*/;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
+             set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} } };
+
+const BRANDS = {
+  milletbank: { name: "Millet Bank", logo: DATA.logos.milletbank, color: [75, 93, 39], footer: "" },
+  deccan: { name: "Deccan", logo: DATA.logos.deccan, color: [155, 28, 35], footer: "Product of India\nDistributed By: Deccan Foods, USA" },
+  other: { name: "Other", logo: null, color: [61, 79, 99], footer: "" },
+};
+const CATALOG = DATA.catalog;
+const BY_ID = new Map(Object.values(CATALOG).flat().map(p => [p.id, p]));
+for (const list of Object.values(CATALOG)) for (const p of list) p.hay = `${p.code} ${p.name} ${p.brand} ${p.cat} ${p.size} ${p.item || ""}`.toLowerCase();
+
+/* Sheet geometry: US Letter, 10 labels of 3 x 2 in, measured from the actual label sheet */
+const SHEET = { w: 215.9, h: 279.4, left: 30.1625, top: 6.35, lw: 76.2, lh: 50.8, gap: 3.175, cols: 2, rows: 5 };
+
+/* ---------- State ---------- */
+const EXAMPLE = [["M1", 2], ["M2", 2], ["M3", 2], ["M4", 2], ["M5", 2], ["M6", 2], ["M12", 2], ["M13", 2], ["M14", 2], ["M15", 2], ["M16", 2], ["M17", 2], ["M20", 1], ["M21", 1], ["M22", 1]];
+const lineFrom = (p, labels) => ({ key: Math.random().toString(36).slice(2), pid: p.id, name: p.name, size: p.size || "", units: p.units ?? "", labels, group: p.cat || "", code: p.code || "" });
+const saved = LS.get("olm.draft", null);
+const st = {
+  brand: saved?.brand || "milletbank",
+  lines: saved?.lines || EXAMPLE.map(([id, n]) => lineFrom(BY_ID.get(id), n)),
+  orderName: saved ? saved.orderName : "Example: Order 5 – Balaji Super Market",
+  example: !saved,
+  ...{ unitsMode: "print", showGroup: true, showCode: false, bbOn: false, bbText: "", footers: {}, nudge: { x: 0, y: 0 } },
+  ...LS.get("olm.settings", {}),
+  start: 1,
+  slip: null,
+};
+const footerFor = b => st.footers[b] ?? BRANDS[b].footer;
+function saveDraft() { if (!st.example) LS.set("olm.draft", { brand: st.brand, lines: st.lines, orderName: st.orderName }); }
+function saveSettings() { LS.set("olm.settings", { unitsMode: st.unitsMode, showGroup: st.showGroup, showCode: st.showCode, bbOn: st.bbOn, bbText: st.bbText, footers: st.footers, nudge: st.nudge }); }
+function touched() { if (st.example) { st.example = false; $("exampleTag").hidden = true; } saveDraft(); schedulePreview(); }
+
+/* ---------- Brand picker ---------- */
+function renderBrands() {
+  $("brands").innerHTML = Object.entries(BRANDS).map(([k, b]) => `<button role="radio" aria-checked="${st.brand === k}" data-brand="${k}">
+    ${b.logo ? `<img src="${b.logo.src}" alt="">` : `<span class="noimg">no logo</span>`}${esc(b.name)}</button>`).join("");
+  $("app").dataset.brand = st.brand;
+  $("footer").value = footerFor(st.brand);
+}
+$("brands").addEventListener("click", e => {
+  const b = e.target.closest("[data-brand]"); if (!b) return;
+  st.brand = b.dataset.brand;
+  if (st.brand === "deccan" && !LS.get("olm.settings", null)) { st.showCode = true; st.bbOn = true; renderOptions(); }
+  renderBrands(); runSearch(); touched();
+});
+
+/* ---------- Order lines ---------- */
+function renderLines() {
+  const tb = $("lines");
+  if (!st.lines.length) { tb.innerHTML = `<tr><td colspan="5" class="empty">No products yet. Read an order slip above, or add products by name or code.</td></tr>`; }
+  else tb.innerHTML = st.lines.map((l, i) => `<tr data-i="${i}">
+    <td><input type="text" data-f="name" value="${esc(l.name)}" aria-label="Product name">
+      ${l.code ? `<span class="code">${esc(l.code)}${l.group ? " · " + esc(l.group) : ""}</span>` : ""}
+      ${l.flag ? `<span class="flag">${esc(l.flag)}</span>` : ""}</td>
+    <td class="sz"><input type="text" data-f="size" value="${esc(l.size)}" aria-label="Size"></td>
+    <td class="num"><input type="number" min="0" data-f="units" value="${esc(l.units)}" aria-label="Units per case"></td>
+    <td class="num"><input type="number" min="0" max="500" data-f="labels" value="${esc(l.labels)}" aria-label="Number of labels"></td>
+    <td><button class="rm" data-rm="${i}" aria-label="Remove ${esc(l.name)}">×</button></td></tr>`).join("");
+  renderTotals();
+}
+function renderTotals() {
+  const labels = st.lines.reduce((a, l) => a + (Math.max(0, parseInt(l.labels) || 0)), 0);
+  const units = st.lines.reduce((a, l) => a + (Math.max(0, parseInt(l.labels) || 0)) * (parseInt(l.units) || 0), 0);
+  $("totLabels").textContent = labels; $("totUnits").textContent = units ? units + " units" : "";
+  const slots = st.start - 1 + labels, sheets = Math.max(1, Math.ceil(slots / 10));
+  $("count").innerHTML = labels ? `${labels} label${labels === 1 ? "" : "s"} <small>on ${sheets} sheet${sheets === 1 ? "" : "s"}</small>` : `No labels <small>add products to the order</small>`;
+  $("downloadBtn").disabled = !labels;
+}
+$("lines").addEventListener("input", e => {
+  const tr = e.target.closest("tr[data-i]"), f = e.target.dataset.f; if (!tr || !f) return;
+  st.lines[+tr.dataset.i][f] = e.target.value; renderTotals(); touched();
+});
+$("lines").addEventListener("click", e => {
+  const b = e.target.closest("[data-rm]"); if (!b) return;
+  st.lines.splice(+b.dataset.rm, 1); renderLines(); touched();
+});
+$("orderName").addEventListener("input", () => { st.orderName = $("orderName").value; touched(); });
+$("clearBtn").addEventListener("click", () => { st.lines = []; st.orderName = ""; $("orderName").value = ""; st.slip = null; $("slipResult").hidden = true; st.example = false; $("exampleTag").hidden = true; renderLines(); saveDraft(); schedulePreview(); $("search").focus(); });
+
+/* ---------- Product search ---------- */
+let hits = [], hl = 0;
+function runSearch() {
+  const q = $("search").value.trim().toLowerCase(), box = $("results");
+  if (!q) { box.hidden = true; return; }
+  const toks = q.split(/\s+/), list = CATALOG[st.brand];
+  hits = list.filter(p => toks.every(t => p.hay.includes(t)))
+    .sort((a, b) => (a.code.toLowerCase() === q ? -1 : 0) - (b.code.toLowerCase() === q ? -1 : 0) || (a.code.toLowerCase().startsWith(q) ? -1 : 0) - (b.code.toLowerCase().startsWith(q) ? -1 : 0))
+    .slice(0, 40);
+  hl = 0;
+  box.innerHTML = hits.length ? hits.map((p, i) => `<li role="option" data-i="${i}" class="${i === hl ? "hl" : ""}"><span class="code">${esc(p.code)}</span><span class="nm">${esc(p.name)} <small>${esc(st.brand === "other" ? p.brand : p.cat)}</small></span><span class="sz">${esc(p.size)}${p.units ? " × " + p.units : ""}</span></li>`).join("")
+    : `<li class="empty">No ${esc(BRANDS[st.brand].name)} product matches “${esc(q)}”. Switch brand above, or add it as an unlisted product.</li>`;
+  box.hidden = false;
+}
+function addProduct(p) {
+  const ex = st.lines.find(l => l.pid === p.id);
+  if (ex) ex.labels = (parseInt(ex.labels) || 0) + 1; else st.lines.push(lineFrom(p, 1));
+  $("search").value = ""; $("results").hidden = true; renderLines(); touched();
+  toast(`Added ${p.name}.`);
+}
+$("search").addEventListener("input", runSearch);
+$("search").addEventListener("keydown", e => {
+  if ($("results").hidden || !hits.length) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); hl = (hl + (e.key === "ArrowDown" ? 1 : -1) + hits.length) % hits.length; [...$("results").children].forEach((li, i) => li.classList.toggle("hl", i === hl)); $("results").children[hl].scrollIntoView({ block: "nearest" }); }
+  if (e.key === "Enter") { e.preventDefault(); addProduct(hits[hl]); }
+  if (e.key === "Escape") $("results").hidden = true;
+});
+$("results").addEventListener("mousedown", e => { const li = e.target.closest("li[data-i]"); if (li) { e.preventDefault(); addProduct(hits[+li.dataset.i]); } });
+document.addEventListener("click", e => { if (!e.target.closest(".adder")) $("results").hidden = true; });
+$("addCustom").addEventListener("click", () => {
+  st.lines.push({ key: Math.random().toString(36).slice(2), pid: null, name: $("search").value.trim() || "New product", size: "", units: "", labels: 1, group: "", code: "" });
+  $("search").value = ""; $("results").hidden = true; renderLines(); touched();
+  const inputs = $("lines").querySelectorAll('input[data-f="name"]'); inputs[inputs.length - 1].select();
+});
+
+/* ---------- Options ---------- */
+function renderOptions() {
+  $("unitsPrint").checked = st.unitsMode === "print"; $("unitsBlank").checked = st.unitsMode === "blank";
+  $("showGroup").checked = st.showGroup; $("showCode").checked = st.showCode; $("bbOn").checked = st.bbOn; $("bbText").value = st.bbText; $("bbText").disabled = !st.bbOn;
+  $("nx").value = st.nudge.x; $("ny").value = st.nudge.y; $("footer").value = footerFor(st.brand);
+  $("start").innerHTML = Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}" ${st.start === i + 1 ? "selected" : ""}>${i + 1}${i === 0 ? " (full sheet)" : ""}</option>`).join("");
+}
+$("optsCard").addEventListener("input", e => {
+  const id = e.target.id;
+  if (e.target.name === "units") st.unitsMode = e.target.value;
+  if (id === "showGroup") st.showGroup = e.target.checked;
+  if (id === "showCode") st.showCode = e.target.checked;
+  if (id === "bbOn") { st.bbOn = e.target.checked; $("bbText").disabled = !st.bbOn; }
+  if (id === "bbText") st.bbText = e.target.value;
+  if (id === "footer") st.footers[st.brand] = e.target.value;
+  if (id === "nx" || id === "ny") st.nudge = { x: parseFloat($("nx").value) || 0, y: parseFloat($("ny").value) || 0 };
+  if (id === "start") { st.start = parseInt(e.target.value) || 1; renderTotals(); }
+  saveSettings(); schedulePreview();
+});
+
+/* ---------- PDF ---------- */
+const PT = 0.3528; // mm per point
+function labelList() {
+  const out = [];
+  for (const l of st.lines) for (let i = 0; i < Math.min(500, Math.max(0, parseInt(l.labels) || 0)); i++) out.push(l);
+  return out;
+}
+function slotXY(i) {
+  const c = i % SHEET.cols, r = Math.floor(i / SHEET.cols) % SHEET.rows;
+  return { x: SHEET.left + st.nudge.x + c * (SHEET.lw + SHEET.gap), y: SHEET.top + st.nudge.y + r * (SHEET.lh + SHEET.gap) };
+}
+// Lay out one label's rows, shrinking everything until it fits inside the label
+function layout(doc, l, brand) {
+  const b = BRANDS[brand], maxW = SHEET.lw - 9, maxH = SHEET.lh - 6.5;
+  const units = parseInt(l.units) || 0, size = (l.size || "").trim().toUpperCase();
+  const printUnits = st.unitsMode === "print" && units > 0;
+  const pack = size ? (printUnits ? `${size} × ${units}` : size) : (printUnits ? `${units} UNITS` : "");
+  let last = null;
+  for (let step = 0; step <= 12; step++) {
+    const s = 1 - step * 0.04, rows = [];
+    const text = (segs, pt, bold, color) => rows.push({ segs, pt: pt * s, bold, color, h: pt * s * PT * 1.18 });
+    if (b.logo) { const h = 11.5 * s; rows.push({ img: b.logo, h, w: h * b.logo.w / b.logo.h }); }
+    if (st.showGroup && l.group) text([l.group.toUpperCase()], 7, true, b.color);
+    doc.setFont("helvetica", "bold");
+    let namePt = 12.5, nameLines;
+    for (; namePt >= 9; namePt -= 0.5) { doc.setFontSize(namePt * s); nameLines = doc.splitTextToSize((l.name || "").toUpperCase(), maxW); if (nameLines.length <= 2) break; }
+    nameLines.slice(0, 3).forEach(n => text([n], namePt, true));
+    if (pack) text([pack], 14, true);
+    if (st.unitsMode === "blank") text(["Units per case: ", { blank: 18 * s }], 9, false);
+    else if (printUnits) text([`${units} units per case`], 9, false);
+    const meta = [];
+    if (st.bbOn) { meta.push("BEST BEFORE: "); meta.push(st.bbText.trim() ? st.bbText.trim().toUpperCase() : { blank: 16 * s }); }
+    if (st.showCode && l.code) { if (meta.length) meta.push("    "); meta.push(`ITEM CODE: ${l.code}`); }
+    if (meta.length) text(meta, 8, false);
+    for (const f of footerFor(brand).split("\n").map(x => x.trim()).filter(Boolean)) text([f], 8, false);
+    const gap = 1.05 * s, total = rows.reduce((a, r) => a + r.h, 0) + gap * (rows.length - 1);
+    last = { rows, total, gap };
+    if (total <= maxH) return last;
+  }
+  return last; // smallest size tried, even if still tight
+}
+function drawLabel(doc, l, brand, x, y) {
+  const { rows, total, gap } = layout(doc, l, brand);
+  const cx = x + SHEET.lw / 2; let cy = y + (SHEET.lh - total) / 2;
+  for (const r of rows) {
+    if (r.img) { doc.addImage(r.img.src, "PNG", cx - r.w / 2, cy, r.w, r.h, brand + "-logo", "FAST"); }
+    else {
+      doc.setFont("helvetica", r.bold ? "bold" : "normal"); doc.setFontSize(r.pt);
+      doc.setTextColor(...(r.color || [20, 20, 20])); doc.setDrawColor(40, 40, 40); doc.setLineWidth(0.25);
+      const widths = r.segs.map(sg => typeof sg === "string" ? doc.getTextWidth(sg) : sg.blank);
+      let sx = cx - widths.reduce((a, w) => a + w, 0) / 2;
+      r.segs.forEach((sg, i) => {
+        if (typeof sg === "string") doc.text(sg, sx, cy, { baseline: "top" });
+        else doc.line(sx, cy + r.h * 0.8, sx + sg.blank, cy + r.h * 0.8);
+        sx += widths[i];
+      });
+    }
+    cy += r.h + gap;
+  }
+}
+function buildPdf(kind) {
+  const doc = new window.jspdf.jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+  doc.setProperties({ title: kind === "align" ? "Label alignment test" : (st.orderName || "Labels") });
+  if (kind === "align") {
+    doc.setLineDashPattern([1.5, 1.5], 0); doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.3);
+    for (let i = 0; i < 10; i++) {
+      const { x, y } = slotXY(i);
+      doc.rect(x, y, SHEET.lw, SHEET.lh);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(150, 150, 150);
+      doc.text(String(i + 1), x + SHEET.lw / 2, y + SHEET.lh / 2 - 2, { align: "center", baseline: "middle" });
+      if (i === 0) { doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.text(["Print on plain paper at Actual size (100%).", "Hold against a label sheet: each box should sit on a label."], x + SHEET.lw / 2, y + SHEET.lh / 2 + 6, { align: "center", baseline: "top" }); }
+    }
+    return doc;
+  }
+  const list = labelList();
+  let slot = st.start - 1;
+  list.forEach((l, i) => {
+    if (i > 0 && slot % 10 === 0) doc.addPage("letter", "portrait");
+    const { x, y } = slotXY(slot % 10);
+    drawLabel(doc, l, st.brand, x, y);
+    slot++;
+  });
+  return doc;
+}
+
+/* ---------- Preview: render the real PDF so what you see is what prints ---------- */
+const pdfjs = window["pdfjs-dist/build/pdf"];
+if (pdfjs) pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+let previewT, previewRun = 0;
+function schedulePreview() { clearTimeout(previewT); previewT = setTimeout(renderPreview, 250); }
+async function renderPreview() {
+  const run = ++previewRun, wrap = $("pages");
+  renderTotals();
+  if (!window.jspdf || !pdfjs) { wrap.innerHTML = `<p class="hint">The PDF tools didn't load. Check your connection and reload the page.</p>`; return; }
+  const list = labelList();
+  if (!list.length) { wrap.innerHTML = `<p class="hint">The printed sheets appear here once the order has products.</p>`; return; }
+  const doc = buildPdf("labels");
+  const pdf = await pdfjs.getDocument({ data: doc.output("arraybuffer") }).promise;
+  if (run !== previewRun) return;
+  const width = Math.max(260, wrap.clientWidth - 6), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const frag = document.createDocumentFragment();
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const vp0 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: width / vp0.width * dpr });
+    const cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
+    await page.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise;
+    if (run !== previewRun) return;
+    // Faint outlines of the label positions (preview only, not printed); skipped slots shaded
+    const ctx = cv.getContext("2d"), k = vp.width / SHEET.w;
+    ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.strokeStyle = "rgba(0,0,0,.18)"; ctx.lineWidth = dpr;
+    for (let i = 0; i < 10; i++) {
+      const { x, y } = slotXY(i);
+      if (p === 1 && i < st.start - 1) { ctx.fillStyle = "rgba(0,0,0,.06)"; ctx.fillRect(x * k, y * k, SHEET.lw * k, SHEET.lh * k); }
+      ctx.strokeRect(x * k, y * k, SHEET.lw * k, SHEET.lh * k);
+    }
+    const div = document.createElement("div"); div.className = "page";
+    div.appendChild(cv); const n = document.createElement("span"); n.className = "pno"; n.textContent = `Sheet ${p} of ${pdf.numPages}`; div.appendChild(n);
+    frag.appendChild(div);
+  }
+  wrap.replaceChildren(frag);
+}
+window.addEventListener("resize", schedulePreview);
+
+/* ---------- Download ---------- */
+const fileSafe = s => (s || "").replace(/^Example:\s*/i, "").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_");
+async function offer(doc, filename) {
+  let dl = null; try { dl = await window.claude?.use?.("downloads"); } catch (_) {}
+  if (!dl) { toast("Downloads aren't available in this view. Open the page in claude.ai to download."); return; }
+  try { await dl.save({ filename, data: doc.output("blob") }); toast(`Saved ${filename}. Print at Actual size (100%) on Letter paper.`); }
+  catch (err) { if (err?.code !== "declined") toast(err?.code === "rate_limited" ? "A save is already open. Try again in a moment." : `The download didn't go through (${err?.code || "error"}).`); }
+}
+$("downloadBtn").addEventListener("click", () => {
+  if (!labelList().length) return;
+  offer(buildPdf("labels"), `Labels_${BRANDS[st.brand].name.replace(/\s/g, "")}_${fileSafe(st.orderName) || "Order"}.pdf`);
+});
+$("alignBtn").addEventListener("click", () => offer(buildPdf("align"), "Label_Alignment_Test.pdf"));
+
+/* ---------- Read an order slip ---------- */
+let slipCtl = null;
+function slipStatus(html, warn) { const s = $("slipStatus"); s.hidden = !html; s.className = "status" + (warn ? " warn" : ""); s.innerHTML = html || ""; }
+async function pdfToInputs(file, maxImages) {
+  const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  let text = ""; const images = [];
+  for (let p = 1; p <= Math.min(pdf.numPages, 4); p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent(), rows = new Map();
+    for (const it of tc.items) { if (!it.str.trim()) continue; const y = Math.round(it.transform[5] / 3); if (!rows.has(y)) rows.set(y, []); rows.get(y).push(it); }
+    text += [...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, its]) => its.sort((a, b) => a.transform[4] - b.transform[4]).map(i => i.str.trim()).join("   ")).join("\n") + "\n\n";
+    if (images.length < maxImages) {
+      const vp0 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: Math.min(3, 1700 / vp0.width) });
+      const cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
+      const ctx = cv.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      images.push(await new Promise(r => cv.toBlob(r, "image/jpeg", 0.88)));
+    }
+  }
+  return { text: text.trim(), images };
+}
+function catalogText() {
+  return Object.entries(CATALOG).map(([k, list]) => `## brand: ${k}\n` + list.map(p => `${p.id} | ${p.code} | ${p.name} | ${p.brand} | ${p.size} | ${p.units ?? ""}`).join("\n")).join("\n\n");
+}
+async function readSlip(file) {
+  if (!file) return;
+  const name = file.name || "", isPdf = file.type === "application/pdf" || /\.pdf$/i.test(name), isImg = /^image\/(jpeg|png|webp)$/.test(file.type);
+  if (/\.hei[cf]$/i.test(name) || /hei[cf]/i.test(file.type)) { slipStatus("iPhone HEIC photos can't be opened in the browser. Save the photo as JPG or PDF first (on iPhone: Share › Print › pinch out › Share › Save to Files), then upload that.", true); return; }
+  if (!isPdf && !isImg) { slipStatus("That file type isn't supported. Upload a PDF, JPG or PNG of the order slip.", true); return; }
+  let sample = null; try { sample = await window.claude?.use?.("sample"); } catch (_) {}
+  if (!sample) { slipStatus("Reading slips needs Claude, which isn't available in this view. Add the products by hand below.", true); return; }
+  const lim = await sample.limits().catch(() => null), maxImages = lim?.images ? Math.min(lim.images.maxCount, 4) : 0;
+  slipCtl?.abort(); slipCtl = new AbortController(); const ctl = slipCtl;
+  slipStatus(`<span class="spinner" aria-hidden="true"></span><span>Opening ${esc(name || "the slip")}…</span>`);
+  let text = "", images = [];
+  try {
+    if (isPdf) ({ text, images } = await pdfToInputs(file, maxImages));
+    else if (maxImages) images = [file];
+    else { slipStatus("Photos can't be read in this view. Upload a PDF of the slip, or add products by hand.", true); return; }
+  } catch (_) { slipStatus("That PDF couldn't be opened. Try saving it again, or upload a photo (JPG or PNG).", true); return; }
+  if (!images.length && text.length < 30) { slipStatus("This PDF has no readable text and images can't be sent from this view. Add products by hand.", true); return; }
+  slipStatus(`<span class="spinner" aria-hidden="true"></span><span>Claude is reading the slip. This usually takes 20–60 seconds.</span><button class="btn" id="stopRead">Stop</button>`);
+  $("stopRead").onclick = () => ctl.abort();
+  const prompt = `You are reading a wholesale ORDER SLIP so a warehouse can print one case label per case ordered.
+${images.length ? "The attached image(s) are the slip's page(s), possibly a phone photo at an angle." : ""}
+${text ? "Text extracted from the PDF (rows reconstructed from positions; may be incomplete):\n<<<\n" + text.slice(0, 20000) + "\n>>>" : ""}
+
+Rules:
+- The number of CASES ordered for each product is in the column headed "ORDER (IN CASES)" (or similar). Tick marks are not quantities. Lines with 0 or blank cases are not ordered: leave them out.
+- "Units/case" is units per case for that product.
+- In photos the value columns can look shifted by a row relative to the product names. Use the printed totals (total cases, total units) to check your reading, and match every line to its own product.
+- Match each ordered line to ONE product id from the catalog below (use SKU/code, name and size). If nothing in the catalog fits, use id null and give the product name as written.
+- brand: which catalog brand most ordered lines belong to: "milletbank", "deccan" or "other".
+
+Catalog (id | code | name | brand | size | units per case):
+${catalogText()}
+
+Reply with only JSON in this shape:
+{"brand":"milletbank","store":"Balaji Super Market","orderNumber":"5","date":null,"lines":[{"id":"M1","name":"Foxtail Millet Noodles","unitsPerCase":10,"cases":2}],"slipCasesTotal":27,"slipUnitsTotal":270}
+Use null for anything not on the slip.`;
+  try {
+    const res = await sample.json(prompt, { images: images.length ? images : undefined, signal: ctl.signal });
+    if (ctl !== slipCtl) return;
+    applySlip(res, name);
+  } catch (e) {
+    if (e?.code === "cancelled") { slipStatus("Stopped. Nothing was changed.", true); return; }
+    const msg = { not_granted: "Claude wasn't allowed to read the slip. Add the products by hand, or reload and allow it.", rate_limited: "Too many requests right now. Wait a minute and try again.",
+      invalid_json: "Claude's answer couldn't be read. Try again, or upload a clearer photo.", image_rejected: "That image couldn't be used. Try a smaller JPG or PNG.", refused: "Claude couldn't read this file. Try a clearer photo or a PDF." }[e?.code];
+    slipStatus(msg || `Reading the slip failed (${esc(e?.code || "error")}). Try again, or add the products by hand.`, true);
+  }
+}
+function applySlip(res, fileName) {
+  const raw = Array.isArray(res?.lines) ? res.lines : [];
+  if (!raw.length) { slipStatus("No ordered products were found on that slip. Check the file, or add products by hand.", true); return; }
+  if (BRANDS[res.brand]) st.brand = res.brand;
+  st.lines = raw.map(r => {
+    const cases = Math.max(0, Math.round(Number(r.cases) || 0)); if (!cases) return null;
+    const p = r.id ? BY_ID.get(String(r.id)) : null;
+    const units = Number(r.unitsPerCase) > 0 ? Math.round(Number(r.unitsPerCase)) : (p?.units ?? "");
+    if (p) return { ...lineFrom(p, cases), units };
+    return { key: Math.random().toString(36).slice(2), pid: null, name: String(r.name || "Unknown product"), size: "", units, labels: cases, group: "", code: "", flag: "Not in the product list. Check the name and size." };
+  }).filter(Boolean);
+  const store = res.store ? String(res.store) : "", num = res.orderNumber ? String(res.orderNumber) : "";
+  st.orderName = [num && `Order ${num}`, store].filter(Boolean).join(" – ") || fileName.replace(/\.\w+$/, "");
+  $("orderName").value = st.orderName;
+  st.example = false; $("exampleTag").hidden = true;
+  const cases = st.lines.reduce((a, l) => a + (+l.labels || 0), 0), units = st.lines.reduce((a, l) => a + (+l.labels || 0) * (+l.units || 0), 0);
+  const sc = Number(res.slipCasesTotal), su = Number(res.slipUnitsTotal);
+  const checks = [];
+  if (sc > 0) checks.push(sc === cases ? `<span class="check ok">${cases} cases, matches the slip's total</span>` : `<span class="check bad">The lines add up to ${cases} cases, but the slip's total says ${sc}. Check the quantities below.</span>`);
+  if (su > 0 && units) checks.push(su === units ? `<span class="check ok">${units} units, matches the slip</span>` : `<span class="check bad">The lines add up to ${units} units, but the slip says ${su}. Check units per case.</span>`);
+  const unmatched = st.lines.filter(l => l.flag).length;
+  $("slipResult").innerHTML = `<div class="slipfacts">${store ? `<span>Store: <b>${esc(store)}</b></span>` : ""}${num ? `<span>Order #: <b>${esc(num)}</b></span>` : ""}${res.date ? `<span>Date: <b>${esc(res.date)}</b></span>` : ""}<span>Brand: <b>${esc(BRANDS[st.brand].name)}</b></span><span>${st.lines.length} products</span></div>
+    <div class="row">${checks.join("")}${unmatched ? `<span class="check bad">${unmatched} product${unmatched > 1 ? "s" : ""} not in the product list</span>` : ""}</div>`;
+  $("slipResult").hidden = false;
+  slipStatus("");
+  renderBrands(); renderLines(); saveDraft(); schedulePreview();
+  toast(`Read ${st.lines.length} products from the slip. Check them before printing.`);
+}
+$("slipFile").addEventListener("change", e => { readSlip(e.target.files[0]); e.target.value = ""; });
+const drop = $("drop");
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => readSlip(e.dataTransfer.files[0]));
+
+let toastT;
+function toast(m) { const t = $("toast"); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3200); }
+
+/* ---------- Start ---------- */
+$("orderName").value = st.orderName; $("exampleTag").hidden = !st.example;
+renderBrands(); renderOptions(); renderLines(); renderPreview();
+</script>

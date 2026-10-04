@@ -1,0 +1,1108 @@
+<title>Warehouse Count</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky top bar, rack index on the left, every rack side stacked in one scrolling column,
+   and a fixed entry bar at the bottom (like a spreadsheet's formula bar). Racks drawn with steel
+   uprights between columns and orange beams under each level, matching the Rack 6 map. */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #18212b;
+  --muted: #5a6877;
+  --line: #d3dae2;
+  --slot: #f7f9fb;
+  --upright: #37597f;
+  --beam: #dd6b1f;
+  --sel: #1d63c9;
+  --sel-soft: #dce8fa;
+  --done: #e6f2ec;
+  --done-ink: #13704b;
+  --warn: #a15c00;
+  --warn-soft: #fdf0d8;
+  --bad: #b42318;
+  --f-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --cw: 62px;
+  --ch: 40px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --surface: #171e26; --ink: #e4e9ee; --muted: #93a1af; --line: #2a3541; --slot: #1c252f;
+    --upright: #6f95c0; --beam: #de7a35; --sel: #5d9bf0; --sel-soft: #1b3150; --done: #16301f; --done-ink: #5fd39b;
+    --warn: #f0b456; --warn-soft: #3a2b12; --bad: #f07a6c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --surface: #171e26; --ink: #e4e9ee; --muted: #93a1af; --line: #2a3541; --slot: #1c252f;
+  --upright: #6f95c0; --beam: #de7a35; --sel: #5d9bf0; --sel-soft: #1b3150; --done: #16301f; --done-ink: #5fd39b;
+  --warn: #f0b456; --warn-soft: #3a2b12; --bad: #f07a6c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.4; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* Top bar */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; }
+.top h1 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 26px; line-height: 1; text-transform: uppercase; letter-spacing: .02em; }
+.top h1 span { color: var(--beam); }
+.grp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.grp label { font-size: 12px; color: var(--muted); }
+select, .top input[type="text"] { border: 1px solid var(--line); background: var(--slot); border-radius: 4px; padding: 5px 8px; font-size: 13px; }
+.btn { border: 1px solid var(--line); background: var(--slot); border-radius: 4px; padding: 5px 10px; font-size: 13px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--sel); border-color: var(--sel); color: #fff; }
+:root:not([data-theme="light"]) .btn.primary { color: var(--surface); }
+.progress { display: grid; gap: 3px; min-width: 200px; }
+.progress .txt { font-size: 12px; color: var(--muted); }
+.progress .txt b { color: var(--ink); font-family: var(--f-mono); font-weight: 600; }
+.bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--done-ink); width: 0; }
+.status { font-size: 12px; color: var(--muted); }
+.status.warn { color: var(--warn); }
+.spacer { flex: 1; }
+
+/* Body layout */
+.layout { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 16px; padding-inline: 16px; padding-block: 14px 190px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+nav.index { position: sticky; top: 70px; max-height: calc(100vh - 280px); overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+@media (max-width: 860px) { nav.index { position: static; max-height: none; display: flex; overflow-x: auto; gap: 4px; } }
+nav.index button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; width: 100%; border: 0; background: transparent; text-align: left; padding: 5px 8px; border-radius: 4px; white-space: nowrap; }
+nav.index button:hover { background: var(--slot); }
+nav.index button.here { background: var(--sel-soft); }
+nav.index .n { font-weight: 600; }
+nav.index .p { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+nav.index .p.full { color: var(--done-ink); }
+
+main { display: grid; gap: 14px; min-width: 0; }
+.face { scroll-margin-top: 80px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px 12px; min-width: 0; }
+.face h2 { margin: 0 0 6px; font-family: var(--f-display); font-weight: 700; font-size: 21px; letter-spacing: .03em; display: flex; gap: 10px; align-items: baseline; }
+.face h2 small { font-family: var(--f-body); font-weight: 400; font-size: 12px; color: var(--muted); letter-spacing: 0; }
+.scroller { overflow-x: auto; padding-bottom: 4px; }
+.rack { display: grid; gap: 3px 3px; width: max-content; align-items: stretch; }
+.lbl { font-family: var(--f-mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
+.colnum { font-family: var(--f-mono); font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; }
+.upr { background: var(--upright); border-radius: 1px; }
+.void { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--line) 6px 7px); border-radius: 3px; min-height: var(--ch); }
+.floor { display: flex; align-items: stretch; gap: 3px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); width: max-content; }
+.floor .lbl { width: 40px; justify-content: flex-start; font-family: var(--f-display); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink); }
+.area-row { display: flex; align-items: stretch; gap: 3px; width: max-content; }
+.area-row + .area-row { margin-top: 6px; }
+.area-row .lbl { width: 150px; justify-content: flex-start; font-family: var(--f-body); font-size: 13px; color: var(--ink); }
+
+.cell { width: var(--cw); min-height: var(--ch); border: 1px dashed var(--line); border-bottom: 3px solid var(--beam); border-radius: 3px 3px 0 0;
+  background: transparent; padding: 2px 4px; text-align: left; display: grid; align-content: start; font-family: var(--f-mono); line-height: 1.2; position: relative; }
+.floor .cell, .area-row .cell { border-bottom: 1px dashed var(--line); border-radius: 3px; }
+.cell .c { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell .c small { font-weight: 400; color: var(--muted); font-size: 10px; }
+.cell .q { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cell .w { font-size: 10px; font-style: italic; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+.cell { scroll-margin: 90px 70px 210px 70px; }
+.cell.done { background: var(--done); border-style: solid; border-color: var(--line); border-bottom-color: var(--beam); }
+.floor .cell.done, .area-row .cell.done { border-bottom-color: var(--line); }
+.cell.done .q { color: var(--done-ink); font-weight: 600; }
+.cell.empty { border-style: solid; background: var(--slot); }
+.cell.empty .c { color: var(--muted); font-weight: 400; }
+.cell.diff::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.cell.insel { box-shadow: inset 0 0 0 2px var(--sel); }
+.cell.sel { outline: 2px solid var(--sel); outline-offset: 1px; z-index: 1; }
+.cell.editing { background: var(--sel-soft); }
+.grid-focus:focus { outline: none; }
+
+/* Entry bar */
+.entry { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--surface); border-top: 2px solid var(--upright);
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 6px; box-shadow: 0 -4px 14px rgb(0 0 0 / .08); }
+.erow { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.eloc { font-family: var(--f-mono); font-weight: 600; font-size: 20px; min-width: 150px; }
+.eloc small { display: block; font-family: var(--f-body); font-weight: 400; font-size: 12px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); background: var(--slot); border-radius: 14px; padding: 2px 4px 2px 10px; font-size: 13px; }
+.chip b { font-family: var(--f-mono); }
+.chip button { border: 0; background: transparent; color: var(--muted); padding: 0 6px; font-size: 15px; line-height: 1; }
+.fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: relative; flex: 1; min-width: 280px; }
+.fields input { border: 1px solid var(--line); background: var(--slot); border-radius: 4px; padding: 8px 10px; font-size: 15px; }
+#prod { flex: 1; min-width: 200px; }
+#qty { width: 92px; font-family: var(--f-mono); }
+.fields input:focus { border-color: var(--sel); background: var(--surface); }
+.picked { font-size: 13px; color: var(--muted); max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picked b { color: var(--ink); font-family: var(--f-mono); }
+.sugg { position: absolute; left: 0; bottom: calc(100% + 6px); width: min(620px, 100%); max-height: 330px; overflow-y: auto; list-style: none; margin: 0; padding: 4px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 24px rgb(0 0 0 / .16); }
+.sugg li { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+.sugg li.hl { background: var(--sel-soft); }
+.sugg .sc { font-family: var(--f-mono); font-weight: 600; }
+.sugg .sn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sugg .sn small { color: var(--muted); }
+.sugg .sp { font-family: var(--f-mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.sugg .head { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 4px 8px; cursor: default; }
+.sugg .none { display: block; color: var(--muted); cursor: default; }
+.flag { color: var(--bad); font-family: var(--f-body); font-size: 11px; font-weight: 600; }
+.hint { font-size: 12px; color: var(--muted); }
+.hint kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; background: var(--slot); color: var(--ink); }
+.was { font-size: 12px; color: var(--muted); }
+.was b { color: var(--ink); font-family: var(--f-mono); }
+.toast { position: fixed; left: 50%; bottom: 180px; transform: translateX(-50%); z-index: 40; background: var(--ink); color: var(--surface); padding: 8px 14px; border-radius: 5px; font-size: 13px; max-width: calc(100% - 32px); }
+.help { position: fixed; right: 16px; bottom: 150px; z-index: 35; width: min(440px, calc(100% - 32px)); max-height: calc(100vh - 240px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 10px 30px rgb(0 0 0 / .2); padding: 12px 14px; }
+.help h3 { margin: 0 0 8px; font-family: var(--f-display); font-weight: 700; font-size: 18px; text-transform: uppercase; letter-spacing: .03em; display: flex; justify-content: space-between; align-items: center; }
+.help h4 { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+.help dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; margin: 0; font-size: 13px; }
+.help dt { white-space: nowrap; }
+.help dd { margin: 0; color: var(--ink); }
+.help kbd { font-family: var(--f-mono); font-size: 11.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 5px; background: var(--slot); }
+.newcount { display: flex; gap: 6px; align-items: center; }
+@media (prefers-reduced-motion: no-preference) { .cell { transition: background .12s; } }
+</style>
+
+<div class="top">
+  <h1>Warehouse <span>/</span> Count</h1>
+  <div class="grp">
+    <label for="session">Count</label>
+    <select id="session"></select>
+    <button class="btn" id="newBtn">New count</button>
+    <span class="newcount" id="newForm" hidden>
+      <input type="text" id="newName" placeholder="Name, e.g. October count" aria-label="New count name">
+      <button class="btn primary" id="newCreate">Create</button>
+      <button class="btn" id="newCancel">Cancel</button>
+    </span>
+  </div>
+  <div class="progress" aria-live="polite">
+    <span class="txt" id="progTxt"></span>
+    <span class="bar"><i id="progBar"></i></span>
+  </div>
+  <div class="spacer"></div>
+  <div class="grp">
+    <label><input type="checkbox" id="showPrev"> Show last sheet count</label>
+    <label for="after">After saving</label>
+    <select id="after">
+      <option value="right">move right</option>
+      <option value="down">move down</option>
+      <option value="up">move up</option>
+      <option value="stay">stay</option>
+    </select>
+    <button class="btn" id="helpBtn" aria-expanded="false" aria-controls="help">Shortcuts</button>
+    <button class="btn primary" id="expXlsx">Export Excel</button>
+  </div>
+  <span class="status" id="saveStatus">Connecting…</span>
+</div>
+
+<div class="layout">
+  <nav class="index" id="index" aria-label="Racks"></nav>
+  <main id="grid" class="grid-focus" tabindex="0" aria-label="Rack slots. Use arrow keys to move, type to enter a product."></main>
+</div>
+
+<div class="entry" id="entry">
+  <div class="erow">
+    <div class="eloc" id="eloc">6A-01-L1-B1<small>Rack 6, side A</small></div>
+    <div class="chips" id="chips"></div>
+    <div class="fields">
+      <ul class="sugg" id="sugg" hidden role="listbox" aria-label="Matching products"></ul>
+      <input id="prod" type="text" autocomplete="off" spellcheck="false" placeholder="Product code or name" aria-label="Product" aria-controls="sugg">
+      <span class="picked" id="picked"></span>
+      <input id="qty" type="text" inputmode="numeric" autocomplete="off" placeholder="Cases" aria-label="Cases">
+    </div>
+  </div>
+  <div class="erow">
+    <span class="was" id="was"></span>
+    <span class="spacer"></span>
+    <span class="hint" id="hint"></span>
+  </div>
+</div>
+<div class="help" id="help" hidden role="dialog" aria-label="Keyboard shortcuts"></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const DATA = /*DATA*/;
+const $ = id => document.getElementById(id);
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+const MOD = IS_MAC ? "⌘" : "Ctrl", ALT = IS_MAC ? "Option" : "Alt";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const P = new Map(DATA.products.map(p => [p.k, p]));
+for (const p of DATA.products) p.hay = (p.c + " " + p.n + " " + p.k + " " + p.cat + " " + p.b).toLowerCase();
+const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
+             set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} } };
+
+/* ---------- Layout model ---------- */
+const FACES = DATA.faces.map(f => {
+  const cols = f.cols.map(([c, slots]) => ({ c, slots, width: Math.max(...slots.map(s => s[1])) }));
+  let x = 0; for (const col of cols) { col.x0 = x; x += col.width; }
+  const rack = f.id.startsWith("D") ? "D" + f.id.slice(1, -1) : f.id.slice(0, -1);
+  return { id: f.id, rack, side: f.id.slice(-1), cols, width: x };
+});
+const rackName = r => r.startsWith("D") ? "Door " + r.slice(1) : "Rack " + r;
+const RACKS = [...new Set(FACES.map(f => f.rack))];
+const AREAS = DATA.areas.map(([id, name]) => ({ id, name }));
+const SLOT_META = new Map(); // code -> {face, col, level, bay} for rack slots
+for (const f of FACES) for (const col of f.cols) for (const [l, b] of col.slots) {
+  const code = `${f.id}-${String(col.c).padStart(2, "0")}-L${l}-B${b}`;
+  SLOT_META.set(code, { face: f.id, rack: f.rack, col: col.c, level: l, bay: b, x: col.x0 + b - 1 });
+}
+const TOTAL_SLOTS = SLOT_META.size;
+const groupOf = code => {
+  const m = SLOT_META.get(code); if (m) return "r-" + m.rack;
+  const f = code.match(/^(D?\d+)[A-Z]-FLOOR-P\d+$/); if (f) return "r-" + f[1];
+  return "areas";
+};
+const describe = code => {
+  const m = SLOT_META.get(code);
+  if (m) return `${rackName(m.rack)}, side ${m.face.slice(-1)} · column ${m.col} · level ${m.level}${m.level === 1 ? " (bottom)" : ""} · bay ${m.bay}`;
+  const f = code.match(/^((D?\d+)([A-Z]))-FLOOR-P(\d+)$/);
+  if (f) return `${rackName(f[2])}, side ${f[3]} floor · pallet ${+f[4]}`;
+  const a = AREAS.find(a => code.startsWith(a.id + "-P"));
+  return a ? `${a.name} · pallet ${+code.slice(a.id.length + 2)}` : code;
+};
+
+/* ---------- State ---------- */
+const cells = new Map();          // code -> {lines:[{k,q}], empty:bool}
+const st = {
+  sel: FACES[0] ? `${FACES[0].id}-01-L4-B1` : null,
+  anchor: null,                   // other corner of a Shift selection
+  mode: "grid",                   // grid | product | qty
+  draft: null,                    // {code, lines:[], item:null}
+  matches: [], hl: 0,
+  showPrev: LS.get("ic.showPrev", false),
+  after: LS.get("ic.after", "right"),
+  lastLines: null,
+  recent: LS.get("ic.recent", []),
+};
+if (!SLOT_META.has(st.sel)) st.sel = SLOT_META.keys().next().value;
+const undo = [];
+
+/* ---------- Floors: how many pallet spots each floor row shows ---------- */
+const floorBases = () => [...FACES.map(f => f.id + "-FLOOR"), ...AREAS.map(a => a.id)];
+function floorCount(base) {
+  let hi = 0;
+  for (const code of cells.keys()) if (code.startsWith(base + "-P")) hi = Math.max(hi, +code.slice(base.length + 2));
+  if (st.showPrev) for (const code in DATA.prev) if (code.startsWith(base + "-P")) hi = Math.max(hi, +code.slice(base.length + 2));
+  return Math.max(3, hi + 1);
+}
+const fcode = (base, n) => `${base}-P${String(n).padStart(2, "0")}`;
+
+/* ---------- Navigation rows (visual order, top to bottom) ---------- */
+let ROWS = [], ROW_OF = new Map();
+function buildRows() {
+  ROWS = []; ROW_OF = new Map();
+  const push = (id, list, group) => { const i = ROWS.length; ROWS.push({ id, group, cells: list }); for (const c of list) ROW_OF.set(c.code, i); };
+  for (const f of FACES) {
+    for (const lv of [4, 3, 2, 1]) {
+      const list = [];
+      for (const col of f.cols) for (const [l, b] of col.slots) if (l === lv) list.push({ code: `${f.id}-${String(col.c).padStart(2, "0")}-L${l}-B${b}`, x: col.x0 + b - 1 });
+      list.sort((a, b) => a.x - b.x);
+      if (list.length) push(f.id + "-L" + lv, list, f.id);
+    }
+    const base = f.id + "-FLOOR", n = floorCount(base);
+    push(base, Array.from({ length: n }, (_, i) => ({ code: fcode(base, i + 1), x: i * 1.6 })), f.id);
+  }
+  for (const a of AREAS) { const n = floorCount(a.id); push(a.id, Array.from({ length: n }, (_, i) => ({ code: fcode(a.id, i + 1), x: i * 1.6 })), "areas"); }
+}
+function nextCode(code, dir) {
+  const r = ROW_OF.get(code); if (r == null) return null;
+  const row = ROWS[r].cells, i = row.findIndex(c => c.code === code), x = row[i].x;
+  if (dir === "left") return i > 0 ? row[i - 1].code : null;
+  if (dir === "right") return i < row.length - 1 ? row[i + 1].code : null;
+  if (dir === "home") return row[0].code;
+  if (dir === "end") return row[row.length - 1].code;
+  const rr = ROWS[r + (dir === "up" ? -1 : 1)];
+  return rr ? rr.cells.reduce((best, c) => Math.abs(c.x - x) < Math.abs(best.x - x) ? c : best, rr.cells[0]).code : null;
+}
+function move(dir, extend) {
+  const next = nextCode(st.sel, dir); if (!next) return;
+  if (extend) {
+    if (!st.anchor) st.anchor = st.sel;
+    if (ROWS[ROW_OF.get(next)].group !== ROWS[ROW_OF.get(st.anchor)].group) return; // a selection stays on one rack side
+  } else st.anchor = null;
+  select(next); updateRange();
+}
+/* Range selection: a rectangle between the anchor and the selected cell, on one rack side */
+let RANGE = new Set();
+const xOf = code => { const r = ROW_OF.get(code); const c = r == null ? null : ROWS[r].cells.find(c => c.code === code); return c ? c.x : 0; };
+const orderCodes = codes => codes.slice().sort((a, b) => ROW_OF.get(a) - ROW_OF.get(b) || xOf(a) - xOf(b));
+const selection = () => RANGE.size ? orderCodes([...RANGE]) : [st.sel];
+function computeRange() {
+  if (!st.anchor || st.anchor === st.sel) return new Set();
+  const ra = ROW_OF.get(st.anchor), rb = ROW_OF.get(st.sel);
+  if (ra == null || rb == null || ROWS[ra].group !== ROWS[rb].group) return new Set();
+  const x0 = Math.min(xOf(st.anchor), xOf(st.sel)) - 0.01, x1 = Math.max(xOf(st.anchor), xOf(st.sel)) + 0.01;
+  const out = new Set();
+  for (let r = Math.min(ra, rb); r <= Math.max(ra, rb); r++) for (const c of ROWS[r].cells) if (c.x >= x0 && c.x <= x1) out.add(c.code);
+  return out;
+}
+function updateRange() {
+  const old = RANGE; RANGE = computeRange();
+  for (const c of old) if (!RANGE.has(c)) paint(c);
+  for (const c of RANGE) if (!old.has(c)) paint(c);
+  renderEntry();
+}
+function clearRange() { st.anchor = null; updateRange(); }
+function jumpFace(delta) {
+  const r = ROW_OF.get(st.sel); if (r == null) return;
+  const g = ROWS[r].group;
+  let k = r;
+  if (delta > 0) { while (k < ROWS.length && ROWS[k].group === g) k++; }
+  else { while (k >= 0 && ROWS[k].group === g) k--; if (k < 0) return; const pg = ROWS[k].group; while (k > 0 && ROWS[k - 1].group === pg) k--; }
+  if (ROWS[k]) select(ROWS[k].cells[0].code);
+}
+
+/* ---------- Rendering ---------- */
+const EL = new Map(); // code -> button
+function cellInner(code) {
+  const v = cells.get(code), prev = DATA.prev[code];
+  let h = "";
+  if (v && v.lines && v.lines.length) {
+    const codes = [...new Set(v.lines.map(l => (P.get(l.k) || { c: "?" }).c))];
+    const total = v.lines.reduce((a, l) => a + (+l.q || 0), 0);
+    h = `<span class="c">${esc(codes[0])}${codes.length > 1 ? `<small> +${codes.length - 1}</small>` : ""}</span><span class="q">${total}</span>`;
+  } else if (v && v.empty) h = `<span class="c">empty</span>`;
+  if (st.showPrev && prev && prev.length) {
+    const pc = [...new Set(prev.map(l => (P.get(l[0]) || { c: "?" }).c))];
+    h += `<span class="w" title="Last sheet count">${esc(pc[0])}${pc.length > 1 ? "+" : ""}·${prev.reduce((a, l) => a + (l[1] || 0), 0)}</span>`;
+  }
+  return h;
+}
+function cellClass(code) {
+  const v = cells.get(code), cls = ["cell"];
+  if (v && v.lines && v.lines.length) cls.push("done"); else if (v && v.empty) cls.push("empty");
+  if (st.showPrev && v && differs(v, DATA.prev[code])) cls.push("diff");
+  if (code === st.sel) cls.push("sel");
+  if (RANGE.has(code)) cls.push("insel");
+  if (st.draft && st.draft.code === code) cls.push("editing");
+  return cls.join(" ");
+}
+function differs(v, prev) {
+  const a = (v.lines || []).map(l => l.k + "|" + (+l.q)).sort().join(","), b = (prev || []).map(l => l[0] + "|" + (+l[1])).sort().join(",");
+  return a !== b;
+}
+const cellHTML = code => `<button class="${cellClass(code)}" data-code="${code}" tabindex="-1" aria-label="${esc(code)}">${cellInner(code)}</button>`;
+function paint(code) { const el = EL.get(code); if (el) { el.className = cellClass(code); el.innerHTML = cellInner(code); } }
+
+function faceHTML(f) {
+  // track list: label, then per column an upright + its bays, then a closing upright
+  const tracks = ["40px"]; const colTrack = [];
+  for (const col of f.cols) { tracks.push("5px"); colTrack.push(tracks.length + 1); for (let i = 0; i < col.width; i++) tracks.push("var(--cw)"); }
+  tracks.push("5px");
+  let h = `<div class="rack" style="grid-template-columns:${tracks.join(" ")};grid-template-rows:16px repeat(4, auto)">`;
+  f.cols.forEach((col, i) => {
+    const t0 = colTrack[i];
+    h += `<div class="colnum" style="grid-row:1;grid-column:${t0} / span ${col.width}">${String(col.c).padStart(2, "0")}</div>`;
+    h += `<div class="upr" style="grid-row:2 / 6;grid-column:${t0 - 1}"></div>`;
+    [4, 3, 2, 1].forEach((lv, r) => {
+      const here = col.slots.filter(s => s[0] === lv);
+      if (!here.length) { h += `<div class="void" style="grid-row:${r + 2};grid-column:${t0} / span ${col.width}"></div>`; return; }
+      for (const [l, b] of here) h += `<div style="grid-row:${r + 2};grid-column:${t0 + b - 1}">${cellHTML(`${f.id}-${String(col.c).padStart(2, "0")}-L${l}-B${b}`)}</div>`;
+    });
+  });
+  h += `<div class="upr" style="grid-row:2 / 6;grid-column:${tracks.length}"></div>`;
+  [4, 3, 2, 1].forEach((lv, r) => { h += `<div class="lbl" style="grid-row:${r + 2};grid-column:1">L${lv}</div>`; });
+  return h + `</div>`;
+}
+function floorHTML(base, label, cls) {
+  const n = floorCount(base);
+  let h = `<div class="${cls}" id="row-${base}"><span class="lbl">${esc(label)}</span>`;
+  for (let i = 1; i <= n; i++) h += cellHTML(fcode(base, i));
+  return h + `</div>`;
+}
+function renderAll() {
+  buildRows();
+  let h = "";
+  for (const rack of RACKS) {
+    for (const f of FACES.filter(f => f.rack === rack)) {
+      const slots = [...SLOT_META.values()].filter(m => m.face === f.id).length;
+      h += `<section class="face" id="face-${f.id}"><h2>${rackName(f.rack)} · Side ${f.side}<small id="fp-${f.id}"></small></h2>
+        <div class="scroller">${faceHTML(f)}${floorHTML(f.id + "-FLOOR", "Floor", "floor")}</div></section>`;
+      void slots;
+    }
+  }
+  h += `<section class="face" id="face-areas"><h2>Other floor areas<small>Pallets not on a rack</small></h2><div class="scroller">`;
+  for (const a of AREAS) h += floorHTML(a.id, a.name, "area-row");
+  h += `</div></section>`;
+  $("grid").innerHTML = h;
+  EL.clear();
+  for (const el of $("grid").querySelectorAll(".cell")) EL.set(el.dataset.code, el);
+  renderIndex(); renderProgress();
+}
+function refreshFloor(base) {
+  const row = document.getElementById("row-" + base); if (!row) return;
+  const want = floorCount(base), have = row.querySelectorAll(".cell").length;
+  if (want === have) return;
+  const isArea = row.classList.contains("area-row");
+  row.outerHTML = floorHTML(base, isArea ? AREAS.find(a => a.id === base).name : "Floor", isArea ? "area-row" : "floor");
+  const fresh = document.getElementById("row-" + base);
+  for (const el of fresh.querySelectorAll(".cell")) EL.set(el.dataset.code, el);
+  buildRows();
+}
+function floorBaseOf(code) { const m = code.match(/^(.*)-P\d+$/); return m && !SLOT_META.has(code) ? m[1] : null; }
+
+function faceStats(faceId) {
+  let n = 0, done = 0;
+  for (const [code, m] of SLOT_META) if (m.face === faceId) { n++; const v = cells.get(code); if (v && ((v.lines && v.lines.length) || v.empty)) done++; }
+  return { n, done };
+}
+function renderIndex() {
+  let h = "";
+  for (const rack of RACKS) {
+    const fs = FACES.filter(f => f.rack === rack);
+    let n = 0, d = 0; for (const f of fs) { const s = faceStats(f.id); n += s.n; d += s.done; }
+    h += `<button data-jump="face-${fs[0].id}"><span class="n">${rackName(rack)} <span class="p">${fs.map(f => f.side).join(" ")}</span></span><span class="p ${d === n ? "full" : ""}">${d}/${n}</span></button>`;
+    for (const f of fs) { const s = faceStats(f.id); const el = document.getElementById("fp-" + f.id); if (el) el.textContent = `${s.done} of ${s.n} slots checked`; }
+  }
+  let fl = 0; for (const [code, v] of cells) if (!SLOT_META.has(code) && v.lines && v.lines.length) fl++;
+  h += `<button data-jump="face-areas"><span class="n">Other areas</span><span class="p">${fl} pl</span></button>`;
+  $("index").innerHTML = h;
+  markIndex();
+}
+function markIndex() {
+  const r = ROW_OF.get(st.sel), g = r == null ? null : ROWS[r].group;
+  const face = FACES.find(f => f.id === g);
+  const want = face ? "face-" + FACES.find(f => f.rack === face.rack).id : "face-areas";
+  for (const b of $("index").querySelectorAll("button")) b.classList.toggle("here", b.dataset.jump === want);
+}
+function renderProgress() {
+  let done = 0, floor = 0, cases = 0;
+  for (const [code, v] of cells) {
+    const has = v.lines && v.lines.length;
+    if (SLOT_META.has(code) && (has || v.empty)) done++;
+    if (!SLOT_META.has(code) && has) floor++;
+    if (has) cases += v.lines.reduce((a, l) => a + (+l.q || 0), 0);
+  }
+  $("progTxt").innerHTML = `Rack slots checked <b>${done.toLocaleString()}</b> of <b>${TOTAL_SLOTS.toLocaleString()}</b> · floor pallets <b>${floor}</b> · cases <b>${cases.toLocaleString()}</b>`;
+  $("progBar").style.width = (100 * done / TOTAL_SLOTS).toFixed(1) + "%";
+}
+let progT;
+function afterChange(code) {
+  paint(code);
+  const base = floorBaseOf(code); if (base) refreshFloor(base);
+  clearTimeout(progT); progT = setTimeout(() => { renderIndex(); renderProgress(); }, 120);
+}
+
+/* ---------- Selection + entry bar ---------- */
+function select(code, opts = {}) {
+  const old = st.sel; st.sel = code;
+  if (old && old !== code) paint(old);
+  paint(code);
+  const el = EL.get(code);
+  if (el && !opts.noScroll) el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  markIndex();
+  renderEntry();
+}
+function renderEntry() {
+  const code = st.draft ? st.draft.code : st.sel;
+  $("eloc").innerHTML = !st.draft && RANGE.size > 1
+    ? `${RANGE.size} cells<small>${esc(selection()[0])} to ${esc(selection().at(-1))} selected</small>`
+    : `${esc(code)}<small>${esc(describe(code))}</small>`;
+  const lines = st.draft ? st.draft.lines : ((cells.get(code) || {}).lines || []);
+  const v = cells.get(code);
+  $("chips").innerHTML = lines.map((l, i) => {
+    const p = P.get(l.k) || { c: "?", n: l.k };
+    return `<span class="chip"><b>${esc(p.c)}</b> ${esc(p.n.slice(0, 34))} × <b>${l.q}</b>${st.draft ? `<button data-rm="${i}" aria-label="Remove ${esc(p.c)}">×</button>` : ""}</span>`;
+  }).join("") || (v && v.empty && !st.draft ? `<span class="chip">Checked, empty</span>` : "");
+  const prev = DATA.prev[code];
+  $("was").innerHTML = prev && prev.length
+    ? "Last sheet: " + prev.map(l => { const p = P.get(l[0]) || { c: "?", n: l[0] }; return `<b>${esc(p.c)}</b> ${esc(p.n.slice(0, 40))} × <b>${l[1] == null ? "?" : l[1]}</b>`; }).join(" · ")
+    : "Last sheet: nothing recorded here";
+  $("was").hidden = !st.showPrev;
+  const item = st.draft && st.draft.item ? P.get(st.draft.item) : null;
+  $("picked").innerHTML = item && item.pl ? `Full pallet: <b>${item.pl}</b>` : "";
+  $("hint").innerHTML = st.mode === "grid"
+    ? `<kbd>←↑↓→</kbd> move · <kbd>Shift</kbd>+arrows select · type to enter · <kbd>=</kbd> repeat · <kbd>-</kbd> empty · <kbd>${ALT}</kbd>+<kbd>A</kbd> fill column · <kbd>${MOD}</kbd>+<kbd>C</kbd> <kbd>${MOD}</kbd>+<kbd>V</kbd> copy, paste · <kbd>?</kbd> all shortcuts`
+    : st.mode === "product"
+      ? `<kbd>↑↓</kbd> choose · <kbd>Enter</kbd> pick product${st.draft && st.draft.lines.length ? " · <kbd>Enter</kbd> on empty box saves" : ""} · <kbd>Esc</kbd> cancel`
+      : `<kbd>Enter</kbd> save and move · <kbd>Tab</kbd> add another product to this pallet · <kbd>Esc</kbd> cancel`;
+}
+
+/* ---------- Product search ---------- */
+function search(q) {
+  q = q.trim().toLowerCase();
+  if (!q) return [];
+  const toks = q.split(/\s+/);
+  const out = [];
+  for (const p of DATA.products) {
+    if (!toks.every(t => p.hay.includes(t))) continue;
+    const c = p.c.toLowerCase(), n = p.n.toLowerCase();
+    const score = c === q ? 0 : c.startsWith(q) ? 1 : n.startsWith(q) ? 2 : (" " + n).includes(" " + toks[0]) ? 3 : 4;
+    out.push([score, p]);
+  }
+  out.sort((a, b) => a[0] - b[0] || a[1].c.localeCompare(b[1].c, undefined, { numeric: true }));
+  return out.map(x => x[1]);
+}
+function renderSugg() {
+  const box = $("sugg"), q = $("prod").value.trim();
+  if (st.mode !== "product") { box.hidden = true; return; }
+  let list, head;
+  if (q) { list = st.matches; head = `${list.length} match${list.length === 1 ? "" : "es"}`; }
+  else { list = st.recent.map(k => P.get(k)).filter(Boolean); head = "Recent"; st.matches = list; }
+  if (!list.length && !q) { box.hidden = true; return; }
+  const shown = list.slice(0, 50);
+  box.innerHTML = `<li class="head">${head}</li>` + (shown.length ? shown.map((p, i) =>
+    `<li role="option" data-i="${i}" class="${i === st.hl ? "hl" : ""}" aria-selected="${i === st.hl}"><span class="sc">${esc(p.c || "—")}</span><span class="sn">${esc(p.n)} <small>${esc(p.pk || "")}</small>${/DONOTUSE/i.test(p.k) ? ' <span class="flag">DO NOT USE</span>' : ""}</span><span class="sp">${p.pl ? p.pl + "/pallet" : ""}</span></li>`).join("")
+    : `<li class="none">No product matches “${esc(q)}”. Try the code or one word of the name.</li>`);
+  box.hidden = false;
+  const hl = box.querySelector("li.hl"); if (hl) hl.scrollIntoView({ block: "nearest" });
+}
+
+/* ---------- Editing ---------- */
+function beginEdit(text, keep) {
+  const code = st.sel;
+  const v = cells.get(code);
+  st.draft = { code, lines: keep && v && v.lines ? v.lines.map(l => ({ ...l })) : [], item: null };
+  st.mode = "product"; st.hl = 0;
+  $("prod").value = text || ""; $("qty").value = "";
+  st.matches = search($("prod").value);
+  paint(code); renderEntry(); renderSugg();
+  $("prod").focus();
+  const L = $("prod").value.length; try { $("prod").setSelectionRange(L, L); } catch (_) {}
+}
+function choose(p) {
+  if (!p) return;
+  st.draft.item = p.k; st.mode = "qty";
+  $("prod").value = p.c + " " + p.n;
+  $("qty").value = p.pl ? String(p.pl) : "";
+  renderEntry(); renderSugg();
+  $("qty").focus(); $("qty").select();
+}
+function takeLine() {
+  const q = $("qty").value.trim();
+  if (!/^\d+$/.test(q)) { toast("Enter the number of cases (whole number)."); $("qty").focus(); return false; }
+  st.draft.lines.push({ k: st.draft.item, q: +q });
+  st.recent = [st.draft.item, ...st.recent.filter(k => k !== st.draft.item)].slice(0, 8); LS.set("ic.recent", st.recent);
+  st.draft.item = null; $("qty").value = ""; $("prod").value = "";
+  return true;
+}
+function cancelEdit() {
+  const code = st.draft && st.draft.code;
+  st.draft = null; st.mode = "grid"; $("prod").value = ""; $("qty").value = "";
+  if (code) paint(code);
+  renderEntry(); renderSugg(); $("grid").focus({ preventScroll: true });
+}
+function commit() {
+  const d = st.draft; st.draft = null; st.mode = "grid";
+  $("prod").value = ""; $("qty").value = "";
+  setCell(d.code, d.lines.length ? { lines: d.lines } : null);
+  if (d.lines.length) st.lastLines = d.lines.map(l => ({ ...l }));
+  renderSugg();
+  $("grid").focus({ preventScroll: true });
+  if (st.after !== "stay") move(st.after); else renderEntry();
+}
+const clone = v => v == null ? null : JSON.parse(JSON.stringify(v));
+// Every edit goes through here; one call is one undo step, however many cells it touches.
+function applyChanges(changes, fromUndo) {
+  if (!changes.length) return;
+  if (!fromUndo) { undo.push(changes.map(c => ({ code: c.code, before: clone(cells.get(c.code) || null) }))); if (undo.length > 200) undo.shift(); }
+  for (const { code, val } of changes) { if (val) cells.set(code, val); else cells.delete(code); afterChange(code); store.write(code, val); }
+  renderEntry();
+}
+function setCell(code, val) { applyChanges([{ code, val }]); }
+const isChecked = code => { const v = cells.get(code); return !!(v && ((v.lines && v.lines.length) || v.empty)); };
+
+/* Option/Alt + A: fill the rest of this rack column with the selected cell's product, at a full pallet */
+function fillColumn() {
+  const m = SLOT_META.get(st.sel);
+  if (!m) { toast(`${ALT}+A works on rack slots, not floor spots.`); return; }
+  const src = cells.get(st.sel);
+  if (!src || !src.lines || !src.lines.length) { toast(`Enter a product in this slot first, then press ${ALT}+A.`); return; }
+  const one = src.lines.length === 1, p = one ? P.get(src.lines[0].k) : null;
+  const lines = one ? [{ k: src.lines[0].k, q: p && p.pl ? p.pl : src.lines[0].q }] : src.lines;
+  const targets = [...SLOT_META].filter(([c, x]) => x.face === m.face && x.col === m.col && c !== st.sel && !isChecked(c)).map(([c]) => c);
+  const colName = `${m.face}-${String(m.col).padStart(2, "0")}`;
+  if (!targets.length) { toast(`Every slot in column ${colName} is already filled.`); return; }
+  applyChanges(targets.map(code => ({ code, val: { lines: clone(lines) } })));
+  const what = one ? `${p ? p.c : "?"} × ${lines[0].q}` : "this mixed pallet";
+  toast(`Filled ${targets.length} empty slot${targets.length > 1 ? "s" : ""} in column ${colName} with ${what}. Filled slots were left alone. ${MOD}+Z to undo.`);
+}
+
+/* Copy, cut, paste */
+let CLIP = null, pendingCopy = null, copyDone = false, pasteDone = false;
+const linesText = v => v && v.lines && v.lines.length ? v.lines.map(l => `${l.k}\t${l.q}`).join("\n") : "";
+function copySel(cut) {
+  const codes = selection();
+  const r0 = Math.min(...codes.map(c => ROW_OF.get(c))), x0 = Math.min(...codes.map(xOf));
+  const items = codes.map(c => ({ dr: ROW_OF.get(c) - r0, dx: xOf(c) - x0, val: clone(cells.get(c) || null) }));
+  // Clipboard text pastes cleanly into Excel: Item and cases, plus Location when several cells are copied
+  const text = codes.length === 1 ? linesText(cells.get(codes[0]))
+    : codes.map(c => { const v = cells.get(c), ls = v && v.lines && v.lines.length ? v.lines : [null]; return ls.map(l => [c, l ? l.k : "", l ? l.q : ""].join("\t")).join("\n"); }).join("\n");
+  CLIP = { items, text };
+  pendingCopy = text; copyDone = false;
+  setTimeout(() => { if (!copyDone && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {}); pendingCopy = null; }, 60);
+  if (cut) applyChanges(codes.filter(c => cells.has(c)).map(code => ({ code, val: null })));
+  toast(`${cut ? "Cut" : "Copied"} ${codes.length} cell${codes.length > 1 ? "s" : ""}. Select where it goes and press ${MOD}+V.`);
+}
+for (const type of ["copy", "cut"]) document.addEventListener(type, e => {
+  if (pendingCopy == null || st.mode !== "grid") return;
+  e.clipboardData.setData("text/plain", pendingCopy); e.preventDefault(); copyDone = true;
+});
+function armPaste() { pasteDone = false; setTimeout(() => { if (!pasteDone) { if (CLIP) pasteInternal(); else toast("Nothing copied yet."); } }, 90); }
+document.addEventListener("paste", e => {
+  if (st.mode !== "grid") return; // the product and cases boxes handle their own paste
+  e.preventDefault(); pasteDone = true;
+  const text = ((e.clipboardData && e.clipboardData.getData("text/plain")) || "").replace(/\r/g, "").replace(/\n+$/, "");
+  if (CLIP && text === CLIP.text) pasteInternal(); else pasteExternal(text);
+});
+function pasteInternal() {
+  const targets = selection();
+  if (CLIP.items.length === 1) {
+    const val = CLIP.items[0].val;
+    applyChanges(targets.map(code => ({ code, val: clone(val) })));
+    toast(`Pasted into ${targets.length} cell${targets.length > 1 ? "s" : ""}.`); return;
+  }
+  // A copied block keeps its shape, starting at the top-left of the selection
+  const r0 = Math.min(...targets.map(c => ROW_OF.get(c))), x0 = Math.min(...targets.map(xOf)), g = ROWS[r0].group;
+  const ch = []; let skipped = 0;
+  for (const it of CLIP.items) {
+    const row = ROWS[r0 + it.dr];
+    const cell = row && row.group === g ? row.cells.find(c => Math.abs(c.x - (x0 + it.dx)) < 0.05) : null;
+    if (cell) ch.push({ code: cell.code, val: clone(it.val) }); else skipped++;
+  }
+  applyChanges(ch);
+  toast(`Pasted ${ch.length} cell${ch.length === 1 ? "" : "s"}${skipped ? `. ${skipped} didn't fit on this rack side` : ""}.`);
+}
+const normLoc = v => { const m = v.match(/^\s*(D?)(\d+)\s*([A-Za-z])\s*-\s*(\d+)\s*-\s*L\s*(\d)\s*-\s*B\s*(\d)\s*$/i); return m ? `${m[1].toUpperCase()}${+m[2]}${m[3].toUpperCase()}-${m[4].padStart(2, "0")}-L${m[5]}-B${m[6]}` : null; };
+const BYKEY = new Map(DATA.products.map(p => [p.k.replace(/\s+/g, "").toLowerCase(), p]));
+const BYCODE = new Map(); for (const p of DATA.products) { const c = p.c.toLowerCase(); if (c) BYCODE.set(c, BYCODE.has(c) ? null : p); }
+const findProduct = v => BYKEY.get(v.replace(/\s+/g, "").toLowerCase()) || BYCODE.get(v.trim().toLowerCase()) || null;
+// Text from Excel or the old sheets: rows of [Location] Item-or-code Cases, tab separated
+function pasteExternal(text) {
+  const items = [];
+  for (const r of text.split("\n").filter(r => r.trim())) {
+    let loc = null, p = null, q = null;
+    for (const v of r.split("\t").map(s => s.trim())) {
+      if (!v) continue;
+      if (!loc) { const L = normLoc(v); if (L && SLOT_META.has(L)) { loc = L; continue; } }
+      if (!p) { const f = findProduct(v); if (f) { p = f; continue; } }
+      if (p && q == null && /^\d+(\.0+)?$/.test(v)) q = Math.round(+v);
+    }
+    if (p) items.push({ loc, k: p.k, q: q != null ? q : (p.pl || 0), guessed: q == null });
+  }
+  if (!items.length) { toast("Couldn't find a product code or product name in what you pasted."); return; }
+  const ch = new Map();
+  if (items.some(i => i.loc)) {
+    for (const i of items) if (i.loc) { const v = ch.get(i.loc) || { lines: [] }; v.lines.push({ k: i.k, q: i.q }); ch.set(i.loc, v); }
+  } else if (items.length === 1) {
+    for (const code of selection()) ch.set(code, { lines: [{ k: items[0].k, q: items[0].q }] });
+  } else {
+    let targets = selection();
+    if (targets.length < items.length) {
+      targets = [st.sel]; const dir = st.after === "stay" ? "right" : st.after;
+      while (targets.length < items.length) { const n = nextCode(targets.at(-1), dir); if (!n) break; targets.push(n); }
+    }
+    items.slice(0, targets.length).forEach((i, n) => ch.set(targets[n], { lines: [{ k: i.k, q: i.q }] }));
+  }
+  applyChanges([...ch].map(([code, val]) => ({ code, val })));
+  const guessed = items.some(i => i.guessed) ? " Rows with no case count got a full pallet." : "";
+  toast(`Pasted ${ch.size} cell${ch.size === 1 ? "" : "s"} from the clipboard.${guessed}`);
+}
+
+/* ---------- Keyboard ---------- */
+$("grid").addEventListener("keydown", e => {
+  if (st.mode !== "grid") return;
+  const k = e.key;
+  const dirs = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", Home: "home", End: "end" };
+  if (dirs[k]) { e.preventDefault(); move(dirs[k], e.shiftKey); return; }
+  if (k === "PageDown" || k === "PageUp") { e.preventDefault(); jumpFace(k === "PageDown" ? 1 : -1); return; }
+  const mod = e.ctrlKey || e.metaKey;
+  // e.code names the physical key (Option+A types "å" on a Mac); fall back to e.key where code is missing
+  const is = L => e.code === "Key" + L || k.toLowerCase() === L.toLowerCase();
+  if (mod && is("Z")) { e.preventDefault(); doUndo(); return; }
+  if (mod && is("C")) { copySel(false); return; }
+  if (mod && is("X")) { copySel(true); return; }
+  if (mod && is("V")) { armPaste(); return; }
+  if (e.altKey && !mod && (is("A") || k === "å")) { e.preventDefault(); fillColumn(); return; }
+  if (mod || e.altKey) return;
+  if (k === "Escape") { if (RANGE.size) clearRange(); else if (!$("help").hidden) toggleHelp(false); return; }
+  if (k === "?") { e.preventDefault(); toggleHelp(); return; }
+  if (k === "Enter" || k === "F2") { e.preventDefault(); beginEdit("", true); return; }
+  const many = RANGE.size > 1, sel = selection();
+  if (k === "Delete" || k === "Backspace") {
+    e.preventDefault(); const had = sel.filter(c => cells.has(c));
+    if (had.length) { applyChanges(had.map(code => ({ code, val: null }))); toast(`Cleared ${had.length > 1 ? had.length + " cells" : had[0]}. ${MOD}+Z to undo.`); }
+    return;
+  }
+  if (k === "=") {
+    e.preventDefault(); if (!st.lastLines) { toast("Nothing entered yet to repeat."); return; }
+    applyChanges(sel.map(code => ({ code, val: { lines: clone(st.lastLines) } })));
+    if (!many && st.after !== "stay") move(st.after); return;
+  }
+  if (k === "-") {
+    e.preventDefault(); applyChanges(sel.map(code => ({ code, val: { lines: [], empty: true } })));
+    if (!many && st.after !== "stay") move(st.after); return;
+  }
+  if (k.length === 1 && k !== " ") { e.preventDefault(); clearRange(); beginEdit(k, false); }
+});
+$("prod").addEventListener("input", () => {
+  if (st.mode === "grid") beginEdit($("prod").value, true);
+  if (st.mode === "qty") { st.mode = "product"; st.draft.item = null; }
+  st.hl = 0; st.matches = search($("prod").value); renderEntry(); renderSugg();
+});
+$("prod").addEventListener("focus", () => { if (st.mode === "grid") beginEdit("", true); });
+$("prod").addEventListener("keydown", e => {
+  const k = e.key;
+  if (k === "ArrowDown" || k === "ArrowUp") {
+    e.preventDefault();
+    const n = Math.min(st.matches.length, 50); if (!n) return;
+    st.hl = (st.hl + (k === "ArrowDown" ? 1 : -1) + n) % n; renderSugg(); return;
+  }
+  if (k === "Escape") { e.preventDefault(); cancelEdit(); return; }
+  if (k === "Enter" || (k === "Tab" && !e.shiftKey)) {
+    const q = $("prod").value.trim();
+    if (!q && st.draft && st.draft.lines.length && k === "Enter") { e.preventDefault(); commit(); return; }
+    if (st.matches.length) { e.preventDefault(); choose(st.matches[Math.min(st.hl, st.matches.length - 1)]); return; }
+    if (k === "Enter") { e.preventDefault(); if (q) toast("No product matches. Try the code or one word of the name."); }
+    return;
+  }
+  if (k === "Backspace" && !$("prod").value && st.draft && st.draft.lines.length) { e.preventDefault(); st.draft.lines.pop(); renderEntry(); }
+});
+$("qty").addEventListener("keydown", e => {
+  const k = e.key;
+  if (k === "Escape") { e.preventDefault(); cancelEdit(); return; }
+  if (k === "Enter") { e.preventDefault(); if (!st.draft || !st.draft.item) return; if (takeLine()) commit(); return; }
+  if ((k === "Tab" && !e.shiftKey) || k === "+") {
+    e.preventDefault(); if (!st.draft || !st.draft.item) return;
+    if (takeLine()) { st.mode = "product"; st.matches = []; st.hl = 0; renderEntry(); renderSugg(); $("prod").focus(); }
+    return;
+  }
+  if (k === "Tab" && e.shiftKey) { e.preventDefault(); st.mode = "product"; st.draft.item = null; st.matches = search($("prod").value); renderEntry(); renderSugg(); $("prod").focus(); }
+});
+$("qty").addEventListener("focus", () => { if (!st.draft || !st.draft.item) { if (st.mode === "grid") beginEdit("", true); $("prod").focus(); } });
+$("sugg").addEventListener("mousedown", e => {
+  const li = e.target.closest("li[data-i]"); if (!li) return;
+  e.preventDefault(); choose(st.matches[+li.dataset.i]);
+});
+$("chips").addEventListener("click", e => {
+  const b = e.target.closest("[data-rm]"); if (!b || !st.draft) return;
+  st.draft.lines.splice(+b.dataset.rm, 1); renderEntry(); $("prod").focus();
+});
+$("grid").addEventListener("mousedown", e => {
+  const c = e.target.closest(".cell"); if (!c) return;
+  e.preventDefault();
+  if (st.mode !== "grid") cancelEdit();
+  const code = c.dataset.code;
+  if (e.shiftKey && ROW_OF.get(code) != null && ROWS[ROW_OF.get(code)].group === ROWS[ROW_OF.get(st.anchor || st.sel)].group) { if (!st.anchor) st.anchor = st.sel; }
+  else st.anchor = null;
+  select(code, { noScroll: true }); updateRange();
+  $("grid").focus({ preventScroll: true });
+});
+$("grid").addEventListener("dblclick", e => { const c = e.target.closest(".cell"); if (c) beginEdit("", true); });
+$("index").addEventListener("click", e => {
+  const b = e.target.closest("[data-jump]"); if (!b) return;
+  const sec = document.getElementById(b.dataset.jump); if (!sec) return;
+  sec.scrollIntoView({ block: "start", behavior: "smooth" });
+  const first = sec.querySelector(".cell"); if (first) { select(first.dataset.code, { noScroll: true }); $("grid").focus({ preventScroll: true }); }
+});
+function doUndo() {
+  const u = undo.pop(); if (!u) { toast("Nothing to undo."); return; }
+  applyChanges(u.map(x => ({ code: x.code, val: x.before })), true);
+  st.anchor = null; select(u[0].code); updateRange();
+  toast(u.length > 1 ? `Undid the change to ${u.length} cells.` : `Undid the change at ${u[0].code}.`);
+}
+
+/* Shortcut reference */
+function toggleHelp(force) {
+  const h = $("help"), show = force == null ? h.hidden : force;
+  h.hidden = !show; $("helpBtn").setAttribute("aria-expanded", String(show));
+  if (!show) $("grid").focus({ preventScroll: true });
+}
+const kb = s => s.split("+").map(x => `<kbd>${x}</kbd>`).join("+");
+$("help").innerHTML = `<h3>Shortcuts <button class="btn" id="helpClose">Close</button></h3>
+  <h4>Moving</h4><dl>
+    <dt>${kb("←")} ${kb("↑")} ${kb("↓")} ${kb("→")}</dt><dd>Move between slots, down into the floor row and on to the next rack side</dd>
+    <dt>${kb("Page Up")} ${kb("Page Down")}</dt><dd>Previous or next rack side</dd>
+    <dt>${kb("Home")} ${kb("End")}</dt><dd>Start or end of the row</dd>
+    <dt>${kb("Shift")}+arrows, ${kb("Shift")}+click</dt><dd>Select a block of cells on one rack side</dd>
+    <dt>${kb("Esc")}</dt><dd>Clear the selection</dd></dl>
+  <h4>Entering</h4><dl>
+    <dt>Type a code or name</dt><dd>Search products, ${kb("↑")} ${kb("↓")} to choose, ${kb("Enter")} to pick</dd>
+    <dt>${kb("Enter")} in cases</dt><dd>Save and move on</dd>
+    <dt>${kb("Tab")} in cases</dt><dd>Add another product to the same pallet</dd>
+    <dt>${kb("Enter")} or ${kb("F2")}</dt><dd>Edit the selected slot</dd>
+    <dt>${kb("=")}</dt><dd>Same product and cases as your last entry (fills every selected cell)</dd>
+    <dt>${kb("-")}</dt><dd>Mark checked and empty</dd>
+    <dt>${kb(ALT + "+A")}</dt><dd>Fill the empty slots in this rack column with this slot's product, at a full pallet</dd></dl>
+  <h4>Copy and paste</h4><dl>
+    <dt>${kb(MOD + "+C")}</dt><dd>Copy the selected cells</dd>
+    <dt>${kb(MOD + "+X")}</dt><dd>Cut the selected cells</dd>
+    <dt>${kb(MOD + "+V")}</dt><dd>Paste. One copied cell fills every selected cell; a copied block keeps its shape. Rows pasted from Excel with a location code go to that location.</dd>
+    <dt>${kb("Del")}</dt><dd>Clear the selected cells</dd>
+    <dt>${kb(MOD + "+Z")}</dt><dd>Undo, including a whole fill or paste</dd></dl>`;
+$("helpBtn").addEventListener("click", () => toggleHelp());
+$("help").addEventListener("click", e => { if (e.target.id === "helpClose") toggleHelp(false); });
+
+/* ---------- Settings ---------- */
+$("showPrev").checked = st.showPrev;
+$("after").value = st.after;
+$("showPrev").addEventListener("change", () => { st.showPrev = $("showPrev").checked; LS.set("ic.showPrev", st.showPrev); renderAll(); select(st.sel, { noScroll: true }); });
+$("after").addEventListener("change", () => { st.after = $("after").value; LS.set("ic.after", st.after); $("grid").focus({ preventScroll: true }); });
+
+let toastT;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2600); }
+
+/* ---------- Storage: shared database, with this-device fallback ---------- */
+const today = new Date();
+const ymd = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+const defaultSession = { id: "count-" + ymd, name: "Count " + today.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }), created: today.toISOString() };
+const store = {
+  db: null, sid: null, sessions: new Map(), unsubs: [], inflight: new Map(), pending: new Map(), mode: "starting",
+  status(msg, warn) { const el = $("saveStatus"); el.textContent = msg; el.classList.toggle("warn", !!warn); },
+  async init() {
+    let db = null;
+    try { db = window.claude && typeof window.claude.use === "function" ? await window.claude.use("db") : null; } catch (_) { db = null; }
+    if (!db) { this.mode = "local"; this.status("Saving on this device only", true); this.loadLocalSessions(); return; }
+    this.db = db; this.mode = "db"; this.status("Saved");
+    let first = true;
+    db.collection("sessions").onSnapshot(snap => {
+      this.sessions.clear();
+      for (const d of snap.docs) this.sessions.set(d.id, { id: d.id, ...d.data() });
+      if (first) { first = false; const want = LS.get("ic.session", null); const pick = (want && this.sessions.has(want)) ? want : ([...this.sessions.values()].sort((a, b) => String(b.created).localeCompare(String(a.created)))[0] || defaultSession).id; this.open(pick); }
+      renderSessions();
+    }, err => { this.status("Couldn't reach saved counts (" + err.code + ")", true); });
+  },
+  loadLocalSessions() {
+    for (const s of LS.get("ic.sessions", [])) this.sessions.set(s.id, s);
+    const want = LS.get("ic.session", null);
+    this.open(want && this.sessions.has(want) ? want : ([...this.sessions.values()].pop() || defaultSession).id);
+    renderSessions();
+  },
+  open(sid) {
+    for (const u of this.unsubs) u(); this.unsubs = [];
+    this.sid = sid; LS.set("ic.session", sid);
+    cells.clear(); undo.length = 0;
+    if (this.mode === "local") {
+      for (const [code, v] of Object.entries(LS.get("ic.cells." + sid, {}))) cells.set(code, v);
+      renderAll(); select(st.sel, { noScroll: true }); renderSessions(); return;
+    }
+    renderAll(); select(st.sel, { noScroll: true });
+    const groups = [...new Set([...RACKS.map(r => "r-" + r), "areas"])];
+    for (const g of groups) {
+      const un = this.db.collection(`sessions/${sid}/${g}`).onSnapshot(snap => {
+        if (this.sid !== sid) return;
+        for (const ch of snap.docChanges()) {
+          const code = ch.doc.id;
+          if (this.pending.has(code) || this.inflight.get(code)) continue;
+          if (ch.type === "removed") cells.delete(code); else cells.set(code, ch.doc.data());
+          afterChange(code);
+        }
+        if (st.draft == null) renderEntry();
+      }, err => this.status("Live updates stopped (" + err.code + "). Reload to reconnect.", true));
+      this.unsubs.push(un);
+    }
+  },
+  async ensureSession() {
+    if (this.sessions.has(this.sid)) return;
+    const s = this.sid === defaultSession.id ? defaultSession : { id: this.sid, name: this.sid, created: new Date().toISOString() };
+    this.sessions.set(s.id, s);
+    if (this.mode === "local") { LS.set("ic.sessions", [...this.sessions.values()]); renderSessions(); return; }
+    await this.db.doc("sessions/" + s.id).set({ name: s.name, created: s.created });
+  },
+  write(code, val) {
+    if (this.mode === "local") {
+      this.ensureSession();
+      const all = LS.get("ic.cells." + this.sid, {}); if (val) all[code] = val; else delete all[code]; LS.set("ic.cells." + this.sid, all); return;
+    }
+    if (this.mode !== "db") return;
+    this.pending.set(code, { val, sid: this.sid });
+    if (!this.inflight.get(code)) this.flush(code);
+  },
+  async flush(code) {
+    this.inflight.set(code, true);
+    try {
+      while (this.pending.has(code)) {
+        const { val, sid } = this.pending.get(code); this.pending.delete(code);
+        this.status("Saving…");
+        await this.ensureSession();
+        const ref = this.db.doc(`sessions/${sid}/${groupOf(code)}/${code}`);
+        let tries = 0;
+        for (;;) {
+          try { if (val) await ref.set({ ...val, at: new Date().toISOString() }); else await ref.delete(); break; }
+          catch (err) {
+            if (err && err.code === "unavailable" && tries++ < 2) { await new Promise(r => setTimeout(r, 400 + Math.random() * 800)); continue; }
+            throw err;
+          }
+        }
+      }
+      const busy = [...this.inflight].some(([c, v]) => v && c !== code) || this.pending.size > 0;
+      if (!busy) this.status("Saved");
+    } catch (err) {
+      this.status(err && err.code === "quota_exceeded" ? "Storage is full. Export and start a new count." : "Not saved (" + (err && err.code || "error") + "). Check your connection.", true);
+    } finally { this.inflight.set(code, false); }
+  },
+  async create(name) {
+    const s = { id: "count-" + Date.now().toString(36), name, created: new Date().toISOString() };
+    this.sessions.set(s.id, s);
+    if (this.mode === "db") { try { await this.db.doc("sessions/" + s.id).set({ name: s.name, created: s.created }); } catch (err) { this.status("Couldn't create the count (" + err.code + ")", true); return; } }
+    else LS.set("ic.sessions", [...this.sessions.values()]);
+    this.open(s.id); renderSessions(); toast(`Started “${name}”.`);
+  },
+};
+function renderSessions() {
+  const list = [...store.sessions.values()];
+  if (store.sid && !store.sessions.has(store.sid)) list.push(store.sid === defaultSession.id ? defaultSession : { id: store.sid, name: store.sid });
+  list.sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
+  $("session").innerHTML = list.map(s => `<option value="${esc(s.id)}" ${s.id === store.sid ? "selected" : ""}>${esc(s.name || s.id)}</option>`).join("");
+}
+$("session").addEventListener("change", () => { if (st.draft) cancelEdit(); store.open($("session").value); });
+$("newBtn").addEventListener("click", () => { $("newForm").hidden = false; $("newBtn").hidden = true; $("newName").focus(); });
+$("newCancel").addEventListener("click", () => { $("newForm").hidden = true; $("newBtn").hidden = false; });
+const createNew = () => { const n = $("newName").value.trim(); if (!n) { $("newName").focus(); return; } $("newForm").hidden = true; $("newBtn").hidden = false; $("newName").value = ""; store.create(n); };
+$("newCreate").addEventListener("click", createNew);
+$("newName").addEventListener("keydown", e => { if (e.key === "Enter") createNew(); if (e.key === "Escape") $("newCancel").click(); });
+
+/* ---------- Export: .xlsx in the stock workbook's layout ---------- */
+/*XLSX-START*/
+// Same tabs, columns, header style and row order as the DECCAN/MATCO stock workbooks, so the
+// RACK tab's QUERY formula (which reads Anaganaga, NearCooler, DOOR6, Rack00, RACK02… by name) still works.
+function buildWorkbook(ExcelJS, ctx) {
+  const { faces, cells, products } = ctx;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Warehouse Count";
+  const HDR = ["Location", "Item", "No. of Cases", "Best Before Date", "Batch No", "Container"];
+  const WIDTHS = [11.6, 53, 6.4, 12.3, 19, 21.7, 5, 11.6, 53, 6.4, 12.3, 19.3, 14.3, 5, 11.6, 53, 6.4, 12.3, 19.3, 14.3];
+  const thin = { style: "thin" }, border = { top: thin, left: thin, bottom: thin, right: thin };
+  const font = { name: "Calibri", size: 11 };
+  const pad = n => String(n).padStart(2, "0");
+  const linesOf = code => { const v = cells.get(code); return v && v.lines && v.lines.length ? v.lines : []; };
+  const pallets = prefix => [...cells.keys()].filter(c => c.startsWith(prefix + "-P") && linesOf(c).length).sort();
+
+  // blocks = how many rack sides sit side by side (A in A–F, B in H–M, C in O–T)
+  function sheet(name, header, blocks, widths) {
+    const ws = wb.addWorksheet(name);
+    const row1 = Array.from({ length: blocks }, (_, i) => i ? [null, ...header] : header).flat();
+    ws.columns = (widths || WIDTHS).slice(0, row1.length).map(w => ({ width: w }));
+    const r = ws.getRow(1);
+    row1.forEach((v, i) => {
+      if (v == null) return;
+      const c = r.getCell(i + 1);
+      c.value = v; c.font = { ...font, bold: true }; c.border = border;
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFB7B7B7" } };
+      c.alignment = { horizontal: "center", vertical: "middle" };
+    });
+    return ws;
+  }
+  function put(ws, rowNo, offset, loc, line, dateCols) {
+    const row = ws.getRow(rowNo);
+    for (let i = 1; i <= 6; i++) { const c = row.getCell(offset + i); c.border = border; c.font = font; }
+    row.getCell(offset + 1).value = loc;
+    if (line) { row.getCell(offset + 2).value = line.k; row.getCell(offset + 3).value = +line.q; }
+    row.getCell(offset + 3).alignment = { horizontal: "center" };
+    if (dateCols !== false) { row.getCell(offset + 4).numFmt = "mmm yyyy"; row.getCell(offset + 4).alignment = { horizontal: "center" }; row.getCell(offset + 6).numFmt = "0"; }
+  }
+  // Lay out each side's list in its own block, row by row; a mixed pallet repeats its location on extra rows.
+  function writePairs(ws, start, lists, dateCols) {
+    let r = start;
+    const n = Math.max(0, ...lists.map(l => l.length));
+    for (let i = 0; i < n; i++) {
+      const hs = lists.map(l => l[i] ? Math.max(1, l[i].lines.length) : 0);
+      for (let j = 0; j < Math.max(...hs); j++) {
+        lists.forEach((l, s) => { if (j < hs[s]) put(ws, r, s * 7, l[i].loc, l[i].lines[j] || null, dateCols); });
+        r++;
+      }
+    }
+    return r;
+  }
+  const slotList = (face, c) => {
+    const col = face && face.cols.find(x => x.c === c);
+    if (!col) return [];
+    return col.slots.slice().sort((x, y) => x[1] - y[1] || x[0] - y[0])
+      .map(([l, b]) => { const code = `${face.id}-${pad(c)}-L${l}-B${b}`; return { loc: code, lines: linesOf(code) }; });
+  };
+  const floorList = (prefix, label) => pallets(prefix).map(code => ({ loc: label, lines: linesOf(code) }));
+
+  // RACK: every counted line, sorted by item then location (what the old QUERY produced)
+  const all = [];
+  const labelOf = code => {
+    let m = code.match(/^(D?\d+[A-Z])-FLOOR-P\d+$/); if (m) return m[1] + " Floor";
+    for (const [id, label] of ctx.areaLabels) if (code.startsWith(id + "-P")) return label;
+    return code;
+  };
+  for (const [code, v] of cells) for (const l of (v.lines || [])) all.push([labelOf(code), l.k, +l.q]);
+  all.sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0], undefined, { numeric: true }));
+  const rack = sheet("RACK", ["LOCATION", "ITEM", "# CASES", "BBD", "BATCH NO", "CONTAINER"], 1);
+  all.forEach((x, i) => put(rack, i + 2, 0, x[0], { k: x[1], q: x[2] }));
+
+  // TOTALS: cases and pallets per product
+  const tot = new Map();
+  for (const v of cells.values()) for (const l of (v.lines || [])) { const x = tot.get(l.k) || { q: 0, n: 0 }; x.q += +l.q || 0; x.n++; tot.set(l.k, x); }
+  const tw = sheet("TOTALS", ["Product Code", "Product", "Product Desc", "Total Cases", "Pallets"], 1, [12, 53, 45, 12, 9]);
+  [...tot].sort((a, b) => ((products.get(a[0]) || {}).c || a[0]).localeCompare((products.get(b[0]) || {}).c || b[0], undefined, { numeric: true }))
+    .forEach(([k, x], i) => {
+      const p = products.get(k) || { c: "", n: "" }, row = tw.getRow(i + 2);
+      [p.c, k, p.n, x.q, x.n].forEach((v, j) => { const c = row.getCell(j + 1); c.value = v; c.border = border; c.font = font; });
+      row.getCell(4).alignment = row.getCell(5).alignment = { horizontal: "center" };
+    });
+
+  // Floor areas, each in the tab the old workbook used
+  const area = (name, header, blocks, prefixes, dateCols) => {
+    const ws = sheet(name, header, blocks);
+    let r = 2;
+    for (const [prefix, label] of prefixes) r = writePairs(ws, r, [floorList(prefix, label)], dateCols);
+  };
+  area("Anaganaga", [...HDR, "Description"], 1, [["LINE-2-3", "Between line 2 & 3"]]);
+  area("NearCooler", HDR, 1, [1, 2, 3, 4, 5].map(n => ["NEARCOOLER-0" + n, "NEARCOOLER-0" + n]));
+
+  // Racks: one tab per rack, column by column, a blank row after each column, then floor pallets
+  const racks = [...new Set(faces.map(f => f.rack))];
+  const rackTab = r => r === "0" ? "Rack00" : r.startsWith("D") ? "DOOR" + r.slice(1) : "RACK" + pad(r);
+  const doorFirst = racks.filter(r => r.startsWith("D")), numbered = racks.filter(r => !r.startsWith("D"));
+  const writeRack = r => {
+    const sides = faces.filter(f => f.rack === r).sort((x, y) => x.side.localeCompare(y.side));
+    const ws = sheet(rackTab(r), HDR, sides.length);
+    const cols = [...new Set(sides.flatMap(f => f.cols.map(c => c.c)))].sort((x, y) => x - y);
+    let row = 2;
+    for (const c of cols) { row = writePairs(ws, row, sides.map(f => slotList(f, c))); row++; }
+    row = writePairs(ws, row, sides.map(f => floorList(f.id + "-FLOOR", f.id + " Floor")));
+    if (r === "7") writePairs(ws, row, [floorList("LANE-7", "Lane 7")]);
+  };
+  doorFirst.forEach(writeRack);
+  area("DOOR2N3", HDR, 2, [["DOOR-2-3", "DOOR 2N3"]]);
+  area("Front", HDR, false, [["LOAD-AREA", "LOAD_AREA_01"]]);
+  area("CSFloor", ["Location", "Item", "QTY", "Container", "WH Arrival Date", "Batch No"], 2, [["RECV-FLOOR", "Recv Floor"]], false);
+  numbered.forEach(writeRack);
+  return wb;
+}
+/*XLSX-END*/
+
+function loadExcelJS() {
+  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  const urls = ["https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js", "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"];
+  return new Promise((resolve, reject) => {
+    const next = () => {
+      const u = urls.shift(); if (!u) { reject(new Error("load")); return; }
+      const s = document.createElement("script"); s.src = u;
+      s.onload = () => (window.ExcelJS ? resolve(window.ExcelJS) : next()); s.onerror = next;
+      document.head.appendChild(s);
+    };
+    next();
+  });
+}
+async function exportXlsx() {
+  let hasAny = false; for (const v of cells.values()) if (v.lines && v.lines.length) { hasAny = true; break; }
+  if (!hasAny) { toast("Nothing counted yet in this count."); return; }
+  const btn = $("expXlsx"); btn.disabled = true; const label = btn.textContent; btn.textContent = "Building…";
+  try {
+    let dl = null; try { dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch (_) {}
+    if (!dl) { toast("Downloads aren't available in this view. Open the page in claude.ai to export."); return; }
+    let ExcelJS; try { ExcelJS = await loadExcelJS(); } catch (_) { toast("Couldn't load the Excel builder. Check your connection and try again."); return; }
+    const wb = buildWorkbook(ExcelJS, { faces: FACES, cells, products: P, areaLabels: AREA_LABELS });
+    const buf = await wb.xlsx.writeBuffer();
+    const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    const filename = `WAREHOUSE_STOCK_${stamp}.xlsx`;
+    try { await dl.save({ filename, data: new Blob([buf]) }); toast(`Saved ${filename}.`); }
+    catch (err) {
+      if (err && err.code === "declined") return;
+      toast(err && err.code === "rate_limited" ? "A save is already open. Try again in a moment." : "The download didn't go through (" + (err && err.code || "error") + ").");
+    }
+  } finally { btn.disabled = false; btn.textContent = label; }
+}
+const AREA_LABELS = [["LINE-2-3", "Between line 2 & 3"], ["LANE-7", "Lane 7"], ["DOOR-2-3", "DOOR 2N3"], ["LOAD-AREA", "LOAD_AREA_01"], ["RECV-FLOOR", "Recv Floor"],
+  ...[1, 2, 3, 4, 5].map(n => ["NEARCOOLER-0" + n, "NEARCOOLER-0" + n])];
+$("expXlsx").addEventListener("click", exportXlsx);
+
+/* ---------- Start ---------- */
+renderAll();
+select(st.sel, { noScroll: true });
+$("grid").focus({ preventScroll: true });
+store.init();
+</script>

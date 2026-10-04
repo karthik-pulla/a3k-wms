@@ -1,0 +1,25 @@
+node_modules/
+__pycache__/
+.DS_Store
+outputs/labels/millet-bank/build/
+app/dist/
+*.tsbuildinfo
+
+# Real business data stays on the owners' machines, never on GitHub (CLAUDE.md rule 1).
+# The public demo site makes up its own stock (app/src/store/demoStock.ts).
+data/source/
+data/csv/
+data/generated/count.json
+outputs/
+tools/warehouse-count/dist/
+tools/rack6-map/
+app/src/data/generated/sampleStock.json
+# Loose copies in the top folder
+/*.pdf
+/*.png
+/*.xlsx
+/*.zip
+/MilletBank_Labels_By_Product/
+/label-maker.html
+/rack6-map.html
+/warehouse-count.html
