@@ -11,7 +11,9 @@ export interface Route {
 
 const parse = (): Route => {
   const [first, ...rest] = window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
-  const mode = MODES.includes(first as Mode) ? (first as Mode) : "home";
+  // People type the names as they're written on screen: #/in-bounds, #/Out-bounds
+  const name = first?.toLowerCase().replace(/-/g, "");
+  const mode = MODES.includes(name as Mode) ? (name as Mode) : "home";
   return { mode, parts: mode === "home" ? [] : rest };
 };
 

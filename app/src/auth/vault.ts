@@ -84,6 +84,10 @@ const readVault = (): Sealed | null => { try { const r = localStorage.getItem(VA
 const DB = "wms-auth", STORE = "session";
 function idb<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   return new Promise((resolve, reject) => {
+    // Some phones (iOS Safari especially) sometimes never answer an IndexedDB open; give up rather than hang on "Opening…"
+    const limit = window.setTimeout(() => reject(new Error("IndexedDB didn't answer")), 4000);
+    const done = <A extends unknown[]>(f: (...a: A) => void) => (...a: A) => { window.clearTimeout(limit); f(...a); };
+    resolve = done(resolve); reject = done(reject);
     const req = indexedDB.open(DB, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(STORE);
     req.onerror = () => reject(req.error);

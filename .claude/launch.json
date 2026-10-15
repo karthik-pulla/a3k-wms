@@ -52,6 +52,21 @@
         "--strictPort"
       ],
       "port": 4180
+    },
+    {
+      "name": "wms-demo-fresh",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "preview",
+        "--",
+        "--port",
+        "4181",
+        "--strictPort"
+      ],
+      "port": 4181
     }
   ]
 }

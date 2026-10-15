@@ -3,6 +3,8 @@ import { sampleState } from "../store/sample";
 import type { State } from "../store/types";
 import { clearSession, ensureVault, persist, restore, sessionLimits, touchSession, type Account, type Session, type VaultData } from "./vault";
 import { LoginScreen } from "../pages/login/LoginScreen";
+import { isDemo, startOver } from "../utils/freshLoad";
+import { t } from "../i18n";
 
 export interface Auth {
   account: Account;
@@ -94,9 +96,30 @@ export function AuthGate({ children }: { children: (initial: State | null, onCha
     return { account, data: phase.data, session: phase.session, run, signOut };
   }, [phase, run, signOut]);
 
-  if (phase.kind === "loading") return <div className="auth-loading" role="status">Opening…</div>;
+  if (phase.kind === "loading") return <Opening />;
   if (phase.kind === "locked" || !auth) {
     return <LoginScreen message={phase.kind === "locked" ? phase.message : undefined} onSignedIn={(session, data) => { dataRef.current = data; sessionRef.current = session; setPhase({ kind: "open", session, data }); }} />;
   }
   return <Ctx.Provider value={auth}>{children(phase.data.state, onChange)}</Ctx.Provider>;
+}
+
+/** "Opening…", and after 8 seconds a way out instead of waiting forever */
+function Opening() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => { const t = window.setTimeout(() => setSlow(true), 8000); return () => window.clearTimeout(t); }, []);
+  if (!slow) return <div className="auth-loading" role="status">Opening…</div>;
+  return (
+    <main className="auth-loading">
+      <div className="glass crash-card">
+        <h2>This is taking too long</h2>
+        <p className="muted">The app couldn't open its saved data on this device. Reloading usually fixes it.</p>
+        <button className="btn primary" onClick={() => location.reload()}>Reload</button>
+        {isDemo && <StartOver />}
+      </div>
+    </main>
+  );
+}
+
+function StartOver() {
+  return <button className="btn" onClick={() => { if (window.confirm(t("Start over on this device? The demo's sample data and any changes you made here are cleared."))) void startOver(); }}>Start over on this device</button>;
 }

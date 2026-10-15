@@ -15,3 +15,11 @@ export function freshLoad(): boolean {
 /** A screen's file couldn't be downloaded (an update replaced it, or the connection dropped) */
 export const isLoadError = (e: unknown) =>
   e instanceof Error && /dynamically imported module|Importing a module script failed|error loading dynamically imported|Unable to preload/i.test(e.message);
+
+/** DEMO only: forget everything this app saved on this device (sample data, accounts, settings) and start again */
+export async function startOver() {
+  try { Object.keys(localStorage).filter(k => k.startsWith("wms.")).forEach(k => localStorage.removeItem(k)); } catch { /* storage blocked */ }
+  try { indexedDB.deleteDatabase("wms-auth"); } catch { /* ignore */ }
+  location.replace(location.pathname);
+}
+export const isDemo = import.meta.env.VITE_WMS_DEMO === "1";
