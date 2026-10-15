@@ -6,3 +6,5 @@ export function accountUser(a: Pick<Account, "uid" | "name" | "role" | "clients"
   return { id: a.uid, name: a.name, role: a.role, groups: groupsFor(a.role), ...(a.clients?.length ? { clients: a.clients } : {}) };
 }
 export const groupsFor = (role: Role): GroupId[] => (role === "owner" ? ["owners"] : role === "coordinator" ? ["coordinators"] : []);
+
+export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("") || "?";

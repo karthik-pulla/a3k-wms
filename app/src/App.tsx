@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Background } from "./components/Background";
 import { ModeNav } from "./components/ModeNav";
 import { StatusPill } from "./components/StatusPill";
@@ -8,10 +8,7 @@ import { SettingsIcon, HomeIcon } from "./components/icons";
 import { ToastProvider } from "./components/Toast";
 import { HomeMessages } from "./components/chat/HomeMessages";
 import { Home } from "./pages/Home";
-import { OutboundsPage } from "./pages/outbounds/OutboundsPage";
-import { InboundsPage } from "./pages/inbounds/InboundsPage";
-import { MessagesPage } from "./pages/messages/MessagesPage";
-import { AccountPage, initials } from "./pages/account/AccountPage";
+import { initials } from "./auth/accountUser";
 import { AuthGate, useAuth } from "./auth/AuthGate";
 import { accountUser } from "./auth/accountUser";
 import { canManageAccounts } from "./auth/permissions";
@@ -19,10 +16,6 @@ import { groupsFor } from "./auth/accountUser";
 import { RoleSwitch } from "./components/RoleSwitch";
 import { pendingCount } from "./auth/vault";
 import { can } from "./auth/permissions";
-import { TasksPage } from "./pages/tasks/TasksPage";
-import { WorkPage } from "./pages/work/WorkPage";
-import { LogsPage } from "./pages/logs/LogsPage";
-import { InventoryPage } from "./pages/inventory/InventoryPage";
 import { useRoute } from "./router";
 import { useAppearance, useSettings } from "./settings";
 import { SessionContext, useSession } from "./session";
@@ -32,6 +25,26 @@ import { ChatBackendProvider } from "./chat/backend";
 import { OverlayProvider } from "./chat/overlay";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useLang } from "./i18n";
+
+// Each screen is downloaded when first opened, so phones start faster; the rest load quietly once signed in
+const screens = {
+  outbounds: () => import("./pages/outbounds/OutboundsPage").then(m => ({ default: m.OutboundsPage })),
+  inbounds: () => import("./pages/inbounds/InboundsPage").then(m => ({ default: m.InboundsPage })),
+  messages: () => import("./pages/messages/MessagesPage").then(m => ({ default: m.MessagesPage })),
+  account: () => import("./pages/account/AccountPage").then(m => ({ default: m.AccountPage })),
+  tasks: () => import("./pages/tasks/TasksPage").then(m => ({ default: m.TasksPage })),
+  work: () => import("./pages/work/WorkPage").then(m => ({ default: m.WorkPage })),
+  logs: () => import("./pages/logs/LogsPage").then(m => ({ default: m.LogsPage })),
+  inventory: () => import("./pages/inventory/InventoryPage").then(m => ({ default: m.InventoryPage })),
+};
+const OutboundsPage = lazy(screens.outbounds);
+const InboundsPage = lazy(screens.inbounds);
+const MessagesPage = lazy(screens.messages);
+const AccountPage = lazy(screens.account);
+const TasksPage = lazy(screens.tasks);
+const WorkPage = lazy(screens.work);
+const LogsPage = lazy(screens.logs);
+const InventoryPage = lazy(screens.inventory);
 
 export default function App() {
   const settingsApi = useSettings();
@@ -97,11 +110,13 @@ function Shell({ reset, viewingAs }: { reset: () => void; viewingAs: boolean }) 
   // Wide screens: Messages and the ticker share a right-hand rail; narrower, Messages joins the update cards
   const rail = home && wide && (messagesCard || settings.showTicker);
   const showTicker = settings.showTicker && home;
+  useEffect(() => { const t = window.setTimeout(() => Object.values(screens).forEach(load => load().catch(() => {})), 1500); return () => window.clearTimeout(t); }, []);
 
   return (
     <>
       <div className={`shell${rail ? " has-rail" : showTicker ? " has-ticker" : ""}${route.mode === "messages" ? " on-messages" : ""}${route.mode === "work" && route.parts[0] === "forklift" ? " fk" : ""}`}>
         <ModeNav current={route.mode} />
+        <Suspense fallback={<main className="page-loading muted" aria-busy="true">Loading…</main>}>
         {route.mode === "home" ? (lead ? <Home messagesInRail={rail && messagesCard} /> : <WorkPage parts={[]} />)
           : route.mode === "work" ? <WorkPage parts={route.parts} />
           : route.mode === "inventory" ? <InventoryPage parts={route.parts} />
@@ -112,6 +127,7 @@ function Shell({ reset, viewingAs }: { reset: () => void; viewingAs: boolean }) 
           : !lead ? <NoAccess />
           : route.mode === "inbounds" ? <InboundsPage parts={route.parts} />
           : <OutboundsPage parts={route.parts} />}
+        </Suspense>
         {rail ? (
           <aside className="rail" aria-label="Messages and activity">
             {messagesCard && <HomeMessages placement="rail" />}

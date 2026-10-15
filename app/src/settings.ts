@@ -16,6 +16,8 @@ export interface HomeSettings {
   theme: ThemeChoice;
   glass: GlassStrength;
   movingBackground: boolean;
+  /** 2 once the phone default for movingBackground applies (see load) */
+  motionDefaults?: number;
   showSummary: boolean;
   showTicker: boolean;
   /** Home cards in display order; `visible` controls whether each shows on the home screen. */
@@ -33,12 +35,16 @@ export interface HomeSettings {
   simulateOffline: boolean;
 }
 
+const media = (q: string) => typeof window !== "undefined" && !!window.matchMedia?.(q).matches;
+
 export const DEFAULT_SETTINGS: HomeSettings = {
   userId: "",
   testRole: "",
   theme: "system",
   glass: "frosted",
-  movingBackground: !(typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches),
+  // Off if the OS asks for less motion, and on phones and tablets: moving colour behind frosted glass makes them slow
+  movingBackground: !media("(prefers-reduced-motion: reduce)") && !media("(pointer: coarse)"),
+  motionDefaults: 2,
   showSummary: true,
   showTicker: true,
   cards: [
@@ -71,6 +77,8 @@ function load(): HomeSettings {
     const saved = JSON.parse(raw) as Partial<HomeSettings> & { role?: string; name?: string };
     delete saved.role; delete saved.name; // replaced by "Signed in as"
     if (saved.userId === "karthik") saved.userId = ""; // the old default, from before sign-in existed
+    // Saved before phones defaulted to a still background (the old default was saved, not chosen): use the new default
+    if (saved.motionDefaults !== 2) saved.movingBackground = DEFAULT_SETTINGS.movingBackground && saved.movingBackground !== false;
     if ((saved.lastOnlineVisibleTo as string) === "owners-supervisors") saved.lastOnlineVisibleTo = "owners-coordinators"; // role renamed
     // Keep any card kinds added since the settings were saved (new ones go first, like the defaults)
     const known = new Set((saved.cards ?? []).map(c => c.kind));

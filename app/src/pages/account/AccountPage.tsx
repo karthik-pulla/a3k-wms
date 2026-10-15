@@ -11,7 +11,7 @@ import { useStore } from "../../store/store";
 import { useSession } from "../../session";
 import { useToast } from "../../components/Toast";
 import { fmtDay } from "../../inventory/selectors";
-import { accountUser } from "../../auth/accountUser";
+import { accountUser, initials } from "../../auth/accountUser";
 import type { Role } from "../../store/types";
 import { t } from "../../i18n";
 
@@ -222,4 +222,3 @@ function SecurityLog() {
   );
 }
 
-export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("") || "?";

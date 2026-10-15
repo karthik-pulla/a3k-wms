@@ -93,7 +93,9 @@ a { color: inherit; }
 }
 
 /* ---------- Moving background ---------- */
-.bg { position: fixed; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; animation: hue 26s ease-in-out infinite alternate; }
+.bg { position: fixed; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
+/* The colour shift repaints the whole screen and every pane of glass each frame: computers only, too heavy for phones */
+@media (hover: hover) and (pointer: fine) { .bg { animation: hue 26s ease-in-out infinite alternate; } }
 .bg .blob {
   position: absolute;
   width: 58vmax;
@@ -245,6 +247,7 @@ a { color: inherit; }
 
 /* ---------- Placeholder pages ---------- */
 .page { padding: 92px 0 40px 36px; max-width: 900px; display: grid; gap: 22px; align-content: start; }
+.page-loading { padding: 92px 0 0 36px; }
 .page h1 { margin: 0; font-family: var(--font-display); font-weight: 640; font-size: clamp(44px, 5.6vw, 76px); line-height: 1; letter-spacing: -0.04em; }
 .panel { border-radius: 26px; padding: 22px 24px; }
 .panel h2 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }

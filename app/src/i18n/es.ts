@@ -60,6 +60,7 @@ export const ES: Record<string, string> = {
   "This account is turned off. Ask an admin.": "Esta cuenta está desactivada. Pregunta a un admin.", "Couldn't sign in on this browser.": "No se pudo iniciar sesión en este navegador.",
   "Your data is encrypted on this device and opens only after you sign in.": "Tus datos están cifrados en este dispositivo y solo se abren cuando inicias sesión.",
   "Demo: the stock here is made up. Sign in with admin / password. Changes stay on this device only.": "Demo: el inventario aquí es inventado. Entra con admin / password. Los cambios se quedan solo en este dispositivo.",
+  "Loading…": "Cargando…",
   "Ask for an account": "Pedir una cuenta", "An admin approves it and gives you your role (owner, coordinator or worker). Your request is encrypted so only an admin can read it.": "Un admin la aprueba y te da tu rol (dueño, coordinador o trabajador). Tu solicitud va cifrada para que solo un admin la lea.",
   "Full name": "Nombre completo", "3–32 letters, numbers, dots, dashes or underscores": "3–32 letras, números, puntos, guiones o guiones bajos", "Email (optional)": "Correo (opcional)",
   "Password again": "Repite la contraseña", "The passwords don't match.": "Las contraseñas no coinciden.", "Note for the admin (optional)": "Nota para el admin (opcional)", "e.g. forklift driver, PM shift": "p. ej. operador de montacargas, turno de tarde",
