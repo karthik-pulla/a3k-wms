@@ -1,6 +1,57 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "tools", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "8765"], "port": 8765 }
+    {
+      "name": "wms-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "dev"
+      ],
+      "port": 5173,
+      "autoPort": true
+    },
+    {
+      "name": "tools",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "wms-app-build",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "preview",
+        "--",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
+    },
+    {
+      "name": "wms-demo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "preview",
+        "--",
+        "--port",
+        "4180",
+        "--strictPort"
+      ],
+      "port": 4180
+    }
   ]
 }

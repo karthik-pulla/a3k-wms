@@ -3,8 +3,10 @@
   "private": true,
   "description": "Warehouse management system: count page, label maker and data scripts",
   "scripts": {
-    "build": "python3 scripts/dump_workbooks.py && python3 scripts/build_count_data.py && python3 scripts/build_label_catalog.py && python3 scripts/build_tools.py",
-    "test": "node --test tests/*.test.js"
+    "build": "python3 scripts/dump_workbooks.py && python3 scripts/build_count_data.py && python3 scripts/build_label_catalog.py && python3 scripts/build_tools.py && python3 scripts/build_app_data.py",
+    "test": "node --test tests/*.test.js",
+    "app:dev": "npm --prefix app run dev",
+    "app:build": "npm --prefix app run build"
   },
   "devDependencies": {
     "exceljs": "4.4.0"
