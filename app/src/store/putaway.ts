@@ -1,4 +1,4 @@
-import { SLOTS, productById, slotMeta, type SlotMeta } from "../data/catalog";
+import { SLOTS, productById, slotMeta, spotCode, type SlotMeta } from "../data/catalog";
 import type { Shipment, StockLine } from "./types";
 
 export interface PalletPlan {
@@ -74,8 +74,8 @@ export function suggestPutaway(stock: Record<string, StockLine[]>, s: Shipment):
     for (const h of homes) counts.set(h.face, (counts.get(h.face) ?? 0) + 1);
     const face = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? SLOTS[0].face;
     let n = 1;
-    while (stock[`${face}-FLOOR-P${String(n).padStart(2, "0")}`]?.length || taken.has(`${face}-FLOOR-P${String(n).padStart(2, "0")}`)) n++;
-    const code = `${face}-FLOOR-P${String(n).padStart(2, "0")}`;
+    while (stock[spotCode(face, n)]?.length || taken.has(spotCode(face, n))) n++;
+    const code = spotCode(face, n);
     taken.add(code);
     return { pallet, lines, slot: code, why: "No empty slot: rack floor" };
   });

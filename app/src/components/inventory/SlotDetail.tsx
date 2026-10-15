@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { FACES, describeLocation, productById, slotMeta } from "../../data/catalog";
+import { FACES, describeLocation, productById, slotCode, slotMeta, spotCode } from "../../data/catalog";
 import { can, visibleLines } from "../../auth/permissions";
 import { normalizeLocation } from "../../chat/refs";
 import { arrivalDate, expiryTone, isPartial } from "../../chat/selectors";
@@ -108,7 +108,7 @@ export function SlotDetail({ code, onClose, onOpen }: { code: string; onClose: (
 export function neighbours(code: string) {
   const m = slotMeta(code);
   if (!m) return { left: null, right: null, up: null, down: null };
-  const at = (col: number, level: number, bay: number) => { const c = `${m.face}-${String(col).padStart(2, "0")}-L${level}-B${bay}`; return slotMeta(c) ? c : null; };
+  const at = (col: number, level: number, bay: number) => { const c = slotCode(m.face, col, level, bay); return slotMeta(c) ? c : null; };
   return {
     left: at(m.col, m.level, m.bay - 1) ?? at(m.col - 1, m.level, 3) ?? at(m.col - 1, m.level, 2) ?? at(m.col - 1, m.level, 1),
     right: at(m.col, m.level, m.bay + 1) ?? at(m.col + 1, m.level, 1),
@@ -161,13 +161,12 @@ function MovePallet({ from, onDone }: { from: string; onDone: (to: string) => vo
     const out: string[] = [];
     const f = FACES.find(x => x.id === face);
     if (f) {
-      const empties = f.cols.flatMap(([col, slots]) => slots.map(([lv, bay]) => ({ code: `${f.id}-${String(col).padStart(2, "0")}-L${lv}-B${bay}`, col, lv })))
+      const empties = f.cols.flatMap(([col, slots]) => slots.map(([lv, bay]) => ({ code: slotCode(f.id, col, lv, bay), col, lv })))
         .filter(s => !taken[s.code]?.length && s.code !== from)
         .sort((a, b) => Math.abs(a.col - (m?.col ?? 0)) - Math.abs(b.col - (m?.col ?? 0)) || a.lv - b.lv);
       out.push(...empties.slice(0, 4).map(s => s.code));
     }
-    const base = f ? `${f.id}-FLOOR` : face;
-    for (let n = 1; n < 100; n++) { const c = `${base}-P${String(n).padStart(2, "0")}`; if (!taken[c]?.length) { out.push(c); break; } }
+    for (let n = 1; n < 100; n++) { const c = spotCode(face, n); if (!taken[c]?.length) { out.push(c); break; } }
     return out;
   }, [from, taken]);
   const pending = state.tasks.some(t => isOpen(t) && (t.from === from || t.to === from));

@@ -11,7 +11,7 @@ import { download } from "../../utils/xlsx";
 import { candidates, reservations, statusOf } from "../../outbound/plan";
 import { pdfText, readOrder } from "../../outbound/reader";
 import {
-  BRANDS, DEFAULT_OPTIONS, brandKeyFor, buildAlignmentPdf, buildLabelsPdf, labelCount, pdfPreview, sheetCount,
+  BRANDS, DEFAULT_OPTIONS, SHEET, brandKeyFor, buildAlignmentPdf, buildLabelsPdf, labelCount, pdfPreview, sheetCount,
   type BrandKey, type LabelLine, type LabelOptions,
 } from "../../outbound/labelsPdf";
 import type { StoreOrder } from "../../store/types";
@@ -186,7 +186,7 @@ export function LabelsTool({ orderId }: { orderId?: string }) {
           {opts.bbMode === "custom" && <input className="input" value={opts.bbText} onChange={e => setOpts({ ...opts, bbText: e.target.value })} placeholder="e.g. MAR 2027 (blank line if empty)" aria-label="Best before text" />}
           <label className="toggle-row"><input type="checkbox" checked={opts.showGroup} onChange={e => setOpts({ ...opts, showGroup: e.target.checked })} /> Category above the name</label>
           <label className="toggle-row"><input type="checkbox" checked={opts.showCode} onChange={e => setOpts({ ...opts, showCode: e.target.checked })} /> Item code</label>
-          {(logos.length ? logos : ["deccan" as BrandKey]).map(b => (
+          {(logos.length ? logos : [Object.keys(BRANDS)[0] as BrandKey]).map(b => (
             <label key={b} className="field"><span>{logos.length > 1 ? `Footer · ${BRANDS[b].name}` : "Footer"}</span>
               <textarea className="input" rows={2} value={opts.footers[b] ?? BRANDS[b].footer} placeholder="Printed at the bottom of each label (optional)" onChange={e => setOpts({ ...opts, footers: { ...opts.footers, [b]: e.target.value } })} />
             </label>
@@ -195,14 +195,14 @@ export function LabelsTool({ orderId }: { orderId?: string }) {
         <fieldset className="label-opts">
           <legend>Sheet</legend>
           <label className="field inline"><span>Start at label</span>
-            <select className="input" value={opts.start} onChange={e => setOpts({ ...opts, start: Number(e.target.value) })}>{Array.from({ length: 10 }, (_, i) => <option key={i} value={i + 1}>{i + 1}{i === 0 ? " (full sheet)" : " (sheet already partly used)"}</option>)}</select>
+            <select className="input" value={opts.start} onChange={e => setOpts({ ...opts, start: Number(e.target.value) })}>{Array.from({ length: SHEET.perSheet }, (_, i) => <option key={i} value={i + 1}>{i + 1}{i === 0 ? " (full sheet)" : " (sheet already partly used)"}</option>)}</select>
           </label>
           <div className="nudge-row">
             <label>Move right <input className="input num-in" type="number" step={0.5} value={opts.nudge.x} onChange={e => setOpts({ ...opts, nudge: { ...opts.nudge, x: parseFloat(e.target.value) || 0 } })} /> mm</label>
             <label>Move down <input className="input num-in" type="number" step={0.5} value={opts.nudge.y} onChange={e => setOpts({ ...opts, nudge: { ...opts.nudge, y: parseFloat(e.target.value) || 0 } })} /> mm</label>
             <button className="btn small" disabled={busy} onClick={() => void print(true)}>Print alignment test</button>
           </div>
-          <p className="muted small">US Letter, 10 labels of 3 × 2 in. Print at Actual size (100%). If the print sits off the labels, print the alignment test on plain paper and move it here.</p>
+          <p className="muted small"><span translate="no">{SHEET.name}.</span> <span>Print at Actual size (100%). If the print sits off the labels, print the alignment test on plain paper and move it here.</span></p>
         </fieldset>
         <div className="panel-foot">
           <span className="muted small">{total} label{total === 1 ? "" : "s"} · {sheets} sheet{sheets === 1 ? "" : "s"}</span>

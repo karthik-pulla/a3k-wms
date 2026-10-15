@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { passwordProblems, passwordStrength } from "../../auth/crypto";
 import { LangSwitch } from "../../components/LangSwitch";
 import { requestAccount, signIn, type Session, type VaultData } from "../../auth/vault";
+import { tenant } from "../../tenant";
 
 const STRENGTH = ["Very weak", "Weak", "Fair", "Good", "Strong"];
+/** The warehouse's name and mark (tenant config), never translated */
+const brand = tenant().config.branding;
 
 /** Sign in, or ask for an account (an admin approves it). */
 export function LoginScreen({ message, onSignedIn }: { message?: string; onSignedIn: (s: Session, d: VaultData) => void }) {
@@ -11,7 +14,7 @@ export function LoginScreen({ message, onSignedIn }: { message?: string; onSigne
   return (
     <main className="login">
       <div className="login-card glass">
-        <div className="login-brand"><span className="login-mark" aria-hidden="true">A3K</span><div><h1>A3K Warehouse</h1><p className="muted small">Warehouse management</p></div></div>
+        <div className="login-brand"><span className="login-mark" aria-hidden="true" translate="no">{brand.mark}</span><div><h1 translate="no">{brand.appTitle}</h1><p className="muted small">Warehouse management</p></div></div>
         {mode === "signin" ? <SignIn message={message} onSignedIn={onSignedIn} onRequest={() => setMode("request")} /> : <RequestAccount onBack={() => setMode("signin")} />}
       </div>
       <LangSwitch className="login-lang" />

@@ -1,7 +1,7 @@
 // DEMO stock: made-up pallets for the public demo site and fresh clones, where the real sheet stock
 // (sampleStock.json, made from the owners' workbooks) is not available. Same shape as sampleStock.json.
 // Real product names and the real layout; every quantity and location is invented, and the same on every load.
-import { FACES, PRODUCTS, findProduct, type Client, type Product } from "../data/catalog";
+import { FACES, PRODUCTS, findProduct, slotCode, spotCode, type Client, type Product } from "../data/catalog";
 import type { StockLine } from "./types";
 
 /** Products the sample shipments and orders use, so they have stock to plan from */
@@ -39,7 +39,7 @@ export function demoStock(): { asof: string; note: string; stock: Record<string,
       if (rnd() > 0.6) product = next();
       for (const [level, bay] of slots) {
         if (rnd() < 0.25) continue;
-        const code = `${f.id}-${String(col).padStart(2, "0")}-L${level}-B${bay}`;
+        const code = slotCode(f.id, col, level, bay);
         const n = full(product), r = rnd();
         if (r < 0.04) { // mixed pallet
           const other = pick(pool[client]);
@@ -50,12 +50,12 @@ export function demoStock(): { asof: string; note: string; stock: Record<string,
     // A few pallets waiting on the rack side's floor
     if (!f.junction && rnd() < 0.3) {
       const count = 1 + Math.floor(rnd() * 3);
-      for (let i = 1; i <= count; i++) stock[`${f.id}-FLOOR-P${String(i).padStart(2, "0")}`] = [{ productId: product.id, cases: full(product) }];
+      for (let i = 1; i <= count; i++) stock[spotCode(f.id, i)] = [{ productId: product.id, cases: full(product) }];
     }
   }
   for (const area of ["LINE-2-3", "NEARCOOLER-01", "NEARCOOLER-03", "LANE-7"]) {
     const count = 2 + Math.floor(rnd() * 4);
-    for (let i = 1; i <= count; i++) { const p = pick(pool.Deccan); stock[`${area}-P${String(i).padStart(2, "0")}`] = [{ productId: p.id, cases: full(p) }]; }
+    for (let i = 1; i <= count; i++) { const p = pick(pool.Deccan); stock[spotCode(area, i)] = [{ productId: p.id, cases: full(p) }]; }
   }
   return { asof: new Date().toISOString().slice(0, 10), note: "DEMO: made-up stock", stock };
 }

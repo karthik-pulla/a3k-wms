@@ -1,18 +1,16 @@
-import { AREAS, FACES, productById, slotMeta } from "../data/catalog";
+import { AREAS, FACES, LEVELS, parseSpot, productById, slotCode, slotMeta, spotCode } from "../data/catalog";
 import type { CountEntry, CountSession, StockLine } from "../store/types";
 
 export interface NavCell { code: string; x: number }
 export interface NavRow { id: string; group: string; cells: NavCell[] }
 
-const pad = (n: number) => String(n).padStart(2, "0");
-export const floorBase = (group: string) => (FACES.some(f => f.id === group) ? `${group}-FLOOR` : group);
-export const floorCode = (group: string, n: number) => `${floorBase(group)}-P${pad(n)}`;
+/** Spot n on the floor of a rack side or in an area */
+export const floorCode = spotCode;
 
 /** How many floor spots to show for a rack side or area: one more than the highest in use, at least 3. */
 export function floorSpots(group: string, stock: Record<string, StockLine[]>, entries: Record<string, CountEntry>): number {
-  const base = `${floorBase(group)}-P`;
   let hi = 0;
-  for (const code of [...Object.keys(stock), ...Object.keys(entries)]) if (code.startsWith(base)) hi = Math.max(hi, Number(code.slice(base.length)) || 0);
+  for (const code of [...Object.keys(stock), ...Object.keys(entries)]) { const s = parseSpot(code); if (s?.group === group) hi = Math.max(hi, s.n); }
   return Math.max(3, hi + 1);
 }
 
@@ -23,9 +21,9 @@ export function buildRows(scope: string[], stock: Record<string, StockLine[]>, e
     if (!scope.includes(f.id)) continue;
     let x0 = 0;
     const starts = f.cols.map(c => { const s = x0; x0 += Math.max(...c[1].map(v => v[1])) + 0.6; return s; });
-    for (const lv of [4, 3, 2, 1]) {
+    for (const lv of LEVELS) {
       const cells: NavCell[] = [];
-      f.cols.forEach((c, ci) => { for (const [l, b] of c[1]) if (l === lv) cells.push({ code: `${f.id}-${pad(c[0])}-L${l}-B${b}`, x: starts[ci] + b - 1 }); });
+      f.cols.forEach((c, ci) => { for (const [l, b] of c[1]) if (l === lv) cells.push({ code: slotCode(f.id, c[0], l, b), x: starts[ci] + b - 1 }); });
       if (cells.length) rows.push({ id: `${f.id}-L${lv}`, group: f.id, cells: cells.sort((a, b) => a.x - b.x) });
     }
     const n = floorSpots(f.id, stock, entries);

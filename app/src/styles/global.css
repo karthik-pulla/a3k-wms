@@ -428,7 +428,7 @@ table.lines td.prod small { display: block; color: var(--muted); font-size: 12px
 .rack-select { width: auto; max-width: 280px; }
 .rack-count { margin-left: auto; font-size: 12.5px; color: var(--muted); }
 .rack-scroll { overflow-x: auto; padding-bottom: 6px; }
-.rack-grid { display: grid; gap: 3px; width: max-content; grid-template-rows: 16px repeat(4, 44px); }
+.rack-grid { display: grid; gap: 3px; width: max-content; grid-template-rows: 16px repeat(var(--levels, 4), 44px); }
 .rack-colnum { font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-align: center; align-self: center; }
 .rack-upright { background: var(--upright); border-radius: 2px; }
 .rack-level { font-family: var(--font-mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; }
@@ -851,7 +851,7 @@ table.lines.inv-table { min-width: 720px; }
 .wface-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 11px; font-family: var(--font-mono); }
 .wface-h small { color: var(--muted); font-size: 10px; }
 .wface-h em { font-style: normal; font-weight: 700; color: var(--accent); }
-.wgrid { display: grid; grid-template-rows: repeat(4, var(--wc)); gap: 1px; }
+.wgrid { display: grid; grid-template-rows: repeat(var(--levels, 4), var(--wc)); gap: 1px; }
 .wc { display: block; border-radius: 1.5px; background: transparent; box-shadow: inset 0 0 0 1px var(--glass-border); }
 .wc.full { background: color-mix(in srgb, var(--ink) 30%, transparent); box-shadow: none; }
 .wmap.marking .wc.full { background: color-mix(in srgb, var(--ink) 12%, transparent); }
@@ -980,7 +980,7 @@ details.panel summary { cursor: pointer; font-weight: 600; }
 .cface { display: grid; gap: 6px; min-width: 0; }
 .cface h3 { margin: 0; font-size: 14px; font-family: var(--font-mono); }
 .cface h3 small { font-family: var(--font-body); font-weight: 400; }
-.cgrid { display: grid; gap: 3px; grid-template-rows: 16px repeat(4, 42px); width: max-content; max-width: 100%; overflow-x: auto; }
+.cgrid { display: grid; gap: 3px; grid-template-rows: 16px repeat(var(--levels, 4), 42px); width: max-content; max-width: 100%; overflow-x: auto; }
 .cgrid > div { display: grid; }
 .cfloor { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
 .cfloor .ccell { width: var(--ccell); height: 42px; }

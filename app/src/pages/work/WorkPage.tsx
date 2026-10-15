@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { canSeeClient } from "../../auth/permissions";
 import { normalizeLocation } from "../../chat/refs";
+import { EXAMPLE_FLOOR } from "../../data/catalog";
 import { mentionsFor, unreadTotals, visibleText } from "../../chat/selectors";
 import { roughAgo } from "../../chat/presence";
 import { useStore } from "../../store/store";
@@ -107,7 +108,7 @@ function MoveRequest() {
       toast(`The WMS gave ${to}. Your task: ${code} → ${to}.`);
       setOpen(false); setFrom(""); setReason("");
     }}>
-      <label className="field"><span>Pallet is at</span><input className={`input${from && !code ? " invalid" : ""}`} autoFocus value={from} onChange={e => setFrom(e.target.value)} placeholder="e.g. 06B-FLOOR-P01" /></label>
+      <label className="field"><span>Pallet is at</span><input className={`input${from && !code ? " invalid" : ""}`} autoFocus value={from} onChange={e => setFrom(e.target.value)} placeholder={`e.g. ${EXAMPLE_FLOOR}`} /></label>
       <label className="field"><span>Why</span><input className="input" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. blocking the aisle" /></label>
       <p className="small muted">{!code ? "Type the slot or floor spot." : !lines.length ? `${code} is empty.` : busy ? `${code} already has a task.` : "The WMS picks the slot it goes to."}</p>
       <div className="btns"><button className="btn primary" disabled={!code || !lines.length || busy || !reason.trim()}>Get a slot</button><button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button></div>

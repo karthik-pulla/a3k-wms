@@ -4,7 +4,7 @@ import { useStore } from "../../store/store";
 import { useSession } from "../../session";
 import { go } from "../../router";
 import { can, visibleLines } from "../../auth/permissions";
-import { messagesAbout } from "../../chat/selectors";
+import { WARN_MONTHS, messagesAbout } from "../../chat/selectors";
 import { RackView, HIDDEN_PRODUCT, type SlotMark } from "../../components/RackView";
 import { WarehouseMap, type MapMark } from "../../components/inventory/WarehouseMap";
 import { ExportDialog } from "../../components/inventory/ExportDialog";
@@ -134,7 +134,7 @@ export function ProductsTab({ selection }: { selection?: string }) {
               <li key={it.id} id={`inv-r-${i}`} role="option" aria-selected={productSel?.id === it.id} className={`inv-r${i === hl ? " hl" : ""}${productSel?.id === it.id ? " on" : ""}${s.cases ? "" : " none"}`} onClick={() => open(it)} onMouseEnter={() => setHl(i)}>
                 <span className="inv-r-code">{s.product.code}</span>
                 <span className="inv-r-name">{s.product.name}<small>{s.product.size}{s.product.units ? ` × ${s.product.units}` : ""} · {brandOf(s.product)}{s.locations ? ` · ${s.locations} loc` : ""}</small></span>
-                <span className="inv-r-n">{s.cases.toLocaleString()}<small>cs</small>{s.worst !== "ok" && <i className={`tone-dot ${s.worst}`} title={s.worst === "expired" ? "Has expired stock" : "Expiring within 6 months"} />}</span>
+                <span className="inv-r-n">{s.cases.toLocaleString()}<small>cs</small>{s.worst !== "ok" && <i className={`tone-dot ${s.worst}`} title={s.worst === "expired" ? "Has expired stock" : `Expiring within ${WARN_MONTHS} months`} />}</span>
               </li>
             );
           })}
@@ -249,7 +249,7 @@ function Detail({ productId, brand, onExport }: { productId?: string; brand?: st
                 <div className="offrack"><span className="muted small">On the floor{isRack ? ` of ${shownFace}` : ""}:</span>
                   {floorHere.map(c => <button key={c} className={`chip-btn tone-${marks.get(c)!.tone}`} onClick={() => setOpen(c)}>{c}</button>)}</div>
               )}
-              <div className="legend-row muted small"><span><i className="sw tone-ok" /> in date</span><span><i className="sw tone-warn" /> expiring within 6 months</span><span><i className="sw tone-expired" /> expired</span><span><i className="sw partial" /> partial pallet</span></div>
+              <div className="legend-row muted small"><span><i className="sw tone-ok" /> in date</span><span><i className="sw tone-warn" /> {`expiring within ${WARN_MONTHS} months`}</span><span><i className="sw tone-expired" /> expired</span><span><i className="sw partial" /> partial pallet</span></div>
             </>
           ) : (
             <div className="table-wrap">

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AREAS, FACES, describeLocation, productById, searchProducts, slotMeta, type Face, type Product } from "../../data/catalog";
+import { AREAS, FACES, LEVELS, colLabel, describeLocation, productById, searchProducts, slotCode, slotMeta, type Face, type Product } from "../../data/catalog";
 import { can, canSeeClient } from "../../auth/permissions";
 import { normalizeLocation } from "../../chat/refs";
 import { useStore } from "../../store/store";
@@ -161,8 +161,8 @@ export function CountGrid({ session }: { session: CountSession }) {
     const lines = one ? [{ productId: src.lines[0].productId, cases: p?.perPallet ?? src.lines[0].cases }] : src.lines;
     const f = FACES.find(x => x.id === m.face)!;
     const col = f.cols.find(c => c[0] === m.col)!;
-    const targets = col[1].map(([l, b]) => `${m.face}-${String(m.col).padStart(2, "0")}-L${l}-B${b}`).filter(c => c !== sel && !checked(c));
-    const name = `${m.face}-${String(m.col).padStart(2, "0")}`;
+    const targets = col[1].map(([l, b]) => slotCode(m.face, m.col, l, b)).filter(c => c !== sel && !checked(c));
+    const name = `${m.face}-${colLabel(m.col)}`;
     if (!targets.length) { toast(`Every slot in column ${name} is already counted.`); return; }
     apply(targets.map(code => ({ code, entry: entry(lines) })));
     toast(`Filled ${targets.length} slot${targets.length > 1 ? "s" : ""} in column ${name} with ${one ? `${p?.code ?? "?"} × ${lines[0].cases}` : "this mixed pallet"}. Counted slots were left alone. ${MOD}+Z to undo.`);
@@ -426,9 +426,9 @@ const FaceSection = memo(function FaceSection({ face, entries, stock, sel, range
       <h3>{face.id} <small className="muted">{face.rack === "D6" ? "Door 6" : face.rack.length > 2 ? "Junction" : `Rack ${face.rack}`} · side {face.side}</small></h3>
       <div className="cgrid" style={{ gridTemplateColumns: tracks.join(" ") }}>
         {face.cols.map((c, ci) => <div key={`h${c[0]}`} className="rack-colnum" style={{ gridRow: 1, gridColumn: `${starts[ci]} / span ${bays(c)}` }}>{String(c[0]).padStart(2, "0")}</div>)}
-        {[4, 3, 2, 1].map((lv, r) => <div key={lv} className="rack-level" style={{ gridRow: r + 2, gridColumn: 1 }}>L{lv}</div>)}
+        {LEVELS.map((lv, r) => <div key={lv} className="rack-level" style={{ gridRow: r + 2, gridColumn: 1 }}>L{lv}</div>)}
         {face.cols.flatMap((c, ci) => c[1].map(([lv, bay]) => {
-          const code = `${face.id}-${String(c[0]).padStart(2, "0")}-L${lv}-B${bay}`;
+          const code = slotCode(face.id, c[0], lv, bay);
           return (
             <div key={code} style={{ gridRow: 6 - lv, gridColumn: starts[ci] + bay - 1 }}>
               <CountCell code={code} entry={entries[code]} expected={stock[code]} selected={code === sel} inRange={range.has(code)} editing={code === draftCode}

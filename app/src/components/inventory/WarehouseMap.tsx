@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { AREAS, FACES, type Face } from "../../data/catalog";
+import { AREAS, FACES, LEVELS, slotCode, type Face } from "../../data/catalog";
 import type { StockLine } from "../../store/types";
 import type { ExpiryTone } from "../../chat/selectors";
 import { groupOf } from "../../inventory/selectors";
@@ -57,11 +57,11 @@ const FaceTile = memo(function FaceTile({ face, stock, marks, n, floor, on, onFa
   const width = x - 2;
   let used = 0, total = 0;
   const cells = face.cols.flatMap((c, ci) => c[1].map(([lv, bay]) => {
-    const code = `${face.id}-${String(c[0]).padStart(2, "0")}-L${lv}-B${bay}`;
+    const code = slotCode(face.id, c[0], lv, bay);
     const full = !!stock[code]?.length;
     total++; if (full) used++;
     const m = marks.get(code);
-    return <i key={code} className={`wc${full ? " full" : ""}${m ? ` hit ${m.tone}` : ""}${m?.partial ? " partial" : ""}`} style={{ gridColumn: starts[ci] + bay - 1, gridRow: 5 - lv }} />;
+    return <i key={code} className={`wc${full ? " full" : ""}${m ? ` hit ${m.tone}` : ""}${m?.partial ? " partial" : ""}`} style={{ gridColumn: starts[ci] + bay - 1, gridRow: LEVELS.indexOf(lv) + 1 }} />;
   }));
   return (
     <button className={`wface${n ? " hit" : ""}${on ? " on" : ""}`} onClick={() => onFace(face.id)} aria-label={`${face.id}: ${used} of ${total} slots used${n ? `, ${n} matches` : ""}`}>

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { sampleState, withOutbound, withSampleDates, withSampleWork } from "./sample";
 import type { AuditEntry, Conversation, CountEntry, CountSession, InboxMail, Message, Movement, PickStrategy, Presence, ReturnOutcome, ReturnRequest, Shipment, State, StockLine, StoreOrder, Task, User } from "./types";
 import { RECEIVING, isOpen, taskId } from "./tasks";
+import { CLIENTS, productById } from "../data/catalog";
 import { describe } from "./audit";
 import { canSeeClient } from "../auth/permissions";
 import { planOrder, putBack, statusOf, takeFrom } from "../outbound/plan";
@@ -143,7 +144,7 @@ function reducer(state: State, a: Action): State {
       // Goods going back into stock become a pending in-bound, so they get a slot through the normal confirmation
       const order = state.orders.find(o => o.id === r.orderId);
       const restock: Shipment[] = a.approve && a.outcome === "restock" ? [{
-        id: `return-${r.id.toLowerCase()}`, client: order?.client ?? "Deccan", number: r.id, supplier: `Return from ${r.store}`, ref: r.orderId,
+        id: `return-${r.id.toLowerCase()}`, client: order?.client ?? productById(r.items.find(i => i.productId)?.productId ?? "")?.client ?? CLIENTS[0], number: r.id, supplier: `Return from ${r.store}`, ref: r.orderId,
         expected: now().slice(0, 10), status: "pending", receivedAt: now(), receivedBy: a.by, condition: "ok", returnId: r.id,
         lines: r.items.filter(i => i.productId && i.cases > 0).map((i, n) => ({ key: `${r.id}-${n}`, productId: i.productId, cases: i.cases, pallet: 1, lot: "", bestBefore: "" })),
       }] : [];

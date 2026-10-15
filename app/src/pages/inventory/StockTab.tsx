@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { AREAS, FACES, SLOTS, rackName } from "../../data/catalog";
+import { WARN_MONTHS } from "../../chat/selectors";
+import { AREAS, FACES, SLOTS, faceOf, isFloor, rackName, slotCode } from "../../data/catalog";
 import { can, visibleLines } from "../../auth/permissions";
 import { useStore } from "../../store/store";
 import { useSession } from "../../session";
@@ -90,7 +91,7 @@ export function StockTab({ openCode }: { openCode?: string }) {
         <div className="stat glass"><span className="stat-n">{stats.cases.toLocaleString()}</span><span className="stat-l">cases in stock<small>{me.clients ? me.clients.join(" + ") : "all clients"}</small></span></div>
         <button className={`stat glass${status === "floor" ? " on" : ""}`} onClick={() => setStatus("floor")}><span className="stat-n">{stats.floor}</span><span className="stat-l">pallets on the floor<small>floors and areas</small></span></button>
         <button className={`stat glass${status === "partial" ? " on" : ""}`} onClick={() => setStatus("partial")}><span className="stat-n">{stats.partial}</span><span className="stat-l">partial pallets<small>{stats.mixed} mixed</small></span></button>
-        <button className={`stat glass${status === "expired" ? " on" : ""}`} onClick={() => setStatus("expired")}><span className="stat-n danger">{stats.expired.toLocaleString()}</span><span className="stat-l">cases expired<small>{stats.warn.toLocaleString()} expiring in 6 months</small></span></button>
+        <button className={`stat glass${status === "expired" ? " on" : ""}`} onClick={() => setStatus("expired")}><span className="stat-n danger">{stats.expired.toLocaleString()}</span><span className="stat-l">cases expired<small>{`${stats.warn.toLocaleString()} expiring in ${WARN_MONTHS} months`}</small></span></button>
       </div>
 
       <div className="toolbar">
@@ -158,9 +159,9 @@ function RacksView({ where, onOpen, open, rows, status }: { where: string; onOpe
     return out;
   }, [state.stock, me]);
   const fill = useMemo(() => FACES.map(f => {
-    const slots = f.cols.flatMap(([c, s]) => s.map(([l, b]) => `${f.id}-${String(c).padStart(2, "0")}-L${l}-B${b}`));
+    const slots = f.cols.flatMap(([c, s]) => s.map(([l, b]) => slotCode(f.id, c, l, b)));
     const used = slots.filter(c => state.stock[c]?.length).length;
-    const floor = Object.keys(state.stock).filter(c => c.startsWith(`${f.id}-FLOOR-`) && state.stock[c].length).length;
+    const floor = Object.keys(state.stock).filter(c => isFloor(c) && faceOf(c) === f.id && state.stock[c].length).length;
     return { f, used, total: slots.length, floor };
   }), [state.stock]);
   // Highlight what the current filter matches (not for "all"/"occupied", where everything would light up)
@@ -170,7 +171,7 @@ function RacksView({ where, onOpen, open, rows, status }: { where: string; onOpe
   else if (open) marks[open] = { kind: "pulse", label: String((viewStock[open] ?? []).reduce((a, l) => a + l.cases, 0) || "") };
   const hits = new Map<string, number>();
   if (status !== "all" && status !== "occupied") for (const r of rows) hits.set(r.group, (hits.get(r.group) ?? 0) + 1);
-  const floorSpots = Object.keys(state.stock).filter(c => c.startsWith(`${face}-FLOOR-`) && state.stock[c].length).sort(byLocation);
+  const floorSpots = Object.keys(state.stock).filter(c => isFloor(c) && faceOf(c) === face && state.stock[c].length).sort(byLocation);
 
   return (
     <div className="racks-view">

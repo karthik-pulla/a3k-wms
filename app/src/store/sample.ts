@@ -3,7 +3,7 @@
 // The sheet stock is real business data, so it stays out of git and out of the demo build (VITE_WMS_DEMO=1,
 // see vite.config.ts); without it the made-up demo stock is used.
 import { demoStock } from "./demoStock";
-import { findProduct, type Client } from "../data/catalog";
+import { findProduct, locKind, type Client } from "../data/catalog";
 import type { InboxMail, Shipment, ShipmentLine, State, StockLine, StoreOrder, ReturnRequest } from "./types";
 import { planOrder, takeFrom } from "../outbound/plan";
 import { nextSlot } from "./tasks";
@@ -173,7 +173,7 @@ export function withOutbound(state: State): State {
 /** SAMPLE: a few pallet tasks and a packing assignment, so the Work and Tasks screens have something to show */
 export function withSampleWork(state: State): State {
   const t = (h: number) => new Date(Date.now() - h * 36e5).toISOString();
-  const floor = Object.keys(state.stock).filter(c => /-FLOOR-P\d+$/.test(c) && state.stock[c].length).slice(0, 2);
+  const floor = Object.keys(state.stock).filter(c => locKind(c) === "floor" && state.stock[c].length).slice(0, 2);
   const tasks = floor.map((from, i) => {
     const to = nextSlot({ ...state, tasks: [] } as State, from);
     return { id: `T-sample-${i + 1}`, kind: "move" as const, status: "open" as const, from, to, lines: state.stock[from], reason: i === 0 ? "Floor pallet into the rack" : "Clearing the aisle",

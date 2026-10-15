@@ -137,7 +137,7 @@ export interface StoreOrder {
   cancelledBy?: string;
 }
 
-/** An email that arrived at the orders inbox (orders@a3kimports.com once the server exists) */
+/** An email that arrived at the warehouse's order inbox (tenant config: orders.inbox) */
 export interface InboxMail {
   id: string;
   from: string;
@@ -152,7 +152,8 @@ export interface InboxMail {
 
 // ---------- Messages ----------
 export type Role = "owner" | "coordinator" | "worker";
-export type GroupId = "owners" | "coordinators" | "receiving" | "shift-am" | "shift-pm";
+/** "owners", "coordinators", or one of the warehouse's own groups (tenant config: receiving, shifts) */
+export type GroupId = string;
 
 export interface User {
   id: string;

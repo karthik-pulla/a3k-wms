@@ -92,7 +92,7 @@ export function OrderEditor({ order }: { order?: StoreOrder }) {
             <select className="input" value={client} onChange={e => setClient(e.target.value as Client)}>{clients.map(c => <option key={c}>{c}</option>)}</select>
           </label>
           <label className="fact"><span>Store</span>
-            <input className="input" list="stores" value={store} onChange={e => setStore(e.target.value)} placeholder="e.g. Patel Brothers – Edison" />
+            <input className="input" list="stores" value={store} onChange={e => setStore(e.target.value)} placeholder="Store name and branch" />
             <datalist id="stores">{stores.map(s => <option key={s} value={s} />)}</datalist>
           </label>
           <label className="fact"><span>Due date</span><input className="input" type="date" value={due} onChange={e => setDue(e.target.value)} /></label>

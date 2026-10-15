@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FACES, describeLocation, faceOf, isFloor, productById, rackName, slotMeta } from "../../data/catalog";
+import { FACES, describeLocation, faceOf, isFloor, productById, rackName, slotCode, slotMeta } from "../../data/catalog";
 import { canSeeClient, visibleLines } from "../../auth/permissions";
 import { useStore } from "../../store/store";
 import { useSession } from "../../session";
 import type { StockLine } from "../../store/types";
 import type { OverlayRequest } from "../../chat/overlay";
-import { productLocations, expiryTone, isPartial, arrivalDate } from "../../chat/selectors";
+import { WARN_MONTHS, productLocations, expiryTone, isPartial, arrivalDate } from "../../chat/selectors";
 import { ThreadSection } from "./ThreadSection";
 import { RackView, HIDDEN_PRODUCT, type SlotMark } from "../RackView";
 import { CloseIcon } from "../icons";
@@ -144,7 +144,7 @@ export function MapOverlay({ request, onClose, onSwitch }: { request: OverlayReq
 function Legend() {
   return (
     <div className="legend-row muted small">
-      <span><i className="sw tone-ok" /> in date</span><span><i className="sw tone-warn" /> expiring within 6 months</span>
+      <span><i className="sw tone-ok" /> in date</span><span><i className="sw tone-warn" /> {`expiring within ${WARN_MONTHS} months`}</span>
       <span><i className="sw tone-expired" /> expired</span><span><i className="sw partial" /> partial pallet</span>
     </div>
   );
@@ -190,7 +190,7 @@ function Picker({ picked, setPicked, onFace }: { picked: string[]; setPicked: (f
   const [level, setLevel] = useState(levels[0]);
   const bays = colSlots.filter(s => s[0] === level).map(s => s[1]);
   const [bay, setBay] = useState(bays[0]);
-  const code = `${face.id}-${String(col).padStart(2, "0")}-L${level}-B${bay}`;
+  const code = slotCode(face.id, col, level, bay);
   const valid = !!slotMeta(code);
   const pickFace = (id: string) => { const f = FACES.find(x => x.id === id)!; setFaceId(id); onFace(id); setCol(f.cols[0][0]); setLevel(f.cols[0][1][0][0]); setBay(f.cols[0][1][0][1]); };
   return (

@@ -1,42 +1,16 @@
-import { AREAS, FACES, productById, slotMeta } from "../data/catalog";
+import { findLocations, normalizeLocation, productById } from "../data/catalog";
+import { tenant } from "../tenant";
 import type { GroupId, MessageRef, State } from "../store/types";
 
 // ---------- Location codes in text ----------
-// Rack slots (padded or old unpadded), Door 6, junctions, floor spots and named areas
-const SLOT_RE = /\b(D6[AB]|1518[AB]|1619[AB]|\d{1,2}[A-C])-(\d{1,2})-L(\d)-B(\d)\b|\b(D6[AB]|1518[AB]|1619[AB]|\d{1,2}[A-C])-FLOOR-P(\d{1,2})\b|\b(NEARCOOLER-0[1-5]|LINE-2-3|LANE-7|DOOR-2-3|LOAD-AREA|RECV-FLOOR)(?:-P(\d{1,2}))?\b/gi;
-const FACE_IDS = new Set(FACES.map(f => f.id));
-const AREA_IDS = new Set(AREAS.map(a => a.id));
-const padFace = (f: string) => { const u = f.toUpperCase(); return /^\d[A-C]$/.test(u) ? `0${u}` : u; };
-
-// One code on its own. Kept separate from SLOT_RE: sharing a global regex's position inside findLocations' loop never ends
-const ONE_RE = new RegExp(`^(?:${SLOT_RE.source})$`, "i");
-
-/** The saved (padded) form of a location code, or null if it isn't a real slot, floor spot or area. */
-export function normalizeLocation(raw: string): string | null {
-  const m = ONE_RE.exec(raw.trim());
-  if (!m) return null;
-  if (m[1]) {
-    const code = `${padFace(m[1])}-${m[2].padStart(2, "0")}-L${m[3]}-B${m[4]}`;
-    return slotMeta(code) ? code : null;
-  }
-  if (m[5]) { const face = padFace(m[5]); return FACE_IDS.has(face) ? `${face}-FLOOR-P${m[6].padStart(2, "0")}` : null; }
-  const area = m[7].toUpperCase();
-  return AREA_IDS.has(area) ? (m[8] ? `${area}-P${m[8].padStart(2, "0")}` : area) : null;
-}
-
-/** Every valid location code in a text, with its position and saved form. */
-export function findLocations(text: string): { start: number; end: number; code: string }[] {
-  const out: { start: number; end: number; code: string }[] = [];
-  const re = new RegExp(SLOT_RE.source, "gi");
-  for (let m = re.exec(text); m; m = re.exec(text)) {
-    const code = normalizeLocation(m[0]);
-    if (code) out.push({ start: m.index, end: m.index + m[0].length, code });
-  }
-  return out;
-}
+// Read with the warehouse's own code format (tenant/layout.ts): rack slots (padded or not), floor spots and named areas
+export { findLocations, normalizeLocation };
 
 // ---------- Labels and snapshots ----------
-export const GROUP_LABEL: Record<GroupId, string> = { owners: "owners", coordinators: "coordinators", receiving: "receiving", "shift-am": "shift-am", "shift-pm": "shift-pm" };
+/** Groups people can @mention: owners and coordinators, plus the warehouse's own (receiving, shifts) */
+export const GROUP_LABEL: Record<GroupId, string> = {
+  owners: "owners", coordinators: "coordinators", ...Object.fromEntries(tenant().config.groups.map(g => [g.id, g.name])),
+};
 
 export type Part = string
   | { slot: string } | { product: string } | { user: string } | { group: GroupId }

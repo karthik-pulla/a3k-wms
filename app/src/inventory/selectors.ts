@@ -1,4 +1,4 @@
-import { AREAS, FACES, PRODUCTS, SLOTS, isFloor, productById, slotMeta, type Product } from "../data/catalog";
+import { AREAS, FACES, PRODUCTS, SLOTS, groupOf, locKind as kindOf, productById, slotMeta, type Product } from "../data/catalog";
 import { canSeeClient } from "../auth/permissions";
 import { arrivalDate, expiryTone, type ExpiryTone } from "../chat/selectors";
 import type { State, StockLine, User } from "../store/types";
@@ -8,9 +8,9 @@ export const natural = (a: string, b: string) => a.localeCompare(b, undefined, {
 export const brandOf = (p: Product) => p.brand || p.client;
 
 export type LocKind = "slot" | "floor" | "area";
-export const locKind = (code: string): LocKind => (!isFloor(code) ? "slot" : code.includes("-FLOOR-") ? "floor" : "area");
+export const locKind = (code: string): LocKind => kindOf(code);
 /** The rack side (or area) a location belongs to */
-export const groupOf = (code: string) => slotMeta(code)?.face ?? code.replace(/-FLOOR-P\d+$/, "").replace(/-P\d+$/, "");
+export { groupOf };
 
 // Rack sides in walking order, used to sort locations: by side, then column, level, bay; floor after its side
 const FACE_ORDER = new Map([...FACES.map(f => f.id), ...AREAS.map(a => a.id)].map((id, i) => [id, i]));

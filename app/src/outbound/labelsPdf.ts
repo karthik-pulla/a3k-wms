@@ -1,20 +1,32 @@
-// Case labels as a PDF, drawn exactly like the Order Label Maker: US Letter, 10 labels of 3 × 2 in (2 across, 5 down),
-// left margin 30.1625 mm, top 6.35 mm, 3.175 mm gaps (measured from the label sheet and confirmed by a print).
-// Print at Actual size (100%). jsPDF is bundled and loaded only when labels are made.
-import logos from "../data/generated/labelLogos.json";
+// Case labels as a PDF, drawn exactly like the Order Label Maker, on the warehouse's label sheet (tenant config: labels).
+// A3K's: US Letter, 10 labels of 3 × 2 in (2 across, 5 down), left margin 30.1625 mm, top 6.35 mm, 3.175 mm gaps
+// (measured from the label sheet and confirmed by a print). Print at Actual size (100%).
+// jsPDF is bundled and loaded only when labels are made.
 import type { jsPDF } from "jspdf";
+import { tenant } from "../tenant";
+import type { Logo } from "../tenant/types";
 
-export const SHEET = { w: 215.9, h: 279.4, left: 30.1625, top: 6.35, lw: 76.2, lh: 50.8, gap: 3.175, cols: 2, rows: 5 };
+const T = tenant();
+const sheet = T.config.labels.sheets.find(s => s.id === T.config.labels.defaultSheet) ?? T.config.labels.sheets[0];
+const PAGES = { letter: [215.9, 279.4], a4: [210, 297] } as const;
+const [pageW, pageH] = Array.isArray(sheet.page) ? sheet.page : PAGES[sheet.page];
+/** The page size as jsPDF takes it */
+const FORMAT: string | number[] = Array.isArray(sheet.page) ? sheet.page : sheet.page;
+export const SHEET = {
+  name: sheet.name, w: pageW, h: pageH, left: sheet.left, top: sheet.top, lw: sheet.labelWidth, lh: sheet.labelHeight,
+  gapX: sheet.gapX, gapY: sheet.gapY, cols: sheet.columns, rows: sheet.rows, perSheet: sheet.columns * sheet.rows,
+};
 
-type Logo = { src: string; w: number; h: number };
-export type BrandKey = "deccan" | "milletbank" | "other";
+const rgb = (hex: string): [number, number, number] => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+/** A label profile's ID (tenant config: labels.profiles), or "other" for no logo */
+export type BrandKey = string;
 export const BRANDS: Record<BrandKey, { name: string; logo: Logo | null; color: [number, number, number]; footer: string }> = {
-  milletbank: { name: "Millet Bank", logo: (logos as Record<string, Logo>).milletbank, color: [75, 93, 39], footer: "" },
-  deccan: { name: "Deccan", logo: (logos as Record<string, Logo>).deccan, color: [155, 28, 35], footer: "Product of India\nDistributed By: Deccan Foods, USA" },
+  ...Object.fromEntries(T.config.labels.profiles.map(p => [p.id, { name: p.name, logo: (p.logo && T.logos[p.logo]) || null, color: rgb(p.color), footer: p.footer ?? "" }])),
   other: { name: "No logo", logo: null, color: [61, 79, 99], footer: "" },
 };
-/** Which logo a product's labels get: by brand (Deccan, Millet Bank), otherwise none */
-export const brandKeyFor = (brand: string): BrandKey => (/^deccan$/i.test(brand) ? "deccan" : /millet bank/i.test(brand) ? "milletbank" : "other");
+/** Which logo a product's labels get: the profile listing its brand, otherwise none */
+export const brandKeyFor = (brand: string): BrandKey =>
+  T.config.labels.profiles.find(p => p.brands.some(b => b.toLowerCase() === brand.trim().toLowerCase()))?.id ?? "other";
 
 export interface LabelLine { key: string; productId: string | null; name: string; size: string; units: string; labels: number; group: string; code: string; brand: BrandKey; bestBefore?: string }
 export interface LabelOptions {
@@ -37,7 +49,7 @@ const bbLabel = (ym?: string) => (ym && /^\d{4}-\d{2}/.test(ym) ? new Date(`${ym
 
 function slotXY(i: number, o: LabelOptions) {
   const c = i % SHEET.cols, r = Math.floor(i / SHEET.cols) % SHEET.rows;
-  return { x: SHEET.left + o.nudge.x + c * (SHEET.lw + SHEET.gap), y: SHEET.top + o.nudge.y + r * (SHEET.lh + SHEET.gap) };
+  return { x: SHEET.left + o.nudge.x + c * (SHEET.lw + SHEET.gapX), y: SHEET.top + o.nudge.y + r * (SHEET.lh + SHEET.gapY) };
 }
 
 type Seg = string | { blank: number };
@@ -98,30 +110,30 @@ function drawLabel(doc: jsPDF, l: LabelLine, o: LabelOptions, x: number, y: numb
 
 /** One label per case: each line repeated `labels` times */
 export const labelCount = (lines: LabelLine[]) => lines.reduce((a, l) => a + Math.min(500, Math.max(0, l.labels || 0)), 0);
-export const sheetCount = (lines: LabelLine[], start: number) => Math.ceil((labelCount(lines) + start - 1) / 10);
+export const sheetCount = (lines: LabelLine[], start: number) => Math.ceil((labelCount(lines) + start - 1) / SHEET.perSheet);
 
 export async function buildLabelsPdf(lines: LabelLine[], o: LabelOptions, title: string): Promise<jsPDF> {
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+  const doc = new jsPDF({ unit: "mm", format: FORMAT, orientation: "portrait" });
   doc.setProperties({ title });
   let slot = o.start - 1, first = true;
   for (const l of lines) for (let i = 0; i < Math.min(500, Math.max(0, l.labels || 0)); i++) {
-    if (!first && slot % 10 === 0) doc.addPage("letter", "portrait");
+    if (!first && slot % SHEET.perSheet === 0) doc.addPage(FORMAT, "portrait");
     first = false;
-    const { x, y } = slotXY(slot % 10, o);
+    const { x, y } = slotXY(slot % SHEET.perSheet, o);
     drawLabel(doc, l, o, x, y);
     slot++;
   }
   return doc;
 }
 
-/** A plain-paper page with the 10 label outlines, to check the printer lines up with the sheet */
+/** A plain-paper page with the label outlines, to check the printer lines up with the sheet */
 export async function buildAlignmentPdf(o: LabelOptions): Promise<jsPDF> {
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+  const doc = new jsPDF({ unit: "mm", format: FORMAT, orientation: "portrait" });
   doc.setProperties({ title: "Label alignment test" });
   doc.setLineDashPattern([1.5, 1.5], 0); doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.3);
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < SHEET.perSheet; i++) {
     const { x, y } = slotXY(i, o);
     doc.rect(x, y, SHEET.lw, SHEET.lh);
     doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(150, 150, 150);

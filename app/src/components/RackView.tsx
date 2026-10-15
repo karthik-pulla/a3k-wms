@@ -1,4 +1,4 @@
-import { FACES, productById, rackName } from "../data/catalog";
+import { FACES, LEVELS, colLabel, productById, rackName, slotCode } from "../data/catalog";
 import type { StockLine } from "../store/types";
 
 export interface SlotMark {
@@ -30,7 +30,7 @@ export function RackView({ faceId, onFace, stock, marks, onPick, onCell }: {
   const tracks = ["32px", ...face.cols.flatMap(c => ["5px", ...Array(maxBays(c)).fill("var(--cell-w)")]), "5px"];
   let t = 2; // grid track counter (1 = level labels)
   const colStart = face.cols.map(c => { const start = t + 1; t += 1 + maxBays(c); return start; });
-  const empty = face.cols.reduce((a, c) => a + c[1].filter(([l, b]) => !stock[`${face.id}-${String(c[0]).padStart(2, "0")}-L${l}-B${b}`]?.length).length, 0);
+  const empty = face.cols.reduce((a, c) => a + c[1].filter(([l, b]) => !stock[slotCode(face.id, c[0], l, b)]?.length).length, 0);
   const total = face.cols.reduce((a, c) => a + c[1].length, 0);
 
   return (
@@ -46,16 +46,16 @@ export function RackView({ faceId, onFace, stock, marks, onPick, onCell }: {
       <div className="rack-scroll">
         <div className="rack-grid" style={{ gridTemplateColumns: tracks.join(" ") }}>
           {face.cols.map((c, ci) => (
-            <div key={`h${c[0]}`} className="rack-colnum" style={{ gridRow: 1, gridColumn: `${colStart[ci]} / span ${maxBays(c)}` }}>{String(c[0]).padStart(2, "0")}</div>
+            <div key={`h${c[0]}`} className="rack-colnum" style={{ gridRow: 1, gridColumn: `${colStart[ci]} / span ${maxBays(c)}` }}>{colLabel(c[0])}</div>
           ))}
-          {face.cols.map((c, ci) => <div key={`u${c[0]}`} className="rack-upright" style={{ gridRow: "2 / 6", gridColumn: colStart[ci] - 1 }} />)}
-          <div className="rack-upright" style={{ gridRow: "2 / 6", gridColumn: tracks.length }} />
-          {[4, 3, 2, 1].map((lv, r) => <div key={`l${lv}`} className="rack-level" style={{ gridRow: r + 2, gridColumn: 1 }}>L{lv}</div>)}
-          {face.cols.flatMap((c, ci) => [4, 3, 2, 1].flatMap((lv, r) => {
+          {face.cols.map((c, ci) => <div key={`u${c[0]}`} className="rack-upright" style={{ gridRow: `2 / ${LEVELS.length + 2}`, gridColumn: colStart[ci] - 1 }} />)}
+          <div className="rack-upright" style={{ gridRow: `2 / ${LEVELS.length + 2}`, gridColumn: tracks.length }} />
+          {LEVELS.map((lv, r) => <div key={`l${lv}`} className="rack-level" style={{ gridRow: r + 2, gridColumn: 1 }}>L{lv}</div>)}
+          {face.cols.flatMap((c, ci) => LEVELS.flatMap((lv, r) => {
             const here = c[1].filter(s => s[0] === lv);
             if (!here.length) return [<div key={`v${c[0]}-${lv}`} className="rack-void" style={{ gridRow: r + 2, gridColumn: `${colStart[ci]} / span ${maxBays(c)}` }} />];
             return here.map(([, bay]) => {
-              const code = `${face.id}-${String(c[0]).padStart(2, "0")}-L${lv}-B${bay}`;
+              const code = slotCode(face.id, c[0], lv, bay);
               const lines = stock[code] ?? [];
               const mark = marks[code];
               const p = lines[0] ? productById(lines[0].productId) : undefined;

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "tenant": { "id": "a3k", "name": "A3K Imports", "locale": "en-US", "timezone": "America/New_York" },
+  "branding": { "appTitle": "A3K Warehouse", "mark": "A3K" },
+  "languages": { "default": "en", "enabled": ["en", "es"] },
+  "layout": {
+    "codeFormat": {
+      "slot": "{face}-{col}-L{level}-B{bay}",
+      "floor": "{face}-FLOOR-P{n}",
+      "areaSpot": "{area}-P{n}",
+      "rackDigits": 2, "colDigits": 2, "spotDigits": 2,
+      "acceptUnpadded": true
+    },
+    "shapes": {
+      "standard": { "levels": [1, 2, 3, 4], "bays": 2 },
+      "top": { "levels": [3, 4], "bays": 3 }
+    },
+    "defaultShape": "standard",
+    "racks": [
+      {"id": "D6", "name": "Door 6", "sides": "AB", "columns": 6},
+      {"id": "0", "sides": "ABC", "columns": 10},
+      {"id": "1", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "2", "sides": "A", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "3", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "4", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "5", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "6", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "7", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "8", "sides": "A", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "9", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "10", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "11", "sides": "A", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "12", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "13", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "14", "sides": "AB", "columns": 13, "columnShapes": {"12": "top"}},
+      {"id": "15", "sides": "AB", "columns": 10},
+      {"id": "16", "sides": "AB", "columns": 10},
+      {"id": "17", "sides": "A", "columns": 8},
+      {"id": "18", "sides": "AB", "columns": 10},
+      {"id": "19", "sides": "AB", "columns": 10},
+      {"id": "20", "sides": "A", "columns": 6},
+      {"id": "1518", "name": "Junction 15/18", "sides": "AB", "columns": 1, "shape": "top", "junction": true},
+      {"id": "1619", "name": "Junction 16/19", "sides": "AB", "columns": 1, "shape": "top", "junction": true}
+    ],
+    "areas": [
+      {"id": "NEARCOOLER-01", "name": "Near cooler 1"},
+      {"id": "NEARCOOLER-02", "name": "Near cooler 2"},
+      {"id": "NEARCOOLER-03", "name": "Near cooler 3"},
+      {"id": "NEARCOOLER-04", "name": "Near cooler 4"},
+      {"id": "NEARCOOLER-05", "name": "Near cooler 5"},
+      {"id": "LINE-2-3", "name": "Between line 2 & 3"},
+      {"id": "LANE-7", "name": "Lane 7"},
+      {"id": "DOOR-2-3", "name": "Door 2 & 3"},
+      {"id": "LOAD-AREA", "name": "Load area (front)"},
+      {"id": "RECV-FLOOR", "name": "Receiving floor"}
+    ],
+    "receivingArea": "RECV-FLOOR"
+  },
+  "clients": [
+    { "id": "Deccan", "name": "Deccan", "defaultSupplier": "Deccan Foods" },
+    { "id": "Matco", "name": "Matco", "defaultSupplier": "Matco Foods" },
+    { "id": "Praj", "name": "Praj", "defaultSupplier": "Praj Natural Foods" }
+  ],
+  "labels": {
+    "sheets": [
+      {
+        "id": "3x2-letter", "name": "3 × 2 in, 10 per sheet (US Letter)", "page": "letter",
+        "labelWidth": 76.2, "labelHeight": 50.8, "columns": 2, "rows": 5,
+        "left": 30.1625, "top": 6.35, "gapX": 3.175, "gapY": 3.175
+      }
+    ],
+    "defaultSheet": "3x2-letter",
+    "profiles": [
+      { "id": "milletbank", "name": "Millet Bank", "logo": "milletbank", "color": "#4b5d27", "brands": ["Millet Bank"] },
+      { "id": "deccan", "name": "Deccan", "logo": "deccan", "color": "#9b1c23", "footer": "Product of India\nDistributed By: Deccan Foods, USA", "brands": ["Deccan"] }
+    ]
+  },
+  "groups": [
+    { "id": "receiving", "name": "receiving" },
+    { "id": "shift-am", "name": "shift-am" },
+    { "id": "shift-pm", "name": "shift-pm" }
+  ],
+  "orders": { "inbox": "orders@a3kimports.com" },
+  "expiry": { "warnMonths": 6 }
+}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { productById } from "../../data/catalog";
+import { tenant } from "../../tenant";
 import { canSeeClient } from "../../auth/permissions";
 import { useStore } from "../../store/store";
 import { useSession } from "../../session";
@@ -10,7 +11,8 @@ import { readOrder } from "../../outbound/reader";
 import { fmtDay } from "../../inventory/selectors";
 import type { InboxMail, StoreOrder } from "../../store/types";
 
-export const ORDER_INBOX = "orders@a3kimports.com";
+/** The warehouse's order email address (tenant config) */
+export const ORDER_INBOX = tenant().config.orders.inbox;
 
 /**
  * Emails sent to the order inbox. Each can become a draft order (read from the email text and any PDF attachments)

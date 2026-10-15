@@ -1,21 +1,22 @@
 import { useState } from "react";
-import { CLIENTS, type Client } from "../../data/catalog";
+import { CLIENTS, clientConfig, type Client } from "../../data/catalog";
 import { useStore } from "../../store/store";
 import type { ShipmentLine } from "../../store/types";
 import { LinesEditor } from "../../components/LinesEditor";
 import { useToast } from "../../components/Toast";
 import { go } from "../../router";
 
-const SUPPLIER: Record<Client, string> = { Deccan: "Deccan Foods", Matco: "Matco Foods", Praj: "Praj Natural Foods" };
+/** The supplier usually filled in for a client (tenant config) */
+const supplierOf = (c: Client) => clientConfig(c)?.defaultSupplier ?? "";
 
 /** Record a delivery that's on its way, product by product, using the product database to fill names. */
 export function NewShipment() {
   const { state, dispatch } = useStore();
   const toast = useToast();
-  const [client, setClient] = useState<Client>("Deccan");
+  const [client, setClient] = useState<Client>(CLIENTS[0]);
   const nextNumber = String(Math.max(1000, ...state.shipments.map(s => parseInt(s.number) || 0)) + 1);
   const [number, setNumber] = useState(nextNumber);
-  const [supplier, setSupplier] = useState(SUPPLIER.Deccan);
+  const [supplier, setSupplier] = useState(() => supplierOf(CLIENTS[0]));
   const [ref, setRef] = useState("");
   const [expected, setExpected] = useState(new Date(Date.now() + 864e5).toISOString().slice(0, 10));
   const [lines, setLines] = useState<ShipmentLine[]>([{ key: "n1", productId: null, cases: 0, pallet: 1, lot: "", bestBefore: "" }]);
@@ -29,7 +30,7 @@ export function NewShipment() {
       <div className="facts glass">
         <div className="fact"><span>Client</span>
           <div className="segment" role="group" aria-label="Client">
-            {CLIENTS.map(c => <button key={c} type="button" aria-pressed={client === c} onClick={() => { setClient(c); setSupplier(SUPPLIER[c]); }}>{c}</button>)}
+            {CLIENTS.map(c => <button key={c} type="button" aria-pressed={client === c} onClick={() => { setClient(c); setSupplier(supplierOf(c)); }}>{c}</button>)}
           </div>
         </div>
         <label className="fact"><span>Number</span><input className={`input${clash ? " invalid" : ""}`} value={number} onChange={e => setNumber(e.target.value.trim())} /></label>

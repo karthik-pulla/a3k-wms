@@ -53,7 +53,7 @@ export const ES: Record<string, string> = {
   "Your status": "Tu estado", "Receiving at Door": "Recibiendo en la puerta", "Door": "Puerta", "Members ·": "Miembros ·",
 
   // ---------- Sign-in ----------
-  "A3K Warehouse": "Almacén A3K", "Warehouse management": "Gestión de almacén", "Sign in": "Iniciar sesión", "Username": "Usuario", "Password": "Contraseña",
+  "Warehouse management": "Gestión de almacén", "Sign in": "Iniciar sesión", "Username": "Usuario", "Password": "Contraseña",
   "Keep me signed in on this device (7 days; leave off on shared devices)": "Mantener la sesión en este dispositivo (7 días; no lo uses en equipos compartidos)",
   "Checking…": "Verificando…", "Need an account? Ask for one": "¿Necesitas una cuenta? Pídela", "Wrong username or password.": "Usuario o contraseña incorrectos.",
   "Too many tries. Wait before trying again.": "Demasiados intentos. Espera antes de intentarlo otra vez.", "Your account request is waiting for an admin to approve it.": "Tu solicitud de cuenta está esperando la aprobación de un admin.",
@@ -156,7 +156,7 @@ export const ES: Record<string, string> = {
   "Pick a product or a brand on the left to highlight every pallet. Squares are slots, darker ones hold stock.": "Elige un producto o una marca a la izquierda para resaltar cada tarima. Los cuadros son espacios; los más oscuros tienen producto.",
   "Map": "Mapa", "Table": "Tabla", "Racks": "Racks", "cases": "cajas", "locations": "ubicaciones", "partial": "parciales", "cs expiring": "cj por vencer", "cs expired": "cj vencidas",
   "No stock right now.": "Sin inventario por ahora.", "Show every rack side": "Mostrar todos los lados de rack", "rack sides and areas hold it · click one to see it below": "lados de rack y áreas lo tienen · haz clic en uno para verlo abajo",
-  "in date": "vigente", "expiring within 6 months": "vence en menos de 6 meses", "expired": "vencido", "partial pallet": "tarima parcial", "Location": "Ubicación", "Arrived:": "Llegó:",
+  "in date": "vigente", "expired": "vencido", "partial pallet": "tarima parcial", "Location": "Ubicación", "Arrived:": "Llegó:",
   "Full": "Completa", "Partial": "Parcial", "Mixed": "Mixta", "On the floor:": "En el piso:", "On the floor": "En el piso", "Has expired stock": "Tiene producto vencido",
   "Rack side": "Lado del rack", "Previous rack side": "Lado anterior", "Next rack side": "Lado siguiente", "slots empty": "espacios vacíos", "hidden": "oculto",
   "slots in use": "espacios en uso", "empty slots": "espacios vacíos", "free for put-away": "libres para acomodar", "cases in stock": "cajas en inventario", "pallets on the floor": "tarimas en el piso",
@@ -240,7 +240,7 @@ export const ES: Record<string, string> = {
   "Re-plan picks": "Volver a planear surtido", "Re-planned the picks still to do.": "Se volvió a planear lo que falta surtir.", ". Not enough stock that isn't expired or already reserved for other orders.": ". No hay suficiente inventario sin vencer ni reservado para otros pedidos.",
   "Packer: not given out": "Empacador: sin asignar", "Packer:": "Empacador:", "Who packs this order": "Quién empaca este pedido", "packed by": "empacado por",
   "New order": "Nuevo pedido", "Read from a PDF…": "Leer de un PDF…", "Reading…": "Leyendo…", "Store": "Tienda", "Due date": "Fecha de entrega", "Store's PO / slip no.": "OC / nota de la tienda",
-  "optional": "opcional", "e.g. Patel Brothers – Edison": "p. ej. Patel Brothers – Edison", "Products and cases": "Productos y cajas", "matched by name, check it": "encontrado por nombre, revísalo",
+  "optional": "opcional", "Store name and branch": "Nombre de la tienda y sucursal", "Products and cases": "Productos y cajas", "matched by name, check it": "encontrado por nombre, revísalo",
   "cs in stock": "cj en inventario", "· not enough": "· no alcanza", "Notes": "Notas", "Delivery instructions, contact…": "Instrucciones de entrega, contacto…",
   "cases · saved as a draft until approved": "cajas · se guarda como borrador hasta aprobarse", "Save draft": "Guardar borrador", "Save & approve": "Guardar y aprobar",
   "Enter the store.": "Escribe la tienda.", "Add at least one product.": "Agrega al menos un producto.", "That PDF couldn't be read.": "No se pudo leer ese PDF.",
@@ -258,9 +258,8 @@ export const ES: Record<string, string> = {
   "Size": "Tamaño", "Units": "Unidades", "Logo": "Logo", "No labels yet. Pick an order above or add a product.": "Aún no hay etiquetas. Elige un pedido arriba o agrega un producto.",
   "+ Product not in the list": "+ Producto que no está en la lista", "New product": "Producto nuevo", "On the label": "En la etiqueta", "Print units per case": "Imprimir unidades por caja",
   "Blank to write in": "En blanco para escribir", "Best before from stock": "Consumir antes de, del inventario", "Same date on all": "Misma fecha en todas", "No best before": "Sin fecha de consumo",
-  "e.g. MAR 2027 (blank line if empty)": "p. ej. MAR 2027 (línea en blanco si está vacío)", "Category above the name": "Categoría arriba del nombre", "Item code": "Código del artículo", "Deccan footer": "Pie de Deccan",
-  "Sheet": "Hoja", "Start at label": "Empezar en la etiqueta", "(full sheet)": "(hoja completa)", "(sheet already partly used)": "(hoja ya usada en parte)", "Move right": "Mover a la derecha", "Move down": "Mover abajo",
-  "Print alignment test": "Imprimir prueba de alineación", "US Letter, 10 labels of 3 × 2 in. Print at Actual size (100%). If the print sits off the labels, print the alignment test on plain paper and move it here.": "Carta (US Letter), 10 etiquetas de 3 × 2 in. Imprime a Tamaño real (100%). Si no cae sobre las etiquetas, imprime la prueba en papel normal y ajústala aquí.",
+  "e.g. MAR 2027 (blank line if empty)": "p. ej. MAR 2027 (línea en blanco si está vacío)", "Category above the name": "Categoría arriba del nombre", "Item code": "Código del artículo",   "Sheet": "Hoja", "Start at label": "Empezar en la etiqueta", "(full sheet)": "(hoja completa)", "(sheet already partly used)": "(hoja ya usada en parte)", "Move right": "Mover a la derecha", "Move down": "Mover abajo",
+  "Print alignment test": "Imprimir prueba de alineación", "Print at Actual size (100%). If the print sits off the labels, print the alignment test on plain paper and move it here.": "Imprime a Tamaño real (100%). Si no cae sobre las etiquetas, imprime la prueba en papel normal y ajústala aquí.",
   "Download PDF": "Descargar PDF", "Preview": "Vista previa", "Making the preview…": "Haciendo la vista previa…", "The labels appear here.": "Las etiquetas aparecen aquí.",
   "Choose Actual size (100%) in the print dialog, not Fit to page.": "Elige Tamaño real (100%) en el cuadro de impresión, no Ajustar a la página.", "No logo": "Sin logo",
   "One label per case, from the pallets planned or picked for this order; each label gets its pallet's best-before.": "Una etiqueta por caja, de las tarimas planeadas o surtidas para este pedido; cada etiqueta lleva la fecha de su tarima.",
@@ -282,7 +281,7 @@ export const ES: Record<string, string> = {
   "Hi": "Hola", "Forklift mode": "Modo montacargas", "Move a pallet…": "Mover una tarima…", "My tasks": "Mis tareas", "Nothing given to you right now.": "No tienes nada asignado por ahora.",
   "Anyone can take": "Cualquiera puede tomar", "A coordinator gives you orders to pack.": "Un coordinador te da pedidos para empacar.", "No messages for you.": "No hay mensajes para ti.", "All messages ›": "Todos los mensajes ›",
   "Pallet is at": "La tarima está en", "Why": "Por qué", "e.g. blocking the aisle": "p. ej. está bloqueando el pasillo", "Type the slot or floor spot.": "Escribe el espacio o lugar del piso.",
-  "The WMS picks the slot it goes to.": "El WMS elige el espacio a donde va.", "Get a slot": "Obtener un espacio", "e.g. 06B-FLOOR-P01": "p. ej. 06B-FLOOR-P01", "e.g. 06B-08-L3-B1": "p. ej. 06B-08-L3-B1",
+  "The WMS picks the slot it goes to.": "El WMS elige el espacio a donde va.", "Get a slot": "Obtener un espacio", 
   "Exit": "Salir", "No pallet tasks": "No hay tareas de tarimas", "New tasks show here as soon as they're given.": "Las tareas nuevas aparecen aquí en cuanto se asignan.", "Next": "Siguientes",
 
   // ---------- Logs ----------
@@ -338,11 +337,15 @@ export const ES: Record<string, string> = {
   "Add a product: type its name or code": "Agrega un producto: escribe su nombre o código", "No labels yet. Pick an order, read a PDF or add a product.": "Aún no hay etiquetas. Elige un pedido, lee un PDF o agrega un producto.",
   "Enter or Tab adds the product and empties the box for the next one": "Enter o Tab agrega el producto y vacía el campo para el siguiente", "Enter or Tab adds the product and empties the box for the next one.": "Enter o Tab agrega el producto y vacía el campo para el siguiente.",
   "; Enter in the empty box adds": "; Enter en el campo vacío agrega", "again": "otra vez", "Footer": "Pie de etiqueta", "Printed at the bottom of each label (optional)": "Se imprime al pie de cada etiqueta (opcional)", "picking": "surtiendo", "sign in": "inicio de sesión", "created": "creada", "failed attempts": "intentos fallidos", "approved": "aprobado", "rejected": "rechazado", "password changed": "contraseña cambiada", "password reset": "contraseña restablecida", "disabled": "desactivada", "enabled": "activada", "role changed": "rol cambiado", "ready to pick": "listo para surtir", "shipped": "enviado", "cancelled": "cancelado", "draft": "borrador", "pending": "pendiente", "Load area (front)": "Zona de carga (frente)", "Receiving floor": "Piso de recepción",
-  "Between line 2 & 3": "Entre las líneas 2 y 3", "expiring in 6 months": "vence en 6 meses", "Coolers": "Cuartos fríos", "Units per case:": "Unidades por caja:", "Search": "Buscar", "View": "Ver",
+  "Between line 2 & 3": "Entre las líneas 2 y 3", "Coolers": "Cuartos fríos", "Units per case:": "Unidades por caja:", "Search": "Buscar", "View": "Ver",
 };
 
 /** Text with names or numbers in it. "{1?s:}" means "s" when the English had a plural there. */
 export const ES_PATTERNS: [string, string][] = [
+  ["e.g. {0}", "p. ej. {0}"],
+  ["{0} expiring in {1} months", "{0} vencen en {1} meses"],
+  ["expiring within {0} months", "vence en menos de {0} meses"],
+  ["Expiring within {0} months", "Vence en menos de {0} meses"],
   // Home
   ["Footer · {0}", "Pie de etiqueta · {0}"],
   ["No text in {0} ({1} page{2}): it's probably a scan or photo. Add the products by hand.", "No hay texto en {0} ({1} página{2}): probablemente es un escaneo o foto. Agrega los productos a mano."],

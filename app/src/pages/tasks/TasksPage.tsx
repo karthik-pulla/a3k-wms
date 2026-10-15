@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { productById } from "../../data/catalog";
+import { EXAMPLE_SLOT, productById } from "../../data/catalog";
 import { can, canSeeClient } from "../../auth/permissions";
 import { normalizeLocation } from "../../chat/refs";
 import { useStore } from "../../store/store";
@@ -109,7 +109,7 @@ function NewMove() {
     }}>
       <h2 className="plain-h">Move a pallet</h2>
       <div className="facts">
-        <label className="fact"><span>From</span><input className={`input${from && !fromCode ? " invalid" : ""}`} value={from} onChange={e => setFrom(e.target.value)} placeholder="e.g. 06B-08-L3-B1" autoFocus /></label>
+        <label className="fact"><span>From</span><input className={`input${from && !fromCode ? " invalid" : ""}`} value={from} onChange={e => setFrom(e.target.value)} placeholder={`e.g. ${EXAMPLE_SLOT}`} autoFocus /></label>
         <label className="fact"><span>To</span><input className={`input${to && !normalizeLocation(to) ? " invalid" : ""}`} value={to} onChange={e => setTo(e.target.value)} placeholder={suggestion ? `WMS: ${suggestion}` : "WMS suggests a slot"} /></label>
         <label className="fact"><span>Give to</span><select className="input" value={assignee} onChange={e => setAssignee(e.target.value)}><option value="">Any worker</option>{workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
         <label className="fact"><span>Reason</span><input className="input" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. consolidating partial pallets" /></label>

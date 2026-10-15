@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { describeLocation, productById } from "../../data/catalog";
+import { RECEIVING, describeLocation, productById } from "../../data/catalog";
 import { can } from "../../auth/permissions";
 import { useStore, shipmentTitle } from "../../store/store";
 import { useSession } from "../../session";
@@ -9,7 +9,7 @@ import { roughAgo } from "../../chat/presence";
 import type { Task } from "../../store/types";
 import { t as t_ } from "../../i18n";
 
-const where = (code: string) => (code === "RECV-FLOOR" ? "Receiving floor (dock)" : describeLocation(code));
+const where = (code: string) => (code === RECEIVING ? "Receiving floor (dock)" : describeLocation(code));
 
 /**
  * One pallet task. Workers: start it, then confirm the pallet is in the slot (or report the slot blocked, and the WMS

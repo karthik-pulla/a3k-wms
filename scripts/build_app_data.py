@@ -1,16 +1,21 @@
-"""Step 5: data for the WMS web app (app/src/data/generated/).
+"""Step 5: data for the WMS web app, as A3K's tenant files (app/public/tenants/a3k/, loaded by the app at startup).
 
 products.json    every product with its client (Deccan, Matco or Praj), code, name, size, units per case
                  and cases per pallet, from the label catalog and the stock-sheet product lists
-layout.json      the owner's rack layout (CLAUDE.md, Oct 2026): every slot with its zero-padded code
-sampleStock.json SAMPLE inventory for testing on localhost: the 27 Sep stock-sheet counts moved onto the
-                 new codes (6A-01-L1-B1 -> 06A-01-L1-B1); slots that no longer exist are dropped
+logos.json       brand logos for case labels (the same images the Order Label Maker uses)
+sampleStock.json SAMPLE inventory for testing on localhost (app/src/data/generated/, never on GitHub): the 27 Sep
+                 stock-sheet counts moved onto the new codes (6A-01-L1-B1 -> 06A-01-L1-B1); slots that no longer exist
+                 are dropped
+
+The rack layout is not made here: it is A3K's tenant config (app/public/tenants/a3k/config.json), written by hand
+from the owner's plan, and the app works out the slots from it (app/src/tenant/layout.ts).
 """
 import csv, json, re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]  # the WMS folder
 GEN = ROOT / "data" / "generated"
+TENANT = ROOT / "app" / "public" / "tenants" / "a3k"
 OUT = ROOT / "app" / "src" / "data" / "generated"
 OUT.mkdir(parents=True, exist_ok=True)
 norm = lambda s: re.sub(r"\s+", "", s or "").lower()
@@ -36,35 +41,19 @@ for group in ("deccan", "other"):
                              size=p["size"], units=p["units"], perPallet=pallet_size.get(norm(p["item"])), item=p["item"]))
 by_item = {norm(p["item"]): p["id"] for p in products if p["item"]}
 
-# ---------- layout (owner's plan; see CLAUDE.md "Rack sides") ----------
+# ---------- slots, from the tenant config (same rules as app/src/tenant/layout.ts) ----------
+layout = json.load(open(TENANT / "config.json"))["layout"]
+fmt = layout["codeFormat"]
 def pad(rack):  # 6 -> "06", "D6" and junctions unchanged
-    return rack if not rack.isdigit() or len(rack) > 2 else f"{int(rack):02d}"
-SIDES = [("D6", "AB", 6), ("0", "ABC", 10)]
-SIDES += [(str(r), "AB", 13) for r in (1, 3, 4, 5, 6, 7, 9, 10, 12, 13, 14)]
-SIDES += [(str(r), "A", 13) for r in (2, 8, 11)]
-SIDES += [(str(r), "AB", 10) for r in (15, 16, 18, 19)]
-SIDES += [("17", "A", 8), ("20", "A", 6)]
-JUNCTIONS = [("1518", "AB"), ("1619", "AB")]
-
-def rack_sort(r):
-    return (0, 0) if r == "D6" else ((2, int(r)) if len(r) > 2 else (1, int(r)))
-
-faces = []
-for rack, sides, ncols in sorted(SIDES, key=lambda s: rack_sort(s[0])):
-    for side in sides:
-        cols = []
-        for c in range(1, ncols + 1):
-            if ncols == 13 and c == 12:
-                slots = [(l, b) for l in (3, 4) for b in (1, 2, 3)]  # column 12: levels 3-4, three bays
-            else:
-                slots = [(l, b) for l in (1, 2, 3, 4) for b in (1, 2)]
-            cols.append([c, slots])
-        faces.append(dict(id=f"{pad(rack)}{side}", rack=pad(rack), side=side, cols=cols))
-for j, sides in JUNCTIONS:
-    for side in sides:
-        faces.append(dict(id=f"{j}{side}", rack=j, side=side, junction=True, cols=[[1, [(l, b) for l in (3, 4) for b in (1, 2, 3)]]]))
-slot_codes = {f"{f['id']}-{c:02d}-L{l}-B{b}" for f in faces for c, s in f["cols"] for l, b in s}
-areas = [dict(id=a, name=n) for a, n in count["areas"]]
+    return f"{int(rack):0{fmt['rackDigits']}d}" if rack.isdigit() and len(rack) <= fmt["rackDigits"] else rack
+slot_codes = set()
+for r in layout["racks"]:
+    for side in r["sides"]:
+        for c in range(1, r["columns"] + 1):
+            shape = layout["shapes"][r.get("columnShapes", {}).get(str(c), r.get("shape", layout["defaultShape"]))]
+            for l in shape["levels"]:
+                for b in range(1, shape["bays"] + 1):
+                    slot_codes.add(fmt["slot"].format(face=f"{pad(r['id'])}{side}", col=f"{c:0{fmt['colDigits']}d}", level=l, bay=b))
 assert len(slot_codes) == 3662, len(slot_codes)
 
 # ---------- sample stock from the 27 Sep sheets ----------
@@ -81,12 +70,10 @@ for old, lines in count["prev"].items():
     ls = [{"productId": by_item[norm(k)], "cases": q} for k, q in lines if q and norm(k) in by_item]
     if ls: stock[code] = ls
 
-json.dump(products, open(OUT / "products.json", "w"), separators=(",", ":"))
-json.dump(dict(faces=faces, areas=areas), open(OUT / "layout.json", "w"), separators=(",", ":"))
-# Brand logos for case labels (the same images the Order Label Maker uses)
-logos = json.load(open(ROOT / "data" / "generated" / "label-catalog.json"))["logos"]
-json.dump(logos, open(OUT / "labelLogos.json", "w"), separators=(",", ":"))
+json.dump(products, open(TENANT / "products.json", "w"), separators=(",", ":"))
+logos = json.load(open(GEN / "label-catalog.json"))["logos"]
+json.dump(logos, open(TENANT / "logos.json", "w"), separators=(",", ":"))
 json.dump(dict(asof="2026-09-27", note="SAMPLE: 27 Sep stock-sheet counts on the new codes", stock=stock), open(OUT / "sampleStock.json", "w"), separators=(",", ":"))
 clients = {}
 for p in products: clients[p["client"]] = clients.get(p["client"], 0) + 1
-print(f"products {len(products)} {clients} · sides {len(faces)} · slots {len(slot_codes)} · sample stock {len(stock)} locations ({dropped} old slots no longer exist)")
+print(f"products {len(products)} {clients} · slots {len(slot_codes)} · sample stock {len(stock)} locations ({dropped} old slots no longer exist)")

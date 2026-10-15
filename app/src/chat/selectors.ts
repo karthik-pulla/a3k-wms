@@ -1,12 +1,15 @@
-import { isFloor, productById } from "../data/catalog";
+import { locKind, productById } from "../data/catalog";
+import { tenant } from "../tenant";
 import { canSeeClient } from "../auth/permissions";
 import type { Conversation, Message, State, StockLine, User } from "../store/types";
 
 // ---------- Stock as chat sees it ----------
 const thisMonth = () => new Date().toISOString().slice(0, 7);
-const sixMonths = () => { const d = new Date(); d.setMonth(d.getMonth() + 6); return d.toISOString().slice(0, 7); };
+/** Best-before months within the warehouse's warning time (tenant config: expiry.warnMonths) are "expiring" */
+export const WARN_MONTHS = tenant().config.expiry.warnMonths;
+const warnUntil = () => { const d = new Date(); d.setMonth(d.getMonth() + WARN_MONTHS); return d.toISOString().slice(0, 7); };
 export type ExpiryTone = "ok" | "warn" | "expired";
-export const expiryTone = (bb?: string): ExpiryTone => (!bb ? "ok" : bb < thisMonth() ? "expired" : bb <= sixMonths() ? "warn" : "ok");
+export const expiryTone = (bb?: string): ExpiryTone => (!bb ? "ok" : bb < thisMonth() ? "expired" : bb <= warnUntil() ? "warn" : "ok");
 
 const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 
@@ -50,7 +53,7 @@ export function productLocations(state: State, productId: string): ProductLocati
 }
 
 export const isPartial = (line: StockLine) => { const p = productById(line.productId); return !!p?.perPallet && line.cases < p.perPallet; };
-export const locationKind = (code: string) => (isFloor(code) ? (code.includes("-FLOOR-") ? "floor" : "area") : "slot");
+export const locationKind = (code: string) => locKind(code);
 
 // ---------- Conversations, unread and mentions ----------
 export const conversationsFor = (state: State, me: User) => state.chat.conversations.filter(c => c.members.includes(me.id));
