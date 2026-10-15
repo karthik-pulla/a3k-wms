@@ -99,6 +99,9 @@ export interface TenantConfig {
   groups: { id: string; name: string }[];
   orders: { inbox: string };
   expiry: { warnMonths: number };
+  /** unscopedKeys: this warehouse's data on the device keeps the names it had before warehouses were separated
+   *  (A3K only, so nothing saved then is lost). Every other warehouse's are named after it. */
+  storage?: { unscopedKeys?: boolean };
 }
 
 export interface Product {
@@ -115,3 +118,49 @@ export interface Product {
 }
 
 export interface Logo { src: string; w: number; h: number }
+
+// ---------- Sample data (seed.json, optional) ----------
+// Made-up deliveries, orders, people and messages a new vault starts with, for testing and the demo. A real
+// warehouse has none. Times are relative, so the sample always looks current: days from today, hours or minutes ago.
+// Products are named by code; a shipment's or order's client says whose. Message parts are text or references
+// ({ slot }, { product: <code> }, { user }, { group }, { order }, { shipment }, { container }). "@name" in a text
+// field means texts[name]; "{date:+4}" in a text is the date 4 days from today.
+
+/** [product code, cases, pallet number, lot, best-before in months from now, damaged cases?] */
+export type SeedShipmentLine = [string, number, number, string, number, number?];
+export interface SeedWho { by: string; hoursAgo: number }
+
+export interface Seed {
+  note?: string;
+  /** Made-up stock when the warehouse has no stock.json: which clients to leave out (so an order shows a shortage) */
+  demoStock?: { seed: number; leaveOut?: Client[]; areas?: string[] };
+  people: { id: string; name: string; role: "owner" | "coordinator" | "worker"; groups: string[]; clients?: Client[] }[];
+  /** The person with unread messages waiting (the others have read up to 15 minutes ago) */
+  focus: string;
+  channels: { id: string; title: string; shift?: "am" | "pm"; members: string[] | "everyone" }[];
+  /** Direct messages: pairs of people */
+  dms: [string, string][];
+  shipments: {
+    id: string; client: Client; number: string; supplier: string; ref: string; expected: number; status: "incoming" | "pending";
+    received?: SeedWho & { condition: "ok" | "damaged" }; lines: SeedShipmentLine[];
+  }[];
+  orders: {
+    id: string; store: string; client: Client; date: number; due: number; source: "app" | "pdf" | "email";
+    status: "draft" | "approved" | "shipped"; lines: [string, number][];
+    created?: SeedWho; approved?: SeedWho; shipped?: SeedWho; ref?: string; sourceName?: string; sourceText?: string;
+    /** Being picked: the first pallet on its list is done */
+    picking?: SeedWho;
+    /** Given to this worker to pack */
+    assignee?: string;
+  }[];
+  returns: { id: string; orderId: string; store: string; reason: string; notes: string; created: SeedWho; items: [string, number][] }[];
+  texts?: Record<string, string>;
+  inbox: { id: string; from: string; subject: string; hoursAgo: number; body: string; attachments: { name: string; text: string }[]; status: "new" | "drafted" | "ignored"; orderId?: string }[];
+  /** [conversation, author, minutes ago, parts, { urgent, escalateMinutesAgo }?] */
+  messages: [string, string, number, unknown[], { urgent?: boolean; escalateMinutesAgo?: number }?][];
+  /** When the focus person last read these conversations, in minutes ago (null = never) */
+  reads?: Record<string, number | null>;
+  presence: Record<string, { state: "online" | "away" | "syncing" | "offline"; minutesAgo: number; manual?: { kind: "forklift" } | { kind: "off" } | { kind: "receiving"; door: number } }>;
+  /** Sample pallet tasks: who made them and who gets the first one */
+  tasks?: { createdBy: string; assignee?: string };
+}

@@ -1,0 +1,271 @@
+{
+  "note": "SAMPLE data for testing A3K's WMS on localhost. Real client, store and product names; every quantity, date, order and message is made up. Delete this file before go-live.",
+  "demoStock": {"seed": 20261014, "leaveOut": ["Praj"], "areas": ["LINE-2-3", "NEARCOOLER-01", "NEARCOOLER-03", "LANE-7"]},
+  "people": [
+    {"id": "karthik", "name": "Karthik", "role": "owner", "groups": ["owners"]},
+    {"id": "maya", "name": "Maya", "role": "owner", "groups": ["owners"]},
+    {"id": "leo", "name": "Leo", "role": "coordinator", "groups": ["coordinators", "shift-am", "receiving"]},
+    {"id": "nina", "name": "Nina", "role": "coordinator", "groups": ["coordinators", "shift-pm"]},
+    {"id": "omar", "name": "Omar", "role": "worker", "groups": ["receiving", "shift-am"]},
+    {"id": "tess", "name": "Tess", "role": "worker", "groups": ["shift-pm"], "clients": ["Deccan", "Praj"]}
+  ],
+  "focus": "karthik",
+  "channels": [
+    {"id": "team", "title": "warehouse-team", "members": "everyone"},
+    {"id": "shift-am", "title": "shift-am", "shift": "am", "members": ["karthik", "maya", "leo", "omar"]},
+    {"id": "shift-pm", "title": "shift-pm", "shift": "pm", "members": ["karthik", "maya", "nina", "tess"]}
+  ],
+  "dms": [["karthik", "leo"], ["karthik", "maya"], ["leo", "omar"], ["karthik", "tess"]],
+  "shipments": [
+    {
+      "id": "deccan-1028",
+      "client": "Deccan",
+      "number": "1028",
+      "supplier": "Deccan Foods",
+      "ref": "MSKU 482910",
+      "expected": 1,
+      "status": "incoming",
+      "lines": [
+        ["1015", 55, 1, "DSM-2610", 14],
+        ["1015", 55, 2, "DSM-2610", 14],
+        ["1051", 55, 3, "DAB-2609", 18],
+        ["1420", 40, 4, "DIR-2611", 7],
+        ["1071", 55, 5, "DSM-2612", 14]
+      ]
+    },
+    {
+      "id": "matco-1028",
+      "client": "Matco",
+      "number": "1028",
+      "supplier": "Matco Foods",
+      "ref": "BOL 77-1028",
+      "expected": 2,
+      "status": "incoming",
+      "lines": [
+        ["M001", 56, 1, "FX-1190", 20],
+        ["M001", 56, 2, "FX-1190", 20],
+        ["M002", 60, 3, "FX-1191", 20],
+        ["M360", 48, 4, "RM-0412", 10]
+      ]
+    },
+    {
+      "id": "praj-1031",
+      "client": "Praj",
+      "number": "1031",
+      "supplier": "Praj Natural Foods",
+      "ref": "PNF-1031",
+      "expected": 5,
+      "status": "incoming",
+      "lines": [["PNFNDLFXT", 30, 1, "MB-NDL-09", 9], ["PNFPSTMLT", 20, 1, "MB-PST-08", 11], ["PNFPCKCHO", 20, 2, "MB-PCK-07", 8]]
+    },
+    {
+      "id": "deccan-2930",
+      "client": "Deccan",
+      "number": "2930",
+      "supplier": "Deccan Foods",
+      "ref": "TGHU 310298",
+      "expected": -1,
+      "status": "pending",
+      "received": {"by": "Dock team", "hoursAgo": 14.4, "condition": "ok"},
+      "lines": [
+        ["1073", 55, 1, "DSK-2608", 16],
+        ["1073", 55, 2, "DSK-2608", 16],
+        ["1065", 55, 3, "DCG-2607", 15],
+        ["1401", 20, 4, "DIR-2605", 6],
+        ["1403", 20, 4, "DWR-2605", 6]
+      ]
+    },
+    {
+      "id": "matco-2931",
+      "client": "Matco",
+      "number": "2931",
+      "supplier": "Matco Foods",
+      "ref": "BOL 77-2931",
+      "expected": 0,
+      "status": "pending",
+      "received": {"by": "Dock team", "hoursAgo": 3, "condition": "damaged"},
+      "lines": [["M006", 48, 1, "HM-0388", 22, 2]]
+    }
+  ],
+  "orders": [
+    {
+      "id": "Order 13",
+      "store": "Patel Brothers – Hamilton",
+      "client": "Deccan",
+      "date": -1,
+      "due": 0,
+      "source": "app",
+      "status": "approved",
+      "approved": {"by": "Karthik", "hoursAgo": 5},
+      "created": {"by": "Karthik", "hoursAgo": 26},
+      "picking": {"by": "Omar", "hoursAgo": 1},
+      "assignee": "omar",
+      "lines": [["1073", 70], ["1065", 30], ["1401", 12]]
+    },
+    {
+      "id": "Order 14",
+      "store": "Balaji Super Market",
+      "client": "Deccan",
+      "date": 0,
+      "due": 3,
+      "source": "app",
+      "status": "approved",
+      "approved": {"by": "Maya", "hoursAgo": 2},
+      "created": {"by": "Maya", "hoursAgo": 3},
+      "lines": [["1015", 60], ["1051", 25]]
+    },
+    {
+      "id": "Order 15",
+      "store": "Patel Brothers – Edison",
+      "client": "Deccan",
+      "date": 0,
+      "due": 4,
+      "source": "pdf",
+      "status": "draft",
+      "ref": "PB-77812",
+      "sourceName": "PB-77812.pdf",
+      "sourceText": "@pdf",
+      "created": {"by": "Order inbox", "hoursAgo": 1},
+      "lines": [["1055", 20], ["1071", 30], ["1054", 8]]
+    },
+    {
+      "id": "Order 4",
+      "store": "Big Bazaar Farmers Market – Plainsboro",
+      "client": "Praj",
+      "date": -9,
+      "due": -7,
+      "source": "pdf",
+      "status": "shipped",
+      "shipped": {"by": "Leo", "hoursAgo": 168},
+      "lines": [["PNFNDLFXT", 1], ["PNFPSTMLT", 1]]
+    },
+    {
+      "id": "Order 5",
+      "store": "Balaji Super Market",
+      "client": "Praj",
+      "date": -8,
+      "due": -6,
+      "source": "pdf",
+      "status": "shipped",
+      "shipped": {"by": "Nina", "hoursAgo": 4},
+      "lines": [["PNFMSLCHO", 1], ["PNFPCKCHO", 2]]
+    },
+    {
+      "id": "Order 9",
+      "store": "Patel Brothers – Hamilton",
+      "client": "Deccan",
+      "date": -6,
+      "due": -4,
+      "source": "email",
+      "status": "shipped",
+      "shipped": {"by": "Leo", "hoursAgo": 96},
+      "lines": [["1015", 20], ["1420", 10]]
+    },
+    {
+      "id": "Order 11",
+      "store": "Patidar Supermarket – East Windsor",
+      "client": "Praj",
+      "date": -4,
+      "due": 1,
+      "source": "app",
+      "status": "approved",
+      "approved": {"by": "Maya", "hoursAgo": 20},
+      "lines": [["PNFMSLCHO", 1]]
+    },
+    {
+      "id": "Order 12",
+      "store": "Subzi Mandi Farmers Market – Parsippany",
+      "client": "Matco",
+      "date": -3,
+      "due": 2,
+      "source": "email",
+      "status": "approved",
+      "approved": {"by": "Karthik", "hoursAgo": 6},
+      "lines": [["M001", 6]]
+    }
+  ],
+  "returns": [
+    {
+      "id": "R-0001",
+      "orderId": "Order 9",
+      "store": "Patel Brothers – Hamilton",
+      "reason": "Damaged in transit",
+      "notes": "Two boxes crushed, one torn. Driver noted it on delivery.",
+      "created": {"by": "Dock team", "hoursAgo": 28.8},
+      "items": [["1420", 3]]
+    }
+  ],
+  "texts": {
+    "pdf": "PATEL BROTHERS – EDISON\nPURCHASE ORDER   PO# PB-77812\nShip to: Patel Brothers – Edison      Deliver by: {date:+4}\nItem   Description                         Qty (cs)\n1055   Deccan Gujarat 17 Rice 10 LB x4     20\n1071   Deccan Sona Masoori 10 LB x4        30\n1054   Deccan Gobindbhog 10 LB x4          8\nThank you",
+    "mail": "Hi team,\n\nPlease send the following for Thursday:\n\nM001 Extreme Basmati Rice 10lb - 24 cases\nM129 Amber XXL 40lb - 6 cases\n\nThanks,\nPurchasing, Big Bazaar Farmers Market – Plainsboro"
+  },
+  "inbox": [
+    {
+      "id": "mail-1",
+      "from": "Purchasing <purchasing@example.com>",
+      "subject": "Order for Thursday – Big Bazaar Plainsboro",
+      "hoursAgo": 0.5,
+      "body": "@mail",
+      "attachments": [],
+      "status": "new"
+    },
+    {
+      "id": "mail-2",
+      "from": "Patel Brothers Edison <orders.pbedison@example.com>",
+      "subject": "PO PB-77812",
+      "hoursAgo": 1.2,
+      "body": "Please see attached PO.",
+      "attachments": [{"name": "PB-77812.pdf", "text": "@pdf"}],
+      "status": "drafted",
+      "orderId": "Order 15"
+    },
+    {
+      "id": "mail-3",
+      "from": "Newsletter <news@example.com>",
+      "subject": "Your weekly freight rates",
+      "hoursAgo": 30,
+      "body": "Rates for next week attached.",
+      "attachments": [],
+      "status": "ignored"
+    }
+  ],
+  "messages": [
+    ["ship-deccan-1028", "maya", 600, ["Packing list is in. Container ", {"container": "MSKU 482910"}, ", due tomorrow."]],
+    ["dm-karthik-tess", "tess", 500, ["I'm off tomorrow, swapped with Omar."]],
+    ["dm-karthik-maya", "maya", 400, ["Matco called: ", {"shipment": "matco-1028"}, " might arrive a day late."]],
+    ["dm-karthik-maya", "karthik", 390, ["OK, noted."]],
+    ["shift-pm", "nina", 300, ["Tonight please count ", {"slot": "15A-03-L2-B1"}, " up to ", {"slot": "15A-03-L4-B1"}, "."]],
+    ["shift-pm", "tess", 280, ["On it."]],
+    ["order-order-5", "nina", 260, ["Picked. Labels printed with the label maker."]],
+    ["order-order-9", "leo", 200, ["Patel Brothers asked to swap 10 cs of ", {"product": "1420"}, " for ", {"product": "1401"}, "."]],
+    ["team", "leo", 180, ["Morning all, AM shift is on. ", {"shipment": "deccan-2930"}, " is on the dock waiting for confirmation."]],
+    ["ship-deccan-2930", "omar", 170, ["Unloaded at Door 2. 5 lines, one mixed pallet (rava) on ", {"slot": "RECV-FLOOR"}, "."]],
+    [
+      "team",
+      "maya",
+      150,
+      [{"user": "leo"}, " thanks. ", {"slot": "6A-01-L4-B1"}, " and ", {"slot": "6A-01-L4-B2"}, " are free for the Surti Kolam."]
+    ],
+    ["shift-am", "leo", 120, ["Forklift 2 is charging until 10. Use forklift 1 for ", {"slot": "D6A-01-L1-B1"}, "."]],
+    ["team", "omar", 95, ["Pallet on ", {"slot": "06B-FLOOR-P01"}, " is leaning. Can someone check it?"]],
+    ["dm-karthik-leo", "leo", 70, ["Can you look at the return from ", {"order": "Order 9"}, "? Photos are in."]],
+    ["dm-karthik-leo", "karthik", 65, ["Will look after lunch."]],
+    ["shift-am", "omar", 60, ["Rava pallet is mixed: ", {"product": "1401"}, " + ", {"product": "1403"}, "."]],
+    ["dm-leo-omar", "leo", 50, ["Take ", {"container": "MSKU 482910"}, " to Door 2 when it lands."]],
+    ["team", "maya", 40, [{"user": "karthik"}, " can you check ", {"product": "1401"}, "? Two lots expire in April."]],
+    ["ship-matco-2931", "omar", 30, ["2 cases of ", {"product": "M006"}, " crushed on arrival. Photos taken."]],
+    ["dm-karthik-leo", "leo", 28, [{"user": "karthik"}, " also, ", {"product": "M001"}, " is getting low."]],
+    ["ship-matco-2931", "leo", 20, [{"group": "owners"}, " please confirm when you can."], {"urgent": true, "escalateMinutesAgo": 5}],
+    ["team", "nina", 12, ["PM shift starts at 3. ", {"group": "owners"}, " we need a decision on ", {"shipment": "matco-2931"}, "."]]
+  ],
+  "reads": {"team": 90, "dm-karthik-leo": 64, "ship-matco-2931": null},
+  "presence": {
+    "karthik": {"state": "online", "minutesAgo": 0},
+    "maya": {"state": "online", "minutesAgo": 1},
+    "leo": {"state": "online", "minutesAgo": 0, "manual": {"kind": "receiving", "door": 2}},
+    "nina": {"state": "away", "minutesAgo": 9},
+    "omar": {"state": "syncing", "minutesAgo": 18, "manual": {"kind": "forklift"}},
+    "tess": {"state": "offline", "minutesAgo": 1200, "manual": {"kind": "off"}}
+  },
+  "tasks": {"createdBy": "Leo", "assignee": "omar"}
+}

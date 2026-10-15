@@ -3,9 +3,9 @@
 products.json    every product with its client (Deccan, Matco or Praj), code, name, size, units per case
                  and cases per pallet, from the label catalog and the stock-sheet product lists
 logos.json       brand logos for case labels (the same images the Order Label Maker uses)
-sampleStock.json SAMPLE inventory for testing on localhost (app/src/data/generated/, never on GitHub): the 27 Sep
-                 stock-sheet counts moved onto the new codes (6A-01-L1-B1 -> 06A-01-L1-B1); slots that no longer exist
-                 are dropped
+stock.json       SAMPLE inventory for testing on localhost (never on GitHub, see .gitignore): the 27 Sep stock-sheet
+                 counts moved onto the new codes (6A-01-L1-B1 -> 06A-01-L1-B1); slots that no longer exist are dropped.
+                 A new vault starts with it; without it the app makes up stock (app/src/store/demoStock.ts)
 
 The rack layout is not made here: it is A3K's tenant config (app/public/tenants/a3k/config.json), written by hand
 from the owner's plan, and the app works out the slots from it (app/src/tenant/layout.ts).
@@ -16,8 +16,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]  # the WMS folder
 GEN = ROOT / "data" / "generated"
 TENANT = ROOT / "app" / "public" / "tenants" / "a3k"
-OUT = ROOT / "app" / "src" / "data" / "generated"
-OUT.mkdir(parents=True, exist_ok=True)
 norm = lambda s: re.sub(r"\s+", "", s or "").lower()
 
 # ---------- products ----------
@@ -73,7 +71,7 @@ for old, lines in count["prev"].items():
 json.dump(products, open(TENANT / "products.json", "w"), separators=(",", ":"))
 logos = json.load(open(GEN / "label-catalog.json"))["logos"]
 json.dump(logos, open(TENANT / "logos.json", "w"), separators=(",", ":"))
-json.dump(dict(asof="2026-09-27", note="SAMPLE: 27 Sep stock-sheet counts on the new codes", stock=stock), open(OUT / "sampleStock.json", "w"), separators=(",", ":"))
+json.dump(dict(asof="2026-09-27", note="SAMPLE: 27 Sep stock-sheet counts on the new codes", stock=stock), open(TENANT / "stock.json", "w"), separators=(",", ":"))
 clients = {}
 for p in products: clients[p["client"]] = clients.get(p["client"], 0) + 1
 print(f"products {len(products)} {clients} · slots {len(slot_codes)} · sample stock {len(stock)} locations ({dropped} old slots no longer exist)")

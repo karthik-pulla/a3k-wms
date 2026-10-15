@@ -1,4 +1,4 @@
-import type { UpdateGroup } from "../data/sampleUpdates";
+import type { UpdateGroup } from "../home/updates";
 
 const MAX_ITEMS = 3;
 

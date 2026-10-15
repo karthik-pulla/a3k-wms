@@ -28,7 +28,7 @@ export const ES: Record<string, string> = {
   "Returns pending": "Devoluciones pendientes", "Not in inventory until approved": "No entra al inventario hasta que se apruebe", "Changes to approve": "Cambios por aprobar",
   "Quantity changes and moves with reasons": "Cambios de cantidad y movimientos con motivo", "Stock by brand": "Inventario por marca", "live": "en vivo",
   "Brand": "Marca", "Client": "Cliente", "Cases": "Cajas", "Pallets": "Tarimas", "Products": "Productos", "Expiring": "Por vencer", "Expired": "Vencido",
-  "Inventory ›": "Inventario ›", "Open ›": "Abrir ›", "View all": "Ver todo", "Recent activity (sample)": "Actividad reciente (ejemplo)",
+  "Inventory ›": "Inventario ›", "Open ›": "Abrir ›", "View all": "Ver todo", "Recent activity": "Actividad reciente",
   "Messages ›": "Mensajes ›", "All caught up": "Todo al día", "Open Messages": "Abrir Mensajes", "Open full screen": "Abrir en pantalla completa", "Unread mentions": "Menciones sin leer",
 
   // ---------- Settings ----------

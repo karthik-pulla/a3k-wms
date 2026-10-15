@@ -1,0 +1,266 @@
+{
+  "note": "DEMO: a made-up warehouse. Every brand, product, store, person and number is invented.",
+  "demoStock": {"seed": 20261014, "leaveOut": ["Ridge"]},
+  "people": [
+    {"id": "sam", "name": "Sam", "role": "owner", "groups": ["owners"]},
+    {"id": "maya", "name": "Maya", "role": "owner", "groups": ["owners"]},
+    {"id": "leo", "name": "Leo", "role": "coordinator", "groups": ["coordinators", "shift-am", "receiving"]},
+    {"id": "nina", "name": "Nina", "role": "coordinator", "groups": ["coordinators", "shift-pm"]},
+    {"id": "omar", "name": "Omar", "role": "worker", "groups": ["receiving", "shift-am"]},
+    {"id": "tess", "name": "Tess", "role": "worker", "groups": ["shift-pm"], "clients": ["Sunfield", "Ridge"]}
+  ],
+  "focus": "sam",
+  "channels": [
+    {"id": "team", "title": "warehouse-team", "members": "everyone"},
+    {"id": "shift-am", "title": "shift-am", "shift": "am", "members": ["sam", "maya", "leo", "omar"]},
+    {"id": "shift-pm", "title": "shift-pm", "shift": "pm", "members": ["sam", "maya", "nina", "tess"]}
+  ],
+  "dms": [["sam", "leo"], ["sam", "maya"], ["leo", "omar"], ["sam", "tess"]],
+  "shipments": [
+    {
+      "id": "sunfield-1028",
+      "client": "Sunfield",
+      "number": "1028",
+      "supplier": "Sunfield Foods",
+      "ref": "MSCU 482910",
+      "expected": 1,
+      "status": "incoming",
+      "lines": [
+        ["SF101", 50, 1, "JR-2610", 14],
+        ["SF101", 50, 2, "JR-2610", 14],
+        ["SF102", 55, 3, "BR-2609", 18],
+        ["SF120", 40, 4, "RL-2611", 9],
+        ["SF130", 60, 5, "RO-2612", 10]
+      ]
+    },
+    {
+      "id": "lotus-1029",
+      "client": "Lotus",
+      "number": "1029",
+      "supplier": "Lotus Trading Co.",
+      "ref": "BOL 55-1029",
+      "expected": 2,
+      "status": "incoming",
+      "lines": [["BL301", 80, 1, "TU-0412", 20], ["BL301", 80, 2, "TU-0412", 20], ["BL330", 75, 3, "CM-0390", 16]]
+    },
+    {
+      "id": "ridge-1031",
+      "client": "Ridge",
+      "number": "1031",
+      "supplier": "Ridge Snack Co.",
+      "ref": "RSC-1031",
+      "expected": 5,
+      "status": "incoming",
+      "lines": [["RS401", 40, 1, "SC-09", 6], ["RS420", 55, 2, "OC-08", 5]]
+    },
+    {
+      "id": "sunfield-2930",
+      "client": "Sunfield",
+      "number": "2930",
+      "supplier": "Sunfield Foods",
+      "ref": "TGHU 310298",
+      "expected": -1,
+      "status": "pending",
+      "received": {"by": "Dock team", "hoursAgo": 14.4, "condition": "ok"},
+      "lines": [
+        ["SF103", 55, 1, "BRN-2608", 16],
+        ["SF103", 55, 2, "BRN-2608", 16],
+        ["SF110", 50, 3, "WF-2607", 12],
+        ["SF121", 20, 4, "CP-2605", 15],
+        ["SF122", 20, 4, "BB-2605", 15]
+      ]
+    },
+    {
+      "id": "lotus-2931",
+      "client": "Lotus",
+      "number": "2931",
+      "supplier": "Lotus Trading Co.",
+      "ref": "BOL 55-2931",
+      "expected": 0,
+      "status": "pending",
+      "received": {"by": "Dock team", "hoursAgo": 3, "condition": "damaged"},
+      "lines": [["BL321", 60, 1, "TP-0388", 22, 2]]
+    }
+  ],
+  "orders": [
+    {
+      "id": "Order 13",
+      "store": "Green Grocer – Lakeside",
+      "client": "Sunfield",
+      "date": -1,
+      "due": 0,
+      "source": "app",
+      "status": "approved",
+      "approved": {"by": "Sam", "hoursAgo": 5},
+      "created": {"by": "Sam", "hoursAgo": 26},
+      "picking": {"by": "Omar", "hoursAgo": 1},
+      "assignee": "omar",
+      "lines": [["SF102", 70], ["SF110", 30], ["GF201", 12]]
+    },
+    {
+      "id": "Order 14",
+      "store": "Corner Market – Riverside",
+      "client": "Sunfield",
+      "date": 0,
+      "due": 3,
+      "source": "app",
+      "status": "approved",
+      "approved": {"by": "Maya", "hoursAgo": 2},
+      "created": {"by": "Maya", "hoursAgo": 3},
+      "lines": [["SF101", 60], ["SF103", 25]]
+    },
+    {
+      "id": "Order 15",
+      "store": "Green Grocer – Northgate",
+      "client": "Sunfield",
+      "date": 0,
+      "due": 4,
+      "source": "pdf",
+      "status": "draft",
+      "ref": "GG-77812",
+      "sourceName": "GG-77812.pdf",
+      "sourceText": "@pdf",
+      "created": {"by": "Order inbox", "hoursAgo": 1},
+      "lines": [["SF111", 20], ["SF130", 30], ["SF122", 8]]
+    },
+    {
+      "id": "Order 4",
+      "store": "Corner Market – Riverside",
+      "client": "Ridge",
+      "date": -9,
+      "due": -7,
+      "source": "pdf",
+      "status": "shipped",
+      "shipped": {"by": "Leo", "hoursAgo": 168},
+      "lines": [["RS401", 1], ["RS402", 1]]
+    },
+    {
+      "id": "Order 5",
+      "store": "Fresh Basket – Hillview",
+      "client": "Ridge",
+      "date": -8,
+      "due": -6,
+      "source": "pdf",
+      "status": "shipped",
+      "shipped": {"by": "Nina", "hoursAgo": 4},
+      "lines": [["RS410", 1], ["RS420", 2]]
+    },
+    {
+      "id": "Order 9",
+      "store": "Green Grocer – Lakeside",
+      "client": "Sunfield",
+      "date": -6,
+      "due": -4,
+      "source": "email",
+      "status": "shipped",
+      "shipped": {"by": "Leo", "hoursAgo": 96},
+      "lines": [["SF101", 20], ["SF120", 10]]
+    },
+    {
+      "id": "Order 11",
+      "store": "Spice Street Market",
+      "client": "Ridge",
+      "date": -4,
+      "due": 1,
+      "source": "app",
+      "status": "approved",
+      "approved": {"by": "Maya", "hoursAgo": 20},
+      "lines": [["RS411", 1]]
+    },
+    {
+      "id": "Order 12",
+      "store": "Fresh Basket – Hillview",
+      "client": "Lotus",
+      "date": -3,
+      "due": 2,
+      "source": "email",
+      "status": "approved",
+      "approved": {"by": "Sam", "hoursAgo": 6},
+      "lines": [["BL301", 6]]
+    }
+  ],
+  "returns": [
+    {
+      "id": "R-0001",
+      "orderId": "Order 9",
+      "store": "Green Grocer – Lakeside",
+      "reason": "Damaged in transit",
+      "notes": "Two boxes crushed, one torn. Driver noted it on delivery.",
+      "created": {"by": "Dock team", "hoursAgo": 28.8},
+      "items": [["SF120", 3]]
+    }
+  ],
+  "texts": {
+    "pdf": "GREEN GROCER – NORTHGATE\nPURCHASE ORDER   PO# GG-77812\nShip to: Green Grocer – Northgate      Deliver by: {date:+4}\nItem   Description                         Qty (cs)\nSF111  Sunfield Semolina 4 LB x10          20\nSF130  Sunfield Rolled Oats 2 LB x12       30\nSF122  Sunfield Black Beans 4 LB x10       8\nThank you",
+    "mail": "Hi team,\n\nPlease send the following for Thursday:\n\nBL301 Turmeric Powder 400g - 24 cases\nBL330 Coconut Milk 400ml - 6 cases\n\nThanks,\nPurchasing, Fresh Basket – Hillview"
+  },
+  "inbox": [
+    {
+      "id": "mail-1",
+      "from": "Purchasing <purchasing@example.com>",
+      "subject": "Order for Thursday – Fresh Basket Hillview",
+      "hoursAgo": 0.5,
+      "body": "@mail",
+      "attachments": [],
+      "status": "new"
+    },
+    {
+      "id": "mail-2",
+      "from": "Green Grocer Northgate <orders.northgate@example.com>",
+      "subject": "PO GG-77812",
+      "hoursAgo": 1.2,
+      "body": "Please see attached PO.",
+      "attachments": [{"name": "GG-77812.pdf", "text": "@pdf"}],
+      "status": "drafted",
+      "orderId": "Order 15"
+    },
+    {
+      "id": "mail-3",
+      "from": "Newsletter <news@example.com>",
+      "subject": "Your weekly freight rates",
+      "hoursAgo": 30,
+      "body": "Rates for next week attached.",
+      "attachments": [],
+      "status": "ignored"
+    }
+  ],
+  "messages": [
+    ["ship-sunfield-1028", "maya", 600, ["Packing list is in. Container ", {"container": "MSCU 482910"}, ", due tomorrow."]],
+    ["dm-sam-tess", "tess", 500, ["I'm off tomorrow, swapped with Omar."]],
+    ["dm-sam-maya", "maya", 400, ["Lotus called: ", {"shipment": "lotus-1029"}, " might arrive a day late."]],
+    ["dm-sam-maya", "sam", 390, ["OK, noted."]],
+    ["shift-pm", "nina", 300, ["Tonight please count ", {"slot": "05A-03-1-1"}, " up to ", {"slot": "05A-03-4-1"}, "."]],
+    ["shift-pm", "tess", 280, ["On it."]],
+    ["order-order-5", "nina", 260, ["Picked. Labels printed."]],
+    ["order-order-9", "leo", 200, ["Green Grocer asked to swap 10 cs of ", {"product": "SF120"}, " for ", {"product": "SF121"}, "."]],
+    ["team", "leo", 180, ["Morning all, AM shift is on. ", {"shipment": "sunfield-2930"}, " is on the dock waiting for confirmation."]],
+    ["ship-sunfield-2930", "omar", 170, ["Unloaded at Door 2. 5 lines, one mixed pallet (beans) on ", {"slot": "DOCK"}, "."]],
+    [
+      "team",
+      "maya",
+      150,
+      [{"user": "leo"}, " thanks. ", {"slot": "2A-01-4-1"}, " and ", {"slot": "2A-01-4-2"}, " are free for the jasmine rice."]
+    ],
+    ["shift-am", "leo", 120, ["Forklift 2 is charging until 10. Use forklift 1 for ", {"slot": "07A-01-5-1"}, "."]],
+    ["team", "omar", 95, ["Pallet on ", {"slot": "03B-F01"}, " is leaning. Can someone check it?"]],
+    ["dm-sam-leo", "leo", 70, ["Can you look at the return from ", {"order": "Order 9"}, "? Photos are in."]],
+    ["dm-sam-leo", "sam", 65, ["Will look after lunch."]],
+    ["shift-am", "omar", 60, ["Beans pallet is mixed: ", {"product": "SF121"}, " + ", {"product": "SF122"}, "."]],
+    ["dm-leo-omar", "leo", 50, ["Take ", {"container": "MSCU 482910"}, " to Door 2 when it lands."]],
+    ["team", "maya", 40, [{"user": "sam"}, " can you check ", {"product": "BL304"}, "? Two lots expire soon."]],
+    ["ship-lotus-2931", "omar", 30, ["2 cases of ", {"product": "BL321"}, " crushed on arrival. Photos taken."]],
+    ["dm-sam-leo", "leo", 28, [{"user": "sam"}, " also, ", {"product": "BL311"}, " is getting low."]],
+    ["ship-lotus-2931", "leo", 20, [{"group": "owners"}, " please confirm when you can."], {"urgent": true, "escalateMinutesAgo": 5}],
+    ["team", "nina", 12, ["PM shift starts at 3. ", {"group": "owners"}, " we need a decision on ", {"shipment": "lotus-2931"}, "."]]
+  ],
+  "reads": {"team": 90, "dm-sam-leo": 64, "ship-lotus-2931": null},
+  "presence": {
+    "sam": {"state": "online", "minutesAgo": 0},
+    "maya": {"state": "online", "minutesAgo": 1},
+    "leo": {"state": "online", "minutesAgo": 0, "manual": {"kind": "receiving", "door": 2}},
+    "nina": {"state": "away", "minutesAgo": 9},
+    "omar": {"state": "syncing", "minutesAgo": 18, "manual": {"kind": "forklift"}},
+    "tess": {"state": "offline", "minutesAgo": 1200, "manual": {"kind": "off"}}
+  },
+  "tasks": {"createdBy": "Leo", "assignee": "omar"}
+}

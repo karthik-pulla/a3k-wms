@@ -14,12 +14,14 @@ import {
   PBKDF2_ITERATIONS, type Sealed, type SealedTo,
 } from "./crypto";
 import type { Client } from "../data/catalog";
+import { storageKey } from "../tenant";
 import type { Role, State } from "../store/types";
 
-const AUTH = "wms.auth.v1";
-const VAULT = "wms.vault.v1";
+// Each warehouse's own (tenant/index.ts, storageKey)
+const AUTH = storageKey("wms.auth.v1");
+const VAULT = storageKey("wms.vault.v1");
 /** Before sign-in existed the app saved its data unencrypted here; it's moved into the vault and deleted */
-const LEGACY = "wms.store.v1";
+const LEGACY = storageKey("wms.store.v1");
 /** The only account at first. Change its password after the first sign-in. */
 const DEFAULT_ADMIN = { username: "admin", password: "password", name: "Admin" };
 
@@ -81,7 +83,7 @@ const writeAuth = (a: AuthFile) => localStorage.setItem(AUTH, JSON.stringify(a))
 const readVault = (): Sealed | null => { try { const r = localStorage.getItem(VAULT); return r ? JSON.parse(r) as Sealed : null; } catch { return null; } };
 
 // ---------- Session kept in IndexedDB: a non-extractable key, so a reload doesn't need the password ----------
-const DB = "wms-auth", STORE = "session";
+const DB = storageKey("wms-auth"), STORE = "session";
 function idb<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   return new Promise((resolve, reject) => {
     // Some phones (iOS Safari especially) sometimes never answer an IndexedDB open; give up rather than hang on "Opening…"

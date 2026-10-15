@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -30,19 +32,32 @@ const csp = (): Plugin => ({
 });
 
 /**
- * Demo build (VITE_WMS_DEMO=1, `npm run build:demo`): the public site on GitHub Pages. The real sheet stock is replaced
- * by nothing (the app then makes up demo stock), so no real stock can end up in it, and paths are relative so it
- * works under any folder (github.io/<repo>/).
+ * Demo build (VITE_WMS_DEMO=1 VITE_TENANT=demo, `npm run build:demo`): the public site on GitHub Pages, serving the
+ * made-up demo warehouse. Paths are relative so it works under any folder (github.io/<repo>/).
  */
 const demo = process.env.VITE_WMS_DEMO === "1";
-const noSheetStock = (): Plugin => ({
-  name: "wms-no-sheet-stock",
-  enforce: "pre",
-  load: id => (id.endsWith("/data/generated/sampleStock.json") ? "null" : undefined),
-});
+
+/**
+ * A build serves one warehouse (VITE_TENANT, default a3k): the other warehouses' folders are left out of it, so the
+ * demo site never carries A3K's files. (Until the server picks the warehouse from the address.)
+ */
+const tenant = process.env.VITE_TENANT || "a3k";
+const oneTenant = (): Plugin => {
+  let outDir = "dist";
+  return {
+    name: "wms-one-tenant",
+    apply: "build",
+    configResolved: c => { outDir = path.resolve(c.root, c.build.outDir); },
+    closeBundle: () => {
+      const dir = path.join(outDir, "tenants");
+      if (!fs.existsSync(dir)) return;
+      for (const t of fs.readdirSync(dir)) if (t !== tenant) fs.rmSync(path.join(dir, t), { recursive: true, force: true });
+    },
+  };
+};
 
 export default defineConfig({
   base: demo ? "./" : "/",
-  plugins: [react(), csp(), ...(demo ? [noSheetStock()] : [])],
+  plugins: [react(), csp(), oneTenant()],
   server: { port, strictPort: true },
 });

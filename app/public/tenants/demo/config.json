@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "tenant": {"id": "demo", "name": "Demo Foods Warehouse", "locale": "en-US", "timezone": "America/New_York"},
+  "branding": {"appTitle": "Demo Warehouse", "mark": "DW"},
+  "languages": {"default": "en", "enabled": ["en", "es"]},
+  "layout": {
+    "codeFormat": {
+      "slot": "{face}-{col}-{level}-{bay}",
+      "floor": "{face}-F{n}",
+      "areaSpot": "{area}-{n}",
+      "rackDigits": 2,
+      "colDigits": 2,
+      "spotDigits": 2,
+      "acceptUnpadded": true
+    },
+    "shapes": {
+      "standard": {"levels": [1, 2, 3, 4], "bays": 2},
+      "tall": {"levels": [1, 2, 3, 4, 5], "bays": 2},
+      "top": {"levels": [3, 4], "bays": 3}
+    },
+    "defaultShape": "standard",
+    "racks": [
+      {"id": "1", "sides": "AB", "columns": 10, "columnShapes": {"10": "top"}},
+      {"id": "2", "sides": "AB", "columns": 10, "columnShapes": {"10": "top"}},
+      {"id": "3", "sides": "AB", "columns": 10},
+      {"id": "4", "sides": "AB", "columns": 10},
+      {"id": "5", "sides": "AB", "columns": 10},
+      {"id": "6", "sides": "AB", "columns": 10},
+      {"id": "7", "name": "High bay 7", "sides": "AB", "columns": 8, "shape": "tall"},
+      {"id": "8", "sides": "A", "columns": 6}
+    ],
+    "areas": [
+      {"id": "DOCK", "name": "Receiving dock"},
+      {"id": "COOLER", "name": "Cooler"},
+      {"id": "STAGING", "name": "Shipping staging"},
+      {"id": "AISLE-4", "name": "Aisle 4 overflow"}
+    ],
+    "receivingArea": "DOCK"
+  },
+  "clients": [
+    {"id": "Sunfield", "name": "Sunfield", "defaultSupplier": "Sunfield Foods"},
+    {"id": "Lotus", "name": "Lotus", "defaultSupplier": "Lotus Trading Co."},
+    {"id": "Ridge", "name": "Ridge", "defaultSupplier": "Ridge Snack Co."}
+  ],
+  "labels": {
+    "sheets": [
+      {
+        "id": "4x2-letter",
+        "name": "4 × 2 in, 10 per sheet (US Letter)",
+        "page": "letter",
+        "labelWidth": 101.6,
+        "labelHeight": 50.8,
+        "columns": 2,
+        "rows": 5,
+        "left": 3.97,
+        "top": 12.7,
+        "gapX": 4.76,
+        "gapY": 0
+      }
+    ],
+    "defaultSheet": "4x2-letter",
+    "profiles": [
+      {
+        "id": "sunfield",
+        "name": "Sunfield",
+        "logo": "sunfield",
+        "color": "#2f6b3a",
+        "footer": "Distributed by Sunfield Foods",
+        "brands": ["Sunfield", "Golden Field"]
+      },
+      {
+        "id": "bluelotus",
+        "name": "Blue Lotus",
+        "logo": "bluelotus",
+        "color": "#284a8c",
+        "footer": "Imported by Lotus Trading Co.",
+        "brands": ["Blue Lotus"]
+      }
+    ]
+  },
+  "groups": [{"id": "receiving", "name": "receiving"}, {"id": "shift-am", "name": "shift-am"}, {"id": "shift-pm", "name": "shift-pm"}],
+  "orders": {"inbox": "orders@demo-warehouse.example"},
+  "expiry": {"warnMonths": 4}
+}

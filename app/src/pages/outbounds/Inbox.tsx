@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { productById } from "../../data/catalog";
+import { PRODUCTS, productById } from "../../data/catalog";
 import { tenant } from "../../tenant";
 import { canSeeClient } from "../../auth/permissions";
 import { useStore } from "../../store/store";
@@ -13,6 +13,8 @@ import type { InboxMail, StoreOrder } from "../../store/types";
 
 /** The warehouse's order email address (tenant config) */
 export const ORDER_INBOX = tenant().config.orders.inbox;
+/** What a pasted order looks like, with two of the warehouse's own products */
+const EMAIL_EXAMPLE = ["Paste the email, e.g.", ...PRODUCTS.filter(p => !/DONOTUSE|CROSSDOCK/i.test(p.item ?? "")).slice(0, 2).map((p, i) => `${p.code} ${p.name} - ${i ? "10 cs" : "20 cases"}`)].join("\n");
 
 /**
  * Emails sent to the order inbox. Each can become a draft order (read from the email text and any PDF attachments)
@@ -71,7 +73,7 @@ export function Inbox() {
           <div className="paste-mail">
             <input className="input" value={from} onChange={e => setFrom(e.target.value)} placeholder="From (optional)" aria-label="From" />
             <input className="input" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject (optional)" aria-label="Subject" />
-            <textarea className="input" rows={6} value={body} onChange={e => setBody(e.target.value)} placeholder={"Paste the email, e.g.\n1073 Surti Kolam 10lb - 20 cases\n1065 Chinigora - 10 cs"} aria-label="Email text" />
+            <textarea className="input" rows={6} value={body} onChange={e => setBody(e.target.value)} placeholder={EMAIL_EXAMPLE} aria-label="Email text" />
             <div className="btns"><button className="btn primary" onClick={addPasted}>Read and draft the order</button><button className="btn" onClick={() => setPasting(false)}>Cancel</button></div>
           </div>
         )}

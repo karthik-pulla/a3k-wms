@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { UpdateKind } from "./data/sampleUpdates";
+import type { UpdateKind } from "./home/updates";
 import type { LastOnlineVisibility } from "./auth/permissions";
 import type { Role } from "./store/types";
 
@@ -76,7 +76,6 @@ function load(): HomeSettings {
     if (!raw) return DEFAULT_SETTINGS;
     const saved = JSON.parse(raw) as Partial<HomeSettings> & { role?: string; name?: string };
     delete saved.role; delete saved.name; // replaced by "Signed in as"
-    if (saved.userId === "karthik") saved.userId = ""; // the old default, from before sign-in existed
     // Saved before phones defaulted to a still background (the old default was saved, not chosen): use the new default
     if (saved.motionDefaults !== 2) saved.movingBackground = DEFAULT_SETTINGS.movingBackground && saved.movingBackground !== false;
     if ((saved.lastOnlineVisibleTo as string) === "owners-supervisors") saved.lastOnlineVisibleTo = "owners-coordinators"; // role renamed

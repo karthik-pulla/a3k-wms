@@ -81,5 +81,6 @@
     { "id": "shift-pm", "name": "shift-pm" }
   ],
   "orders": { "inbox": "orders@a3kimports.com" },
-  "expiry": { "warnMonths": 6 }
+  "expiry": { "warnMonths": 6 },
+  "storage": { "unscopedKeys": true }
 }

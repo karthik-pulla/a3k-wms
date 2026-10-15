@@ -13,7 +13,7 @@ data/generated/count.json
 outputs/
 tools/warehouse-count/dist/
 tools/rack6-map/
-app/src/data/generated/sampleStock.json
+app/public/tenants/*/stock.json
 # Loose copies in the top folder
 /*.pdf
 /*.png

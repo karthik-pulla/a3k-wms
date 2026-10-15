@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { sampleUpdates, type UpdateGroup } from "../data/sampleUpdates";
+import { UPDATE_KINDS, changesToApprove, type UpdateGroup } from "../home/updates";
 import { useStore, shipmentTitle, palletCount, totalCases } from "../store/store";
 import { UpdateCard } from "../components/UpdateCard";
 import { HomeMessages, HomeMessagesCompact } from "../components/chat/HomeMessages";
@@ -17,13 +17,12 @@ export function Home({ messagesInRail }: { messagesInRail: boolean }) {
   const { state } = useStore();
   const { me, settings } = useSession();
   const phone = useMediaQuery("(max-width: 760px)");
-  const base = useMemo(sampleUpdates, []);
-  // In-bound cards come from the live store; the rest stay sample until their screens exist
+  // Every card comes from the live store
   const groups: UpdateGroup[] = useMemo(() => {
     const incoming = state.shipments.filter(s => s.status === "incoming").sort((a, b) => a.expected.localeCompare(b.expected));
     const pending = state.shipments.filter(s => s.status === "pending");
     const returns = state.returns.filter(r => r.status === "pending");
-    // Expired first, then the earliest best-before within 6 months; only clients this person may see
+    // Expired first, then the earliest best-before within the warning time; only clients this person may see
     const expiring = stockRows(state, me).filter(r => r.line && r.tone !== "ok")
       .sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "expired" ? -1 : 1) || (a.line!.bestBefore ?? "").localeCompare(b.line!.bestBefore ?? ""));
     // Out-bounds, only clients this person may see
@@ -33,7 +32,7 @@ export function Home({ messagesInRail }: { messagesInRail: boolean }) {
     const dueSoon = orders.filter(o => isActive(o) && statusOf(o) !== "draft" && ["overdue", "today", "soon"].includes(dueTone(o))).sort((a, b) => (a.due ?? "").localeCompare(b.due ?? ""));
     const toApprove = orders.filter(o => statusOf(o) === "draft");
     const href = (id: string) => `#/outbounds/orders/${encodeURIComponent(id)}`;
-    const live: Partial<Record<UpdateGroup["kind"], UpdateGroup>> = {
+    const live: Record<UpdateGroup["kind"], UpdateGroup> = {
       outgoing: { kind: "outgoing", mode: "outbounds", title: "Going out today", subtitle: "Picking, picked or shipped today", count: going.length,
         items: going.map(o => ({ id: o.id, what: o.store, detail: `${o.id} · ${o.client} · ${orderCases(o)} cases`, meta: STATUS_LABEL[statusOf(o)].toLowerCase(), href: href(o.id) })) },
       deadlines: { kind: "deadlines", mode: "outbounds", title: "Due soon", subtitle: "Orders due in the next 2 days", count: dueSoon.length, tone: dueSoon.some(o => dueTone(o) === "overdue") ? "danger" : dueSoon.length ? "warn" : undefined,
@@ -49,9 +48,10 @@ export function Home({ messagesInRail }: { messagesInRail: boolean }) {
           meta: `${r.tone === "expired" ? "expired" : "best before"} ${fmtMonth(r.line!.bestBefore)}`, tone: r.tone === "expired" ? "expired" as const : "warn" as const, href: `#/inventory/stock/${encodeURIComponent(r.code)}` })) },
       returns: { kind: "returns", mode: "inbounds", title: "Returns pending", subtitle: "Not in inventory until approved", count: returns.length,
         items: returns.map(r => ({ id: r.id, what: r.store, detail: `${r.orderId} · ${r.items.reduce((a, i) => a + i.cases, 0)} cases · ${r.reason}`, meta: r.id, href: `#/inbounds/returns/${r.id}` })) },
+      changesToApprove: changesToApprove(state, me),
     };
-    return base.map(g => live[g.kind] ?? g);
-  }, [base, state, me]);
+    return UPDATE_KINDS.map(k => live[k]);
+  }, [state, me]);
   const byKind = new Map(groups.map(g => [g.kind, g]));
   const shown = settings.cards.filter(c => c.visible && !(c.kind === "messages" && messagesInRail));
   const count = (k: string) => byKind.get(k as never)?.count ?? 0;
@@ -74,7 +74,6 @@ export function Home({ messagesInRail }: { messagesInRail: boolean }) {
       <section aria-labelledby="updates-h" style={{ display: "grid", gap: 16 }}>
         <div className="updates-head">
           <h2 id="updates-h">Updates</h2>
-          <span className="chip">Sample data</span>
         </div>
         {shown.length ? (
           <div className="cards">{shown.map(c => {

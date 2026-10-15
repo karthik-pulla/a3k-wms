@@ -1,14 +1,9 @@
-// DEMO stock: made-up pallets for the public demo site and fresh clones, where the real sheet stock
-// (sampleStock.json, made from the owners' workbooks) is not available. Same shape as sampleStock.json.
-// Real product names and the real layout; every quantity and location is invented, and the same on every load.
-import { FACES, PRODUCTS, findProduct, slotCode, spotCode, type Client, type Product } from "../data/catalog";
+// DEMO stock: made-up pallets for a warehouse with no stock.json (the public demo site, fresh clones). Uses the
+// warehouse's own products and layout; every quantity and location is invented, and the same on every load.
+// The seed's demoStock says which clients to leave out and which floor areas to fill.
+import { AREAS, CLIENTS, FACES, PRODUCTS, RECEIVING, findProduct, slotCode, spotCode, type Client, type Product } from "../data/catalog";
+import { tenant } from "../tenant";
 import type { StockLine } from "./types";
-
-/** Products the sample shipments and orders use, so they have stock to plan from */
-const NEEDED: [Client, string][] = [
-  ["Deccan", "1015"], ["Deccan", "1051"], ["Deccan", "1073"], ["Deccan", "1065"], ["Deccan", "1401"], ["Deccan", "1420"],
-  ["Deccan", "1055"], ["Deccan", "1071"], ["Deccan", "1054"], ["Matco", "M001"], ["Matco", "M002"], ["Matco", "M006"], ["Matco", "M129"],
-];
 
 function mulberry32(seed: number) {
   return () => {
@@ -20,19 +15,30 @@ function mulberry32(seed: number) {
 }
 
 export function demoStock(): { asof: string; note: string; stock: Record<string, StockLine[]> } {
-  const rnd = mulberry32(20261014);
+  const seed = tenant().seed;
+  const opts = seed?.demoStock ?? { seed: 20261014 };
+  const rnd = mulberry32(opts.seed);
   const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
-  // Praj stays out, like the sheets, so one sample order shows a shortage
-  const usable = PRODUCTS.filter(p => p.client !== "Praj" && !/DONOTUSE|CROSSDOCK/i.test(p.item ?? ""));
-  const pool: Record<"Deccan" | "Matco", Product[]> = { Deccan: usable.filter(p => p.client === "Deccan"), Matco: usable.filter(p => p.client === "Matco") };
-  const queue: Record<"Deccan" | "Matco", Product[]> = { Deccan: [], Matco: [] };
-  for (const [client, code] of NEEDED) { const p = findProduct(client, code); if (p) queue[client as "Deccan" | "Matco"].push(p); }
+  const leaveOut = new Set(opts.leaveOut ?? []);
+  const usable = PRODUCTS.filter(p => !leaveOut.has(p.client) && !/DONOTUSE|CROSSDOCK/i.test(p.item ?? ""));
+  const clients = CLIENTS.filter(c => usable.some(p => p.client === c));
+  const pool = new Map<Client, Product[]>(clients.map(c => [c, usable.filter(p => p.client === c)]));
+  // Products the sample orders use go first, so they have stock to plan from
+  const queue = new Map<Client, Product[]>(clients.map(c => [c, []]));
+  for (const o of seed?.orders ?? []) for (const [code] of o.lines) {
+    const p = findProduct(o.client, code);
+    if (p && queue.has(p.client) && !queue.get(p.client)!.includes(p)) queue.get(p.client)!.push(p);
+  }
+  // A rack side holds one client's stock; bigger clients get more sides
+  const total = usable.length;
+  const clientFor = () => { let r = rnd() * total; for (const c of clients) { r -= pool.get(c)!.length; if (r < 0) return c; } return clients[0]; };
   const full = (p: Product) => p.perPallet ?? 40;
   const stock: Record<string, StockLine[]> = {};
+  if (!clients.length) return { asof: new Date().toISOString().slice(0, 10), note: "DEMO: no products", stock };
 
   for (const f of FACES) {
-    const client = rnd() < 0.75 ? "Deccan" : "Matco";
-    const next = () => queue[client].shift() ?? pick(pool[client]);
+    const client = clientFor();
+    const next = () => queue.get(client)!.shift() ?? pick(pool.get(client)!);
     let product = next();
     for (const [col, slots] of f.cols) {
       if (rnd() < 0.45) continue; // empty column
@@ -42,7 +48,7 @@ export function demoStock(): { asof: string; note: string; stock: Record<string,
         const code = slotCode(f.id, col, level, bay);
         const n = full(product), r = rnd();
         if (r < 0.04) { // mixed pallet
-          const other = pick(pool[client]);
+          const other = pick(pool.get(client)!);
           stock[code] = [{ productId: product.id, cases: Math.max(1, Math.round(n * 0.4)) }, { productId: other.id, cases: Math.max(1, Math.round(full(other) * 0.3)) }];
         } else stock[code] = [{ productId: product.id, cases: r < 0.18 ? Math.max(1, Math.round(n * (0.15 + rnd() * 0.7))) : n }];
       }
@@ -53,9 +59,10 @@ export function demoStock(): { asof: string; note: string; stock: Record<string,
       for (let i = 1; i <= count; i++) stock[spotCode(f.id, i)] = [{ productId: product.id, cases: full(product) }];
     }
   }
-  for (const area of ["LINE-2-3", "NEARCOOLER-01", "NEARCOOLER-03", "LANE-7"]) {
+  const areas = opts.areas ?? AREAS.map(a => a.id).filter(a => a !== RECEIVING);
+  for (const area of areas) {
     const count = 2 + Math.floor(rnd() * 4);
-    for (let i = 1; i <= count; i++) { const p = pick(pool.Deccan); stock[spotCode(area, i)] = [{ productId: p.id, cases: full(p) }]; }
+    for (let i = 1; i <= count; i++) { const p = pick(pool.get(clients[0])!); stock[spotCode(area, i)] = [{ productId: p.id, cases: full(p) }]; }
   }
   return { asof: new Date().toISOString().slice(0, 10), note: "DEMO: made-up stock", stock };
 }
