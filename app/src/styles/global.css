@@ -1173,6 +1173,9 @@ details.panel summary { cursor: pointer; font-weight: 600; }
 
 /* ======================= Sign-in and account ======================= */
 .auth-loading { position: relative; z-index: 1; min-height: 100vh; display: grid; place-items: center; color: var(--muted); }
+.crash-card { max-width: 420px; margin: 16px; padding: 24px; border-radius: 24px; display: grid; gap: 10px; color: var(--ink); }
+.crash-card h2 { margin: 0; }
+.crash-card p { margin: 0; }
 .login { position: relative; z-index: 1; min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 14px; padding: max(24px, env(safe-area-inset-top)) 16px 24px; }
 .login-card { width: min(440px, calc(100vw - 32px)); border-radius: 30px; padding: 28px 28px 24px; display: grid; gap: 20px; background: var(--glass-strong); }
 .login-brand { display: flex; gap: 14px; align-items: center; }
@@ -1343,3 +1346,46 @@ table.lines.bt-table { min-width: 560px; }
 .login-lang { margin-top: 4px; }
 .label-src { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .label-hint { margin: 2px 0 0; }
+
+/* ======================= Phones: less on screen at once ======================= */
+.card-cover { display: none; }
+@media (max-width: 760px) {
+  /* Slimmer bottom menu, one-line labels */
+  .shell, .shell.has-ticker, .shell.has-rail { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .modes, .modes.many { padding: 5px; gap: 2px; border-radius: 22px; bottom: max(10px, env(safe-area-inset-bottom)); }
+  .modes .mode, .modes.many .mode { height: 52px; border-radius: 16px; }
+  .modes .mode span:not(.mode-ic), .modes.many .mode span:not(.mode-ic) { font-size: 10px; white-space: nowrap; }
+  .modes .mode svg, .modes.many .mode svg { width: 21px; height: 21px; }
+  /* Top bar: the admin's role switcher lives in Settings on phones */
+  .topbar { gap: 8px; }
+  .topbar .role-switch { display: none; }
+  .topbar .iconbtn { width: 36px; height: 36px; }
+  /* Smaller titles */
+  .home, .page, .section { padding-top: 62px; gap: 16px; }
+  .page h1, .section-head h1 { font-size: 34px; }
+  .crumb { margin-top: 4px; font-size: 14px; }
+  .greeting { font-size: 38px; }
+  .greeting .name { display: inline; padding-left: 0.2em; }
+  .summary { margin-top: -8px; font-size: 14.5px; }
+  /* A section's tabs sit under its title instead of floating over the content */
+  .section { grid-template-rows: auto auto 1fr; min-height: 0; }
+  .section > .section-head { order: -2; }
+  .section > .subtabs { order: -1; position: relative; bottom: auto; justify-self: stretch; margin-top: 0; }
+  .subtabs a { flex: 1; text-align: center; padding: 8px 10px; }
+  /* Number tiles two per row */
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .stat { flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 16px; }
+  .stat-n { font-size: 26px; }
+  /* Home: each update card is just its title and count; tap it to open */
+  .cards { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .card { position: relative; padding: 12px 16px; border-radius: 18px; gap: 0; }
+  .card .card-head { align-items: center; }
+  .card .card-sub, .card .items, .card .empty-card, .card .card-foot { display: none; }
+  .card .count { font-size: 26px; }
+  .card-cover { display: block; position: absolute; inset: 0; border-radius: inherit; }
+  /* Stock by brand: brand, cases, pallets and expired only */
+  .brand-totals { padding: 16px; }
+  .brand-totals .table-wrap { max-height: 230px; }
+  table.lines.bt-table { min-width: 0; width: 100%; }
+  .bt-table th:nth-child(2), .bt-table td:nth-child(2), .bt-table th:nth-child(5), .bt-table td:nth-child(5), .bt-table th:nth-child(6), .bt-table td:nth-child(6) { display: none; }
+}

@@ -29,6 +29,8 @@ export function UpdateCard({ group }: { group: UpdateGroup }) {
       ) : (
         <p className="empty-card">Nothing waiting.</p>
       )}
+      {/* Phones show only the title and count, so the whole card opens the section */}
+      <a className="card-cover" href={`#/${group.mode}`} aria-label={`Open ${group.title}`} tabIndex={-1} />
       <div className="card-foot">
         <a className="link" href={`#/${group.mode}`}>{extra > 0 ? `View all ${group.count}` : "Open"} ›</a>
       </div>
