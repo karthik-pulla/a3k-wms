@@ -1,3 +1,4 @@
+import type { ProductText } from "../../../server/src/shared/products.ts";
 import type { Client } from "../data/catalog";
 import type { Permissions } from "../../../server/src/shared/permissions.ts";
 
@@ -261,7 +262,7 @@ export interface AuditEntry {
   at: string;
   byId: string;
   by: string;
-  area: "stock" | "inbound" | "outbound" | "count" | "task" | "messages" | "data";
+  area: "stock" | "inbound" | "outbound" | "count" | "task" | "messages" | "data" | "products";
   action: string;
   /** Moves of pallets (put-away, moves, picks): the workers' pallet log */
   pallet?: boolean;
@@ -305,4 +306,6 @@ export interface State {
   inbox: InboxMail[];
   tasks: Task[];
   audit: AuditEntry[];
+  /** Products whose code, name or full description was changed, by product id (applied over the tenant's list) */
+  productEdits?: Record<string, ProductText>;
 }

@@ -11,7 +11,7 @@ export type BaseRole = "owner" | "coordinator" | "worker";
 export type Action =
   | "view-stock" | "confirm-inbound" | "decide-return" | "view-history" | "move-stock" | "start-count" | "approve-count"
   | "delete-count" | "approve-order" | "cancel-order" | "ship-order" | "create-order" | "assign-work" | "choose-slot"
-  | "adjust-stock" | "print-labels" | "export" | "view-logs" | "view-all-logs" | "use-inbounds" | "pack-orders"
+  | "adjust-stock" | "edit-products" | "print-labels" | "export" | "view-logs" | "view-all-logs" | "use-inbounds" | "pack-orders"
   | "manage-people" | "manage-settings" | "manage-support" | "view-security-log";
 
 export type Permissions = Partial<Record<Action, boolean>>;
@@ -36,6 +36,7 @@ export const SWITCHES: Switch[] = [
   { id: "move-stock", group: "Inventory", label: "Move pallets", help: "Move a pallet to another location, always with a reason", defaultFor: ALL },
   { id: "choose-slot", group: "Inventory", label: "Choose the slot", help: "Pick any empty slot instead of the one the WMS gives", defaultFor: OFFICE },
   { id: "adjust-stock", group: "Inventory", label: "Change stock directly", help: "Edit what's in a slot (reviewed, with a reason, logged)", defaultFor: OWNER, ownerOnly: true },
+  { id: "edit-products", group: "Inventory", label: "Edit products", help: "Change a product's code, name and full description (with a reason, logged)", defaultFor: OWNER },
   { id: "use-inbounds", group: "In-bounds", label: "Use In-bounds and Out-bounds", help: "The office sections (workers get the Work screen instead)", defaultFor: OFFICE },
   { id: "confirm-inbound", group: "In-bounds", label: "Confirm deliveries", help: "Check received pallets and send them to put-away", defaultFor: OFFICE },
   { id: "decide-return", group: "In-bounds", label: "Decide returns", help: "Approve or reject returned goods", defaultFor: OWNER, ownerOnly: true },

@@ -3,6 +3,7 @@
 import { tenant } from "../tenant";
 import type { Client, Product } from "../tenant/types";
 import type { Face, SlotMeta } from "../tenant/layout";
+import type { ProductText } from "../../../server/src/shared/products.ts";
 
 export type { Client, Product, Face, SlotMeta };
 
@@ -22,7 +23,31 @@ export const findProduct = (client: Client, code: string) => PRODUCTS.find(p => 
 
 export const productLabel = (p: Product) => `${p.name}${p.size ? ` ${p.size}` : ""}${p.units ? ` × ${p.units}` : ""}`;
 
-const hay = new Map(PRODUCTS.map(p => [p.id, `${p.code} ${p.name} ${p.brand} ${p.cat} ${p.size} ${p.client}`.toLowerCase()]));
+const hayOf = (p: Product) => `${p.code} ${p.name} ${p.brand} ${p.cat} ${p.size} ${p.client}`.toLowerCase();
+const hay = new Map(PRODUCTS.map(p => [p.id, hayOf(p)]));
+
+// ---------- Edited products ----------
+// An edit changes a product's code, name and full description (never its id). Edits are saved with the app data
+// (the store's productEdits; on the server also in the warehouse's database) and applied here, in place, so every
+// screen, search and the order reader see the new text. `productsVersion` goes up with each change, for caches.
+let version = 0;
+let applied: Record<string, ProductText> | undefined;
+export const productsVersion = () => version;
+export function applyProductEdits(edits: Record<string, ProductText> | undefined) {
+  if (!edits || edits === applied) return;
+  applied = edits;
+  let changed = false;
+  for (const [id, e] of Object.entries(edits)) {
+    const p = BY_ID.get(id);
+    if (!p || (p.code === e.code && p.name === e.name && (p.item ?? "") === e.item)) continue;
+    p.code = e.code; p.name = e.name; p.item = e.item;
+    hay.set(id, hayOf(p));
+    changed = true;
+  }
+  if (changed) version++;
+}
+/** A product's editable text as it is now */
+export const productText = (p: Product): ProductText => ({ code: p.code, name: p.name, item: p.item ?? "" });
 
 /** Products matching every word typed. Exact code, then code prefix, then name prefix come first; the shipment's client next. */
 export function searchProducts(query: string, client?: string, limit = 8): Product[] {

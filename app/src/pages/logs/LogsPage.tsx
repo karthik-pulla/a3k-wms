@@ -7,7 +7,7 @@ import { buildXlsx, download } from "../../utils/xlsx";
 import type { AuditEntry } from "../../store/types";
 
 type Area = AuditEntry["area"] | "accounts";
-const AREAS: [Area | "all" | "pallets", string][] = [["all", "Everything"], ["pallets", "Pallet moves"], ["stock", "Stock"], ["inbound", "In-bounds"], ["outbound", "Out-bounds"], ["count", "Counts"], ["task", "Tasks"], ["accounts", "Accounts and sign-in"], ["data", "Data"]];
+const AREAS: [Area | "all" | "pallets", string][] = [["all", "Everything"], ["pallets", "Pallet moves"], ["stock", "Stock"], ["inbound", "In-bounds"], ["outbound", "Out-bounds"], ["count", "Counts"], ["task", "Tasks"], ["products", "Products"], ["accounts", "Accounts and sign-in"], ["data", "Data"]];
 interface Row { id: string; at: string; by: string; area: Area; action: string; pallet?: boolean }
 const PAGE = 200;
 

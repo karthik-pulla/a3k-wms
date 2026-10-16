@@ -1298,6 +1298,10 @@ details.panel summary { cursor: pointer; font-weight: 600; }
 .adjust { display: grid; gap: 10px; padding: 12px; border-radius: 16px; }
 .adjust-line { display: grid; grid-template-columns: minmax(0, 1fr) 70px 90px 120px auto; gap: 6px; align-items: center; }
 .adjust-diff { display: grid; gap: 6px; margin: 0; font-size: 13.5px; }
+.edit-product { margin: 4px 0 14px; max-width: 640px; }
+.edit-product .note { margin: 0; }
+.edit-product .adjust-diff dd { margin: 0; overflow-wrap: anywhere; }
+.inv-item { margin: 2px 0 0; overflow-wrap: anywhere; }
 .adjust-diff dt { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
 .adjust-diff dd { margin: 0; }
 .adjust-open { justify-self: start; }

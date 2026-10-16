@@ -1,6 +1,6 @@
 // Reads an order from a PDF or an email: product codes (or names), cases, store, due date and PO number.
 // Everything it finds becomes a DRAFT that a person checks and approves; lines it can't read are listed, not guessed.
-import { PRODUCTS, searchProducts, type Client, type Product } from "../data/catalog";
+import { PRODUCTS, productsVersion, searchProducts, type Client, type Product } from "../data/catalog";
 
 export interface ReadLine { productId: string; cases: number; raw: string; how: "code" | "name" }
 export interface ReadOrder { lines: ReadLine[]; unread: string[]; store?: string; client?: Client; due?: string; ref?: string }
@@ -27,8 +27,15 @@ export async function pdfText(file: File): Promise<{ text: string; pages: number
   return { text: out.join("\n"), pages: doc.numPages };
 }
 
-const BY_CODE = new Map<string, Product[]>();
-for (const p of PRODUCTS) { const k = p.code.toLowerCase(); if (k) BY_CODE.set(k, [...(BY_CODE.get(k) ?? []), p]); }
+// Products by code, made again after a product is edited
+let byCode: Map<string, Product[]> | null = null, byCodeVersion = -1;
+function codes() {
+  if (byCode && byCodeVersion === productsVersion()) return byCode;
+  byCode = new Map();
+  for (const p of PRODUCTS) { const k = p.code.toLowerCase(); if (k) byCode.set(k, [...(byCode.get(k) ?? []), p]); }
+  byCodeVersion = productsVersion();
+  return byCode;
+}
 const SIZE = /^\d+(\.\d+)?(lbs?|lb|kg|g|gms?|oz|ml|l)$/i;
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -55,7 +62,7 @@ export function readOrder(text: string, knownStores: string[] = [], clientHint?:
   for (const raw of text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)) {
     const tokens = raw.replace(/[,;|]/g, " ").split(/\s+/);
     let products: Product[] = [], codeTok = -1;
-    tokens.forEach((t, i) => { const k = t.replace(/^[#(]+|[):.]+$/g, "").toLowerCase(); if (!products.length && BY_CODE.has(k) && !/^\d{1,2}$/.test(k)) { products = BY_CODE.get(k)!; codeTok = i; } });
+    tokens.forEach((t, i) => { const k = t.replace(/^[#(]+|[):.]+$/g, "").toLowerCase(); if (!products.length && codes().has(k) && !/^\d{1,2}$/.test(k)) { products = codes().get(k)!; codeTok = i; } });
     // Cases: "24 cases", "qty 24", "x 24", else the last plain number that isn't the code, a size (10lb) or a pack (x4)
     let cases: number | null = null;
     const m = raw.match(/(\d+)\s*(?:cs|cases?|ctns?|cartons?|boxes)\b/i) ?? raw.match(/\b(?:qty|quantity)\s*[:=]?\s*(\d+)/i);

@@ -3,64 +3,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { freshDb } from "./pg.ts";
-import { OPS_TABLES, TENANT_TABLES, type AuthEnv } from "../src/core/auth.ts";
-import { totpAt, totpCounter } from "../src/core/crypto.ts";
-import { ApiError } from "../src/core/errors.ts";
+import { OPS_TABLES, type AuthEnv } from "../src/core/auth.ts";
 import { outbox } from "../src/core/mail.ts";
-import { callTenant, tenantLog, useHandoff, type TenantCtx } from "../src/core/tenant-api.ts";
+import { callTenant, useHandoff } from "../src/core/tenant-api.ts";
 import { callOps, firstOperator, opsLog, type OpsCtx } from "../src/core/ops-api.ts";
 import type { Db } from "../src/core/db.ts";
-
-let clock = Date.parse("2026-10-16T12:00:00Z");
-const tick = (s = 31) => { clock += s * 1000; };
-const KEY = new Uint8Array(32).fill(3);
-
-async function warehouse() {
-  const { db } = await freshDb("tenant");
-  const mail = outbox();
-  const env: AuthEnv = { db, tables: TENANT_TABLES, appKey: KEY, now: () => clock, issuer: "Bravo Warehouse", ownWords: ["bravo"], log: tenantLog() };
-  const tenant: TenantCtx["tenant"] = {
-    id: "bravo", name: "Bravo Foods", appTitle: "Bravo Warehouse", mark: "BW", languages: { default: "en", enabled: ["en", "es"] },
-    clients: [{ id: "Sunfield", name: "Sunfield" }, { id: "Lotus", name: "Lotus" }], groups: [{ id: "shift-am", name: "shift-am" }],
-  };
-  const ctx = (token?: string): TenantCtx => ({ env, tenant, token, meta: { ip: "203.0.113.5" }, baseUrl: "https://bravo.wms.test", mailer: mail });
-  return { db, env, mail, ctx };
-}
-
-/** Calls a method, returning the body; a session the method sets is kept on the "browser" */
-function browser(make: (token?: string) => TenantCtx) {
-  let token: string | undefined;
-  return {
-    get token() { return token; },
-    async call(method: string, input: Record<string, unknown> = {}) {
-      const r = await callTenant(method, input, make(token));
-      if (r.session === "clear") token = undefined; else if (r.session) token = r.session.token;
-      return r.body as any;
-    },
-  };
-}
-const code = (secret: string) => totpAt(secret, totpCounter(clock));
-const fails = (p: Promise<unknown>, c: string) => assert.rejects(p, (e: ApiError) => e.code === c);
-const tokenOf = (link: string) => link.split("/#/invite/")[1];
-
-/** Follows an invite link like a person would: password, then the authenticator code */
-async function accept(b: ReturnType<typeof browser>, link: string, password = "Correct-Horse-9!") {
-  const t = tokenOf(link);
-  const { secret } = await b.call("invite.password", { token: t, password });
-  const me = await b.call("invite.finish", { token: t, code: await code(secret) });
-  return { me, secret };
-}
-
-async function ownerSignedIn() {
-  const w = await warehouse();
-  // The first owner comes from the ops console (restore access / invite an owner)
-  const { tenantOps } = await import("../src/core/tenant-api.ts");
-  const r = await tenantOps.restoreOwner(w.ctx(), { by: "Sam (WMS team)", name: "Maya", username: "maya", email: "maya@bravo.test" });
-  const owner = browser(w.ctx);
-  const { me, secret } = await accept(owner, r.link, "Rapid-Owner-Pass-1");
-  await owner.call("auth.confirm", { password: "Rapid-Owner-Pass-1" });
-  return { ...w, owner, ownerMe: me, ownerSecret: secret };
-}
+import { accept, browser, code, fails, KEY, now, ownerSignedIn, tick } from "./warehouse.ts";
 
 test("the first owner joins from an emailed link and is signed in as an owner", async () => {
   const w = await ownerSignedIn();
@@ -200,7 +148,7 @@ async function ops() {
   await platform.query("INSERT INTO tenants (id, name, status, db_name, db_user, db_host, db_direct_host) VALUES ('bravo', 'Bravo Foods', 'setup', 't_bravo', 't_bravo', 'proxy', 'db')");
   await platform.query("INSERT INTO domains (host, tenant_id) VALUES ('bravo.wms.test', 'bravo')");
   const mail = outbox();
-  const env: AuthEnv = { db: platform, tables: OPS_TABLES, appKey: KEY, now: () => clock, issuer: "WMS console", ownWords: ["wms"], log: opsLog() };
+  const env: AuthEnv = { db: platform, tables: OPS_TABLES, appKey: KEY, now, issuer: "WMS console", ownWords: ["wms"], log: opsLog() };
   const jobs: string[] = [];
   const ctx = (token?: string): OpsCtx => ({
     env, platform, token, meta: {}, baseUrl: "https://ops.wms.test", mailer: mail,

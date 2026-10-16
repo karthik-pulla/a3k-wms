@@ -9,6 +9,7 @@ import { RackView, HIDDEN_PRODUCT, type SlotMark } from "../../components/RackVi
 import { WarehouseMap, type MapMark } from "../../components/inventory/WarehouseMap";
 import { ExportDialog } from "../../components/inventory/ExportDialog";
 import { SlotDetail } from "../../components/inventory/SlotDetail";
+import { EditProduct } from "../../components/inventory/EditProduct";
 import {
   PRODUCT_SORTS, brandList, brandOf, byLocation, fmtDay, fmtMonth, groupOf, looksLikeCode, matchesProduct, productSummaries, sortProducts,
   stockRows, type ProductSort, type StockRow,
@@ -160,7 +161,8 @@ function Detail({ productId, brand, onExport }: { productId?: string; brand?: st
   const [open, setOpen] = useState<string | null>(null);
   const [col, setCol] = useState<Col>("arrival");
   const [asc, setAsc] = useState(true);
-  useEffect(() => { setFace(undefined); setOpen(null); }, [productId, brand]);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { setFace(undefined); setOpen(null); setEditing(false); }, [productId, brand]);
 
   const rows: StockRow[] = useMemo(() => {
     if (!productId && !brand) return [];
@@ -220,6 +222,7 @@ function Detail({ productId, brand, onExport }: { productId?: string; brand?: st
             <div>
               <h2>{p ? <>{p.name} <span className="muted">{p.size}{p.units ? ` × ${p.units}` : ""}</span></> : `All ${brand} products`}</h2>
               <p className="muted small">{p ? `${p.code} · ${brandOf(p)}${p.brand && p.brand !== p.client ? ` · ${p.client}` : ""}${p.perPallet ? ` · ${p.perPallet} cs per full pallet` : ""}` : `${new Set(rows.map(r => r.product!.id)).size} products in stock`}</p>
+              {p?.item && <p className="muted small mono inv-item" translate="no">{p.item}</p>}
             </div>
             <div className="btns">
               <div className="segment s2" role="group" aria-label="View">
@@ -227,8 +230,10 @@ function Detail({ productId, brand, onExport }: { productId?: string; brand?: st
                 <button aria-pressed={view === "table"} onClick={() => setView("table")}>Table</button>
               </div>
               {can(me, "export") && <button className="btn small" onClick={onExport}>Export…</button>}
+              {p && !editing && can(me, "edit-products", { client: p.client }) && <button className="btn small" onClick={() => setEditing(true)}>Edit product</button>}
             </div>
           </div>
+          {p && editing && <EditProduct key={p.id} product={p} onDone={() => setEditing(false)} />}
           <div className="inv-stats">
             <span><b>{cases.toLocaleString()}</b> cases</span><span><b>{locs}</b> locations</span><span><b>{partial}</b> partial</span>
             {expiring > 0 && <span className="warn"><b>{expiring}</b> cs expiring</span>}

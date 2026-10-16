@@ -2,6 +2,7 @@
 // Messages aren't logged (they're conversation, not data, and direct messages stay private).
 import { productById } from "../data/catalog";
 import type { AuditEntry, State } from "./types";
+import { productChanges } from "../../../server/src/shared/products.ts";
 
 type Described = Pick<AuditEntry, "area" | "action" | "pallet">;
 const pn = (id?: string | null) => { const p = id ? productById(id) : undefined; return p ? `${p.code} ${p.name}` : "a product"; };
@@ -22,6 +23,7 @@ export function describe(before: State, a: any, after: State): Described | null 
     case "submitReturn": return { area: "inbound", action: `Requested return ${a.request.id} from ${a.request.store}: ${lines(a.request.items)} (${a.request.reason})` };
     case "decideReturn": return { area: "inbound", action: `${a.approve ? `Approved return ${a.id} (${a.outcome})` : `Rejected return ${a.id}`}${a.note ? `: ${a.note}` : ""}` };
     case "reset": return { area: "data", action: "Reset the sample data" };
+    case "product/edit": { const c = productChanges(a.before, a.after); return c ? { area: "products", action: `Edited product ${a.before.code || "(no code)"} ${a.before.name}: ${c}. Reason: ${a.reason}` } : null; }
     case "move": return { area: "stock", pallet: true, action: `Moved the pallet on ${a.from} to ${a.to} (${lines(before.stock[a.from] ?? [])}). Reason: ${a.reason}` };
     case "stock/adjust": return { area: "stock", action: `Changed ${a.location} from ${lines(before.stock[a.location] ?? [])} to ${lines(a.lines)}. Reason: ${a.reason}` };
     case "count/start": return { area: "count", action: `Started count "${a.session.name}"${a.session.blind ? " (blind)" : ""}` };

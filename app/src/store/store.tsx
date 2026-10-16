@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { sampleState, withOutbound, withSampleDates, withSampleWork } from "./sample";
 import type { AuditEntry, Conversation, CountEntry, CountSession, InboxMail, Message, Movement, PickStrategy, Presence, ReturnOutcome, ReturnRequest, Shipment, State, StockLine, StoreOrder, Task, User } from "./types";
 import { RECEIVING, isOpen, taskId } from "./tasks";
-import { CLIENTS, productById } from "../data/catalog";
+import { CLIENTS, applyProductEdits, productById } from "../data/catalog";
+import type { ProductText } from "../../../server/src/shared/products.ts";
 import { describe } from "./audit";
 import { canSeeClient } from "../auth/permissions";
 import { planOrder, putBack, statusOf, takeFrom } from "../outbound/plan";
@@ -18,6 +19,8 @@ type Action =
   | { type: "submitReturn"; request: ReturnRequest }
   | { type: "decideReturn"; id: string; by: string; approve: boolean; outcome?: ReturnOutcome; note: string }
   | { type: "reset" }
+  /** A product's code, name and full description (the id stays). before = what the editor saw, for the log. */
+  | { type: "product/edit"; id: string; before: ProductText; after: ProductText; reason: string }
   // Inventory
   | { type: "move"; from: string; to: string; by: string; reason: string }
   | { type: "count/start"; session: CountSession }
@@ -156,8 +159,11 @@ function reducer(state: State, a: Action): State {
       };
     }
     case "reset":
-      // The change log survives a reset (it's never edited or cleared)
-      return withSampleWork({ ...sampleState(), tasks: [], audit: state.audit ?? [] });
+      // The change log survives a reset (it's never edited or cleared), and so do product edits (they're the warehouse's, not sample data)
+      return withSampleWork({ ...sampleState(), tasks: [], audit: state.audit ?? [], productEdits: state.productEdits });
+    case "product/edit":
+      if (!productById(a.id)) return state;
+      return { ...state, productEdits: { ...(state.productEdits ?? {}), [a.id]: a.after } };
     case "move": {
       const lines = state.stock[a.from];
       if (!lines?.length || a.from === a.to) return state;
@@ -363,6 +369,8 @@ const Ctx = createContext<{ state: State; dispatch: (a: Action) => void; setActo
  */
 export function StoreProvider({ initial, onChange, children }: { initial: State | null; onChange: (s: State) => void; children: ReactNode }) {
   const [state, raw] = useReducer(root, initial, migrate);
+  // Before anything below renders, so every screen reads the edited codes and names
+  applyProductEdits(state.productEdits);
   const actor = useRef<Actor | undefined>(undefined);
   const dispatch = useCallback((a: Action) => raw({ ...a, actor: actor.current }), []);
   const setActor = useCallback((a: Actor) => { actor.current = a; }, []);

@@ -9,6 +9,7 @@ import type { Sql } from "./db.ts";
 import { ApiError, bad, bool, email as emailOf, forbidden, int, notFound, obj, str, strList, username as usernameOf } from "./errors.ts";
 import { inviteMail, type Mailer } from "./mail.ts";
 import { allows, cleanPermissions, effective, roleProblems, type Action, type BaseRole, type Permissions } from "../shared/permissions.ts";
+import { cleanProductText, productChanges, productEditProblems, PRODUCT_LIMITS, type ProductText } from "../shared/products.ts";
 import type { GrantView, InviteInfo, LinkResult, LogView, Me, PersonView, RequestView, RoleView, TenantPublic } from "../shared/api.ts";
 
 export interface TenantCtx {
@@ -152,6 +153,10 @@ const slug = (name: string) => name.toLowerCase().normalize("NFKD").replace(/[^a
 type Method = (input: Record<string, unknown>, ctx: TenantCtx) => Promise<Result>;
 const ok = (body: unknown = { ok: true }): Result => ({ body });
 
+const PRODUCT_COLS = "id, client, brand, code, name, category, size, units, per_pallet, item";
+/** A products row as the app's Product (app/src/tenant/types.ts) */
+const productView = (r: any) => ({ id: r.id, client: r.client, brand: r.brand, code: r.code, name: r.name, cat: r.category, size: r.size, units: r.units, perPallet: r.per_pallet, item: r.item });
+
 export const TENANT_METHODS: Record<string, Method> = {
   // ----- Before sign-in -----
   "tenant.public": async (_i, ctx) => ok(publicOf(ctx)),
@@ -202,8 +207,31 @@ export const TENANT_METHODS: Record<string, Method> = {
   },
   "tenant.products": async (_i, ctx) => {
     await actor(ctx);
-    const { rows } = await ctx.env.db.query("SELECT id, client, brand, code, name, category, size, units, per_pallet, item FROM products WHERE active ORDER BY client, code, id");
-    return ok(rows.map(r => ({ id: r.id, client: r.client, brand: r.brand, code: r.code, name: r.name, cat: r.category, size: r.size, units: r.units, perPallet: r.per_pallet, item: r.item })));
+    const { rows } = await ctx.env.db.query(`SELECT ${PRODUCT_COLS} FROM products WHERE active ORDER BY client, code, id`);
+    return ok(rows.map(productView));
+  },
+  /** Code, name and full description; the id stays. `expect` is what the editor saw, so two people can't overwrite each other unseen. */
+  "products.update": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "edit-products"); mayChange(a);
+    const id = str(i.id, "Product", { max: 80 });
+    const next = cleanProductText({ code: str(i.code, "Code", { max: PRODUCT_LIMITS.code }), name: str(i.name, "Name", { max: PRODUCT_LIMITS.name }), item: str(i.item, "Full description", { max: PRODUCT_LIMITS.item }) });
+    const reason = str(i.reason, "Reason", { min: 4, max: PRODUCT_LIMITS.reason });
+    const problems = productEditProblems(next, reason);
+    if (problems.length) throw bad(problems.join(". "));
+    return ok(await ctx.env.db.tx(async q => {
+      const cur = (await q.query(`SELECT ${PRODUCT_COLS} FROM products WHERE id = $1 AND active FOR UPDATE`, [id])).rows[0];
+      if (!cur) throw notFound();
+      if (a.person?.clients && !a.person.clients.includes(cur.client)) throw notFound();
+      const before: ProductText = { code: cur.code, name: cur.name, item: cur.item ?? "" };
+      if (i.expect !== undefined) {
+        const e = obj(i.expect);
+        if (e.code !== before.code || e.name !== before.name || (e.item ?? "") !== before.item) throw new ApiError(409, "conflict", "Someone else changed this product a moment ago. Look at it again before saving.");
+      }
+      if (!productChanges(before, next)) return productView(cur);
+      const { rows } = await q.query(`UPDATE products SET code = $2, name = $3, item = $4, updated_at = now(), updated_by = $5 WHERE id = $1 RETURNING ${PRODUCT_COLS}`, [id, next.code, next.name, next.item, a.name]);
+      await q.query("INSERT INTO product_changes (product_id, changed_by, reason, before, after) VALUES ($1, $2, $3, $4, $5)", [id, a.name, reason, JSON.stringify(before), JSON.stringify(next)]);
+      return productView(rows[0]);
+    }));
   },
 
   // ----- People -----

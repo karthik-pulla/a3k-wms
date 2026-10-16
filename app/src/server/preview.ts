@@ -59,9 +59,10 @@ export const previewOutbox = { read: readOutbox, subscribe: (f: () => void) => {
 interface Engine { platform: Db; tenants: Map<string, Db>; ready: Promise<void> }
 let engine: Engine | null = null;
 const idb = (name: string) => `idb://wms-preview-${name}`;
+const open = (name: string) => new PGlite(idb(name));
 
 async function openTenantDb(id: string, fresh: boolean, config?: unknown, products?: unknown[]): Promise<Db> {
-  const pg = new PGlite(idb(`t-${id}`), { relaxedDurability: true });
+  const pg = open(`t-${id}`);
   const c = conn(pg);
   await migrateDatabase(c, await migrations("tenant"));
   const db = singleConnectionDb(c);
@@ -75,7 +76,7 @@ async function openTenantDb(id: string, fresh: boolean, config?: unknown, produc
 function start(): Engine {
   const e: Engine = { platform: null as unknown as Db, tenants: new Map(), ready: Promise.resolve() };
   e.ready = (async () => {
-    const pg = new PGlite(idb("platform"), { relaxedDurability: true });
+    const pg = open("platform");
     const c = conn(pg);
     if (!(await c.query("SELECT 1 FROM pg_roles WHERE rolname = 'wms_platform'")).rows.length) await c.query("CREATE ROLE wms_platform");
     await migrateDatabase(c, await migrations("platform"));
