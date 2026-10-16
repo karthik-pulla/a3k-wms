@@ -143,11 +143,34 @@ The stock workbook format in CLAUDE.md (tabs `Rack00`…`RACK20`, the grey heade
 ### Databases
 
 - **One RDS PostgreSQL instance** (Multi-AZ) holds one database per tenant, named `t_<tenant_id>`. Each tenant database has its own login role that owns it; `CONNECT` is revoked from `PUBLIC` on every tenant database, so tenant A's role cannot even open tenant B's database. The app never connects as a superuser.
-- **Connections**: a small pool per tenant database, opened on demand and closed when idle (RDS Proxy or PgBouncer in front). A pooled connection is tied to one database for its whole life, so a connection can never be reused for another tenant.
-- **Same schema everywhere**: migrations run against every tenant database in turn and record their version in each. A release waits until all tenant databases are migrated; there is one code path, never per-tenant schemas.
+- **Connections**: every app connection goes through **RDS Proxy, from day one** (decided 15 Oct 2026; see "Connections and RDS Proxy" below). Inside the app, a small pool per tenant database, opened on demand and closed when idle, under one connection budget per server task. A pooled connection is tied to one database for its whole life, so it can never be reused for another tenant.
+- **Same schema everywhere**: the migration loop (below) runs every change against the platform database and then every tenant database, and records each one's version. A release waits until all tenant databases are migrated; there is one code path, never per-tenant schemas.
 - **Platform database** (`platform`, its own role): tenants, domains, plans, subscriptions and invoices (billing provider IDs only, no card numbers), feature flags, operators, support grants, and the platform's own audit log. It holds no stock, products, orders or messages.
 - **Silo tier**: the same database, moved to its own RDS instance (and optionally its own AWS account). Only the connection string in the platform DB changes; the code is the same.
 - **Size**: one instance comfortably holds dozens of small warehouses. Watch connections and storage per tenant; move a heavy tenant to its own instance with the same steps as silo.
+
+### Connections and RDS Proxy
+
+PostgreSQL has a hard limit on open connections (`max_connections`, about 400 on a 4 GB instance), and each connection uses memory. With a database per tenant this matters more than usual: a connection to tenant A's database can't serve tenant B, so 50 tenants × a few connections × several server tasks would run out quickly and the database would start refusing everyone. So, from the first deploy:
+
+- **RDS Proxy sits between the app and the database.** The app connects only to the proxy; the proxy holds the real connections and lends them out per request. Its cap (`MaxConnectionsPercent`, 70% of `max_connections`) is the most the database ever sees, whatever the app does. When the cap is reached, requests wait (up to 30 s) instead of the database falling over. Idle connections are closed (`MaxIdleConnectionsPercent`), so quiet tenants cost nothing. It also keeps connections across a Multi-AZ failover.
+- **Sign-in to the proxy is by IAM**, not passwords: each server task signs a short-lived token for the tenant's database user. The proxy itself logs in to the database with one Secrets Manager secret per database user; creating a tenant adds its secret to the proxy. AWS limits how many secrets one proxy takes (check the current quota). The platform database records which proxy each tenant uses, so a second proxy can be added later without code changes.
+- **The app has its own budget too** (`server/src/db/pools.ts`): at most 3 connections per tenant pool and 30 per server task in all. A tenant's pool closes after 10 s idle; when the budget is full, the least recently used idle pool is closed to make room, and if every pool is busy the request gets "busy, try again" (503) after a short wait rather than piling up.
+- **Nothing that pins**: RDS Proxy can only share a connection between requests if the connection keeps no session state. So the app never uses session `SET`, temporary tables, `LISTEN`/`NOTIFY`, advisory locks or named prepared statements through the proxy. Per-tenant settings like `statement_timeout` are set on the tenant's database role instead (`ALTER ROLE … SET`). Live updates (WebSockets) don't need `LISTEN`; they go through the server.
+- **What doesn't go through the proxy**: migrations and tenant creation (DDL and advisory locks) connect straight to the database as the migration role, one database at a time, from a one-off task.
+- **Watch it**: CloudWatch alarms on the proxy's `DatabaseConnections` (over 80% of its cap), `ClientConnections` and borrow latency, and on the instance's `DatabaseConnections`.
+- **Cost**: RDS Proxy is billed per vCPU of the database instance, with a 2-vCPU minimum: a small fixed monthly amount, worth it for this.
+
+### The migration loop
+
+One code path means one schema: every tenant database must be at the same version before new code serves it. `server/src/migrate/` does this:
+
+1. Migrations are numbered SQL files: `server/migrations/platform/*.sql` for the platform database, `server/migrations/tenant/*.sql` for every tenant database. A file is never edited once it has run anywhere; each database records the file name and a checksum, and a changed checksum stops the loop.
+2. Changes only **add** (new tables, new columns with defaults, new indexes built `CONCURRENTLY` in their own file). Renaming or dropping happens in a later release, once no running code uses the old shape. So the old code keeps working while databases change, and a half-finished rollout is safe.
+3. The loop runs as a one-off ECS task before the new code is deployed: platform database first, then the tenants listed in the platform database, a few at a time (default 4 in parallel, so the instance isn't overloaded). Each database takes an advisory lock first, so two loops can never migrate the same database at once. Each file runs in its own transaction.
+4. If one tenant fails, no new tenants are started, the ones in progress finish, and the deploy stops. Everyone keeps running the old code, which still works because migrations only add. The failure, its tenant and the file are recorded in the platform database (`tenant_migrations`) and printed.
+5. After a fix, the loop runs again and skips what's done. New tenants are migrated by the same code when they're created.
+6. Before a release, the loop runs against a copy of the largest tenant database (restored from its nightly dump) in staging.
 
 ### Files and keys
 
@@ -328,7 +351,7 @@ Notes on the fields:
 - **`layout`** keeps the owner's way of describing a warehouse (rack, sides, column count, column shape) and the server expands it into the slot list. `slotOverrides` covers one-off oddities (a missing bay behind a pillar, a short column by a door) without new shape rules. The expanded A3K layout must give exactly today's 3,662 codes.
 - **`codeFormat`** drives building, reading (the chat regex, the move box, count paste) and checking codes. Reading always ends with "is this a real slot in the layout?", as `normalizeLocation` does today.
 - **Changing the layout** when stock exists: removing or renaming a slot that holds stock is refused until the stock is moved; renames are applied as a logged move. Layout changes are owner-only.
-- **`roles`** may only move actions listed in the schema between built-in roles; it cannot invent roles or give workers owner powers (no "adjust-stock" for workers, ever). Each tenant's answers to CLAUDE.md's open questions (who starts counts, whether workers see inventory) become these settings.
+- **`roles`**: the three built-in roles (Owner, Coordinator, Worker) with switches for a listed set of actions, **plus roles the warehouse makes itself** (user, 16 Oct 2026): a name (e.g. "Night lead", "Receiving clerk") and the same switches. A handful of powers stay with owners and can't be switched on for any other role, so nobody can give themselves more: managing people and roles, adjusting stock directly, deciding returns, support access, exports of everything, and deleting data. Each tenant's answers to CLAUDE.md's open questions (who starts counts, whether workers see inventory) become these settings.
 - **`languages`**: Spanish is on for A3K. Turning it off hides the language switch. New languages are added to the product for everyone, never per tenant.
 - **Assets** (`asset:…`) are files in the tenant's S3 folder, shown through signed links.
 
@@ -380,6 +403,10 @@ Charge for the work this creates: the setup fee covers the visit and config; a c
 - **Checks**: A3K's config gives the same 3,662 slot codes; `normalizeLocation` gives the same answers for a list of real and invalid codes; label PDFs are byte-identical to today's for the same input; the built bundle contains no A3K product names, logos or store names.
 
 ### Phase 1: server, with A3K as tenant #1
+
+**Progress (16 Oct 2026)**: built and tested (not deployed): the server's tenant routing, connection budget and RDS Proxy setup; the migration loop; sign-in with an authenticator code, sessions, invite and reset links; people, roles and switches with named custom roles; account requests; support access with owner approval, one-time links and emergency access; the ops console (warehouses, setup checklist, restoring owner access, creating warehouses, team, activity, errors); the warehouse's Team page; the app signing in with the server. Tests run on PGlite (PostgreSQL in WebAssembly) inside the test process, and the preview runs the same code in a browser. Next: stock, orders and messages on the server (with offline sync), loading A3K's settings, products and opening count, the landing page.
+
+**Everything runs on AWS** (user, 15 Oct 2026): no database or server on anyone's computer. There are two AWS environments, `staging` (sandbox tenants and made-up data, cheaper settings) and `prod`, built from the same code (`infra/`, AWS CDK). Changes are deployed from GitHub Actions by hand (`.github/workflows/deploy-aws.yml`, never on every push), using an AWS role the workflow can assume without stored passwords. The code is written and checked here (tests, `cdk synth`), but only runs in AWS.
 
 - Build the platform DB, one tenant database, the API and WebSockets, sign-in with two-factor, and tenant context middleware from day one, even with one tenant.
 - Load A3K: config from Phase 0, products and opening stock from the 3-day go-live count (via `onboarding/a3k/`).
@@ -518,6 +545,12 @@ Every tenant runs the same version, so maintenance is done once for everyone.
 At first: the developer (with Claude Code) as operator and on call, with the runbooks kept in this repository. Once there are more than a few tenants, a second person on call is needed, so no customer depends on one person being reachable.
 
 ---
+
+## Decisions so far (product, 16 Oct 2026)
+
+- **Landing page**: the product's public site has a "Book a visit" form only. Warehouses never sign themselves up; the operator creates each one from the ops console after the contract (matches the on-site onboarding plan, section 8).
+- **Roles**: three built-in roles plus switches, and warehouses may add their own named roles built from the same switches (section 4, `roles`), with the owner-only powers kept out of reach: changing stock directly, deciding returns, applying count corrections, deleting counts, managing people and roles, warehouse settings, support access and the security log.
+- **Product name and domain**: not chosen yet. One domain for the product, a subdomain per warehouse (`a3k.<domain>`); a warehouse's own domain is a paid extra.
 
 ## Open questions
 

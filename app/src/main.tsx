@@ -9,13 +9,15 @@ import { startI18n } from "./i18n";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { freshLoad } from "./utils/freshLoad";
 import { loadTenant } from "./tenant";
+import { usesServer } from "./server/client";
 
 startI18n();
 // A screen's file is gone because the app was updated while open: load the latest version
 window.addEventListener("vite:preloadError", e => { if (freshLoad()) e.preventDefault(); });
 
-// The warehouse's settings and products load first: every screen reads them (data/catalog.ts) when its file loads
-const App = lazy(() => loadTenant().then(() => import("./App")));
+// On this device (default): the warehouse's settings and products load first, since every screen reads them
+// (data/catalog.ts) when its file loads. With the server: sign-in first, then the settings from its database.
+const App = usesServer ? lazy(() => import("./server/ServerRoot")) : lazy(() => loadTenant().then(() => import("./App")));
 
 // In development, hot reload can run this file again: render into the same root instead of mounting a second one
 const root: Root = (import.meta.hot?.data.root as Root | undefined) ?? createRoot(document.getElementById("root")!);

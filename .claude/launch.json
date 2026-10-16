@@ -67,6 +67,17 @@
         "--strictPort"
       ],
       "port": 4181
+    },
+    {
+      "name": "wms-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "dev:preview"
+      ],
+      "port": 5175
     }
   ]
 }

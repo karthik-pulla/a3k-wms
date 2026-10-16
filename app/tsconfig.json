@@ -20,10 +20,13 @@
       "vite/client",
       "node"
     ],
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src",
-    "vite.config.ts"
+    "vite.config.ts",
+    "../server/src/shared",
+    "../server/src/core"
   ]
 }

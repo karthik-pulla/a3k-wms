@@ -1,4 +1,4 @@
-import { useAuth } from "../auth/AuthGate";
+import { useIdentity } from "../auth/identity";
 import { useStore } from "../store/store";
 import { useSession } from "../session";
 import type { Role } from "../store/types";
@@ -10,7 +10,7 @@ const ROLE_NAME: Record<Role, string> = { owner: "Owner", coordinator: "Coordina
  * Every change made while switched is logged under the admin, naming the role or person.
  */
 export function RoleSwitch({ compact = false }: { compact?: boolean }) {
-  const { account } = useAuth();
+  const { account } = useIdentity();
   const { state } = useStore();
   const { settings, update } = useSession();
   if (!account.admin) return null;

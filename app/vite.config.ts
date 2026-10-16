@@ -42,6 +42,8 @@ const demo = process.env.VITE_WMS_DEMO === "1";
  * demo site never carries A3K's files. (Until the server picks the warehouse from the address.)
  */
 const tenant = process.env.VITE_TENANT || "a3k";
+const backend = process.env.VITE_WMS_BACKEND ?? "local";
+const withServer = backend !== "local";
 const oneTenant = (): Plugin => {
   let outDir = "dist";
   return {
@@ -51,7 +53,9 @@ const oneTenant = (): Plugin => {
     closeBundle: () => {
       const dir = path.join(outDir, "tenants");
       if (!fs.existsSync(dir)) return;
-      for (const t of fs.readdirSync(dir)) if (t !== tenant) fs.rmSync(path.join(dir, t), { recursive: true, force: true });
+      // A server build gets every warehouse's settings from its database: no tenant files at all
+      for (const t of fs.readdirSync(dir)) if (t !== tenant || backend === "server") fs.rmSync(path.join(dir, t), { recursive: true, force: true });
+      if (!fs.readdirSync(dir).length) fs.rmdirSync(dir);
     },
   };
 };
@@ -59,5 +63,13 @@ const oneTenant = (): Plugin => {
 export default defineConfig({
   base: demo ? "./" : "/",
   plugins: [react(), csp(), oneTenant()],
-  server: { port, strictPort: true },
+  // Always a fixed value in the build, so code for the other ways of running (the preview's in-browser database) is left out
+  define: { "import.meta.env.VITE_WMS_BACKEND": JSON.stringify(backend) },
+  // With the server, two pages: the warehouse app, and the WMS team's ops console (served only at the console's address).
+  // On-device builds (the demo site) have no console.
+  build: { rollupOptions: { input: { app: path.resolve(import.meta.dirname, "index.html"), ...(withServer ? { ops: path.resolve(import.meta.dirname, "ops.html") } : {}) } } },
+  // The app shares the roles and the sign-in logic with the server (server/src/shared, server/src/core)
+  server: { port, strictPort: true, fs: { allow: [".", "../server/src", "../server/migrations", "../server/templates"] } },
+  // PGlite (the preview's in-browser PostgreSQL) ships its own WebAssembly; Vite mustn't pre-bundle it
+  optimizeDeps: { exclude: ["@electric-sql/pglite"] },
 });

@@ -1,0 +1,21 @@
+{
+  // Source is plain TypeScript that Node can also run directly (tests run with node --test, no build):
+  // only erasable syntax, and relative imports name the .ts file (rewritten to .js in dist/).
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src", "test"]
+}

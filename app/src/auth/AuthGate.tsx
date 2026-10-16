@@ -5,6 +5,7 @@ import { clearSession, ensureVault, persist, restore, sessionLimits, touchSessio
 import { LoginScreen } from "../pages/login/LoginScreen";
 import { isDemo, startOver } from "../utils/freshLoad";
 import { t } from "../i18n";
+import { IdentityContext, type Identity } from "./identity";
 
 export interface Auth {
   account: Account;
@@ -100,7 +101,19 @@ export function AuthGate({ children }: { children: (initial: State | null, onCha
   if (phase.kind === "locked" || !auth) {
     return <LoginScreen message={phase.kind === "locked" ? phase.message : undefined} onSignedIn={(session, data) => { dataRef.current = data; sessionRef.current = session; setPhase({ kind: "open", session, data }); }} />;
   }
-  return <Ctx.Provider value={auth}>{children(phase.data.state, onChange)}</Ctx.Provider>;
+  return <Ctx.Provider value={auth}><DeviceIdentity auth={auth}>{children(phase.data.state, onChange)}</DeviceIdentity></Ctx.Provider>;
+}
+
+/** The vault's account as the app's identity */
+function DeviceIdentity({ auth, children }: { auth: Auth; children: ReactNode }) {
+  const a = auth.account;
+  const identity = useMemo<Identity>(() => ({
+    kind: "device",
+    account: { uid: a.uid, name: a.name, username: a.username, role: a.role, clients: a.clients, admin: !!a.admin, mustChange: !!a.mustChange },
+    signOut: auth.signOut,
+    securityLog: auth.data.log,
+  }), [a, auth.signOut, auth.data.log]);
+  return <IdentityContext.Provider value={identity}>{children}</IdentityContext.Provider>;
 }
 
 /** "Opening…", and after 8 seconds a way out instead of waiting forever */

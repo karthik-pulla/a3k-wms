@@ -1,0 +1,16 @@
+# The server image is built from the repository root; only app/ and server/ are needed, and never business data
+**/node_modules
+**/dist
+.git
+data
+outputs
+tools
+docs
+infra
+scripts
+tests
+app/public/tenants/*/stock.json
+*.pdf
+*.xlsx
+*.png
+*.zip

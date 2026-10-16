@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-export type Mode = "home" | "inbounds" | "inventory" | "outbounds" | "messages" | "account" | "tasks" | "logs" | "work";
-const MODES: Mode[] = ["home", "inbounds", "inventory", "outbounds", "messages", "account", "tasks", "logs", "work"];
+export type Mode = "home" | "inbounds" | "inventory" | "outbounds" | "messages" | "account" | "tasks" | "logs" | "work" | "warehouse";
+const MODES: Mode[] = ["home", "inbounds", "inventory", "outbounds", "messages", "account", "tasks", "logs", "work", "warehouse"];
 
 export interface Route {
   mode: Mode;

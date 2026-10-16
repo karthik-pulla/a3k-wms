@@ -1,4 +1,5 @@
 import type { Client } from "../data/catalog";
+import type { Permissions } from "../../../server/src/shared/permissions.ts";
 
 /** One product line of a shipment. Lines with the same pallet number share a pallet (a mixed pallet). */
 export interface ShipmentLine {
@@ -164,6 +165,10 @@ export interface User {
   clients?: Client[];
   /** Made-up person for testing */
   sample?: boolean;
+  /** A role the warehouse made (e.g. "Night lead"); `role` is its base role */
+  roleName?: string;
+  /** Switches that differ from the base role's defaults (server/src/shared/permissions.ts) */
+  perms?: Permissions;
 }
 
 export type PresenceState = "online" | "away" | "syncing" | "offline";

@@ -3,6 +3,8 @@ __pycache__/
 .DS_Store
 outputs/labels/millet-bank/build/
 app/dist/
+server/dist/
+infra/cdk.out/
 *.tsbuildinfo
 
 # Real business data stays on the owners' machines, never on GitHub (CLAUDE.md rule 1).

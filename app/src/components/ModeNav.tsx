@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
-import { ChatIcon, InboundIcon, InventoryIcon, LogsIcon, OutboundIcon, TasksIcon, WorkIcon } from "./icons";
+import { ChatIcon, InboundIcon, InventoryIcon, LogsIcon, OutboundIcon, TasksIcon, TeamIcon, WorkIcon } from "./icons";
+import { useIdentity } from "../auth/identity";
 import { can } from "../auth/permissions";
 import { isOpen } from "../store/tasks";
 import type { Mode } from "../router";
@@ -28,7 +29,9 @@ export function ModeNav({ current }: { current: Mode }) {
   const { me } = useSession();
   const unread = unreadTotals(state, me);
   const lead = can(me, "use-inbounds");
-  const MODES = lead ? LEADS : WORKERS;
+  const { kind, me: serverMe } = useIdentity();
+  // Owners signed in with the server manage people, roles and access there
+  const MODES = [...(lead ? LEADS : WORKERS), ...(kind === "server" && serverMe?.can["manage-people"] ? [{ route: "warehouse" as Mode, label: "Team", icon: TeamIcon }] : [])];
   const myTasks = state.tasks.filter(t => isOpen(t) && (lead ? !t.assignee : t.assignee === me.id || !t.assignee)).length;
   return (
     <nav className={`modes glass-bar${MODES.length > 4 ? " many" : ""}`} aria-label="Modes">

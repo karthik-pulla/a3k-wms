@@ -4,9 +4,11 @@
   "description": "Warehouse management system: count page, label maker and data scripts",
   "scripts": {
     "build": "python3 scripts/dump_workbooks.py && python3 scripts/build_count_data.py && python3 scripts/build_label_catalog.py && python3 scripts/build_tools.py && python3 scripts/build_app_data.py",
-    "test": "node --test tests/*.test.js",
+    "test": "node --test tests/*.test.js && npm --prefix server test && npm --prefix infra test",
     "app:dev": "npm --prefix app run dev",
-    "app:build": "npm --prefix app run build"
+    "app:build": "npm --prefix app run build",
+    "server:build": "npm --prefix server run build",
+    "infra:synth": "npm --prefix infra run synth"
   },
   "devDependencies": {
     "exceljs": "4.4.0"

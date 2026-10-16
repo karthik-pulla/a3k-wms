@@ -1,0 +1,35 @@
+{
+  "name": "wms-server",
+  "private": true,
+  "type": "module",
+  "description": "The WMS server: API, tenant routing through RDS Proxy, and the migration loop. Runs on AWS (ECS Fargate).",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.ts",
+    "start": "node dist/src/main.js",
+    "migrate": "node dist/src/migrate/main.js",
+    "create-tenant": "node dist/src/ops/createTenant.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ecs": "3.1144.0",
+    "@aws-sdk/client-kms": "3.1144.0",
+    "@aws-sdk/client-rds": "3.1144.0",
+    "@aws-sdk/client-secrets-manager": "3.1144.0",
+    "@aws-sdk/client-sesv2": "3.1144.0",
+    "@aws-sdk/rds-signer": "3.1144.0",
+    "@fastify/cookie": "11.1.2",
+    "@fastify/static": "10.1.5",
+    "fastify": "5.12.5",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@types/node": "22.20.5",
+    "@types/pg": "8.23.1",
+    "typescript": "5.9.3"
+  }
+}

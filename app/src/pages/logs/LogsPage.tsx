@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { can } from "../../auth/permissions";
-import { useAuth } from "../../auth/AuthGate";
+import { useIdentity } from "../../auth/identity";
 import { useStore } from "../../store/store";
 import { useSession } from "../../session";
 import { buildXlsx, download } from "../../utils/xlsx";
@@ -18,7 +18,7 @@ const PAGE = 200;
 export function LogsPage() {
   const { state } = useStore();
   const { me } = useSession();
-  const { data } = useAuth();
+  const { securityLog } = useIdentity();
   const all = can(me, "view-all-logs");
   const [area, setArea] = useState<Area | "all" | "pallets">(all ? "all" : "pallets");
   const [who, setWho] = useState("");
@@ -28,9 +28,9 @@ export function LogsPage() {
 
   const rows: Row[] = useMemo(() => {
     const changes: Row[] = (state.audit ?? []).map(e => ({ ...e }));
-    const signins: Row[] = all ? data.log.map((e, i) => ({ id: `S${i}`, at: e.at, by: e.who ?? "", area: "accounts" as const, action: `${e.kind.replace(/-/g, " ")}${e.detail ? `: ${e.detail}` : ""}` })) : [];
+    const signins: Row[] = all ? securityLog.map((e, i) => ({ id: `S${i}`, at: e.at, by: e.who ?? "", area: "accounts" as const, action: `${e.kind.replace(/-/g, " ")}${e.detail ? `: ${e.detail}` : ""}` })) : [];
     return [...changes, ...signins].sort((a, b) => b.at.localeCompare(a.at));
-  }, [state.audit, data.log, all]);
+  }, [state.audit, securityLog, all]);
   const people = [...new Set(rows.map(r => r.by).filter(Boolean))].sort();
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const shown = rows.filter(r =>

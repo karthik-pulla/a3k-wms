@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "tenant": { "id": "", "name": "", "locale": "en-US", "timezone": "America/New_York" },
+  "branding": { "appTitle": "", "mark": "" },
+  "languages": { "default": "en", "enabled": ["en", "es"] },
+  "layout": {
+    "codeFormat": { "slot": "{face}-{col}-L{level}-B{bay}", "floor": "{face}-FLOOR-P{n}", "areaSpot": "{area}-P{n}", "rackDigits": 2, "colDigits": 2, "spotDigits": 2, "acceptUnpadded": true },
+    "shapes": { "standard": { "levels": [1, 2, 3, 4], "bays": 2 } },
+    "defaultShape": "standard",
+    "racks": [],
+    "areas": [{ "id": "RECEIVING", "name": "Receiving dock" }],
+    "receivingArea": "RECEIVING"
+  },
+  "clients": [],
+  "labels": {
+    "sheets": [{ "id": "3x2-letter", "name": "3 × 2 in, 10 per sheet (US Letter)", "page": "letter", "labelWidth": 76.2, "labelHeight": 50.8, "columns": 2, "rows": 5, "left": 30.1625, "top": 6.35, "gapX": 3.175, "gapY": 3.175 }],
+    "defaultSheet": "3x2-letter",
+    "profiles": []
+  },
+  "groups": [{ "id": "receiving", "name": "receiving" }],
+  "orders": { "inbox": "" },
+  "expiry": { "warnMonths": 6 }
+}

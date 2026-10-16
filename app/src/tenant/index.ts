@@ -60,6 +60,26 @@ export async function loadTenant(id = tenantId()): Promise<Tenant> {
   ]);
   if (config.schemaVersion !== 1) throw new Error(`This app can't read settings version ${config.schemaVersion}`);
   current = { id, config, products, logos, layout: buildLayout(config.layout), seed, stock: stock?.stock ?? null };
+  applyTenant(current);
+  return current;
+}
+
+/** Signed in with the server: the settings and products come from the warehouse's own database */
+export function setServerTenant(t: { id: string; config: TenantConfig; products: Product[]; logos: Record<string, Logo>; seed: Seed | null }): Tenant {
+  if (t.config.schemaVersion !== 1) throw new Error(`This app can't read settings version ${t.config.schemaVersion}`);
+  current = { ...t, layout: buildLayout(t.config.layout), stock: null };
+  applyTenant(current);
+  return current;
+}
+
+/** Fetches a warehouse's optional sample data (the preview fills its screens with it) */
+export async function fetchSeed(id = tenantId()): Promise<Seed | null> {
+  const r = await fetch(`${import.meta.env.BASE_URL}tenants/${id}/seed.json`, { cache: "no-cache" }).catch(() => null);
+  return r?.ok && r.headers.get("content-type")?.includes("json") ? ((await r.json()) as Seed) : null;
+}
+
+function applyTenant(current: Tenant) {
+  const config = current.config;
   document.title = config.branding.appTitle;
   // The language chosen on this device, if the warehouse offers it; otherwise the warehouse's default
   const { enabled, default: fallback } = config.languages;
@@ -68,6 +88,5 @@ export async function loadTenant(id = tenantId()): Promise<Tenant> {
   const want: Lang = saved && enabled.includes(saved as Lang) ? (saved as Lang) : fallback;
   if (getLang() !== want) setLang(want);
   // Rack drawings have one row per level (styles/global.css)
-  document.documentElement.style.setProperty("--levels", String(current.layout.levels.length));
-  return current;
+  document.documentElement.style.setProperty("--levels", String(Math.max(1, current.layout.levels.length)));
 }

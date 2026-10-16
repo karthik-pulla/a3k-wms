@@ -1,0 +1,87 @@
+# Deploys the WMS server to AWS. Only by hand (Actions → "Deploy to AWS" → Run workflow), never on a push.
+# Order matters (docs/multi-tenant-design.md, "The migration loop"):
+#   1. data stack (network, PostgreSQL, RDS Proxy, the migration task for this release)
+#   2. build and push the server image, tagged with this commit
+#   3. run the migration loop; stop here if any database failed
+#   4. API stack (the new code starts only after every database is migrated)
+# Needs, once per AWS account: `cdk bootstrap`, an IAM role this workflow may assume through GitHub's OIDC provider
+# (repository variable AWS_DEPLOY_ROLE_ARN) and AWS_REGION. The prod GitHub environment should require a reviewer.
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Environment
+        type: choice
+        options: [staging, prod]
+        default: staging
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.stage }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.stage }}
+    env:
+      STAGE: ${{ inputs.stage }}
+      RELEASE: ${{ github.sha }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      CDK_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            infra/package-lock.json
+
+      - name: Test the server and the infrastructure
+        run: |
+          npm --prefix server ci && npm --prefix server run typecheck && npm --prefix server test
+          npm --prefix infra ci && npm --prefix infra run typecheck && npm --prefix infra test
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: 1. Data stack
+        working-directory: infra
+        run: npx cdk deploy "WmsData-$STAGE" -c stage="$STAGE" -c release="$RELEASE" --require-approval never --outputs-file ../data-outputs.json
+
+      - name: 2. Server image
+        run: |
+          REPO=$(jq -r --arg s "WmsData-$STAGE" '.[$s].RepoUri' data-outputs.json)
+          if aws ecr describe-images --repository-name "${REPO##*/}" --image-ids imageTag="$RELEASE" >/dev/null 2>&1; then
+            echo "Image $RELEASE is already there"
+          else
+            aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO%%/*}"
+            docker build -f server/Dockerfile -t "$REPO:$RELEASE" .
+            docker push "$REPO:$RELEASE"
+          fi
+
+      - name: 3. Migration loop
+        run: |
+          out() { jq -r --arg s "WmsData-$STAGE" --arg k "$1" '.[$s][$k]' data-outputs.json; }
+          CLUSTER=$(out ClusterName)
+          TASK=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$(out MigrateTaskDefinition)" --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$(out OpsSubnets)],securityGroups=[$(out OpsSecurityGroup)],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' --output text)
+          echo "Migration task: $TASK"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK"
+          CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "Exit code: $CODE (logs: CloudWatch, log stream prefix migrate)"
+          test "$CODE" = "0"
+
+      - name: 4. API stack
+        working-directory: infra
+        run: npx cdk deploy "WmsApi-$STAGE" -c stage="$STAGE" -c release="$RELEASE" --require-approval never

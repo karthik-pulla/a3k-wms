@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { GlassStrength, HomeCardKind, HomeSettings, ThemeChoice } from "../settings";
 import type { LastOnlineVisibility } from "../auth/permissions";
-import { useAuth } from "../auth/AuthGate";
+import { useIdentity } from "../auth/identity";
 import { RoleSwitch } from "./RoleSwitch";
 import { CloseIcon, DownIcon, UpIcon } from "./icons";
 import { t } from "../i18n";
@@ -144,7 +144,7 @@ export function SettingsPanel({ settings, update, reset, onResetData, onClose }:
 
 /** Your account, and (the admin account only) using the app as another role or person, for testing */
 function You() {
-  const { account } = useAuth();
+  const { account } = useIdentity();
   return (
     <section>
       <h3>You</h3>

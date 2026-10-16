@@ -1,0 +1,191 @@
+Description: "WMS one-time setup: GitHub deploy role (OIDC, no stored passwords) and a budget alert"
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: karthik-pulla/a3k-wms
+    AllowedPattern: ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$
+    Description: The GitHub repository allowed to deploy (owner/name)
+  ExistingGitHubProviderArn:
+    Type: String
+    Default: ""
+    Description: "Leave empty, unless this AWS account already has GitHub's sign-in provider (IAM > Identity providers): then paste its ARN"
+  BudgetEmail:
+    Type: String
+    Default: ""
+    Description: "Who gets an email when the month's AWS bill is heading over budget (empty: no budget)"
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 250
+    Description: Monthly budget in US dollars
+    MinValue: 1
+Conditions:
+  MakeProvider:
+    Fn::Equals:
+      - Ref: ExistingGitHubProviderArn
+      - ""
+  WantBudget:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: BudgetEmail
+          - ""
+Resources:
+  GitHubProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+      Url: https://token.actions.githubusercontent.com
+    Condition: MakeProvider
+  DeployRole885297C3:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - Fn::Join:
+                      - ""
+                      - - "repo:"
+                        - Ref: GitHubRepo
+                        - :environment:staging
+                  - Fn::Join:
+                      - ""
+                      - - "repo:"
+                        - Ref: GitHubRepo
+                        - :environment:prod
+            Effect: Allow
+            Principal:
+              Federated:
+                Fn::If:
+                  - MakeProvider
+                  - Fn::GetAtt:
+                      - GitHubProvider
+                      - Arn
+                  - Ref: ExistingGitHubProviderArn
+        Version: "2012-10-17"
+      Description: "GitHub Actions: Deploy to AWS (.github/workflows/deploy-aws.yml)"
+      RoleName: wms-github-deploy
+  DeployRoleDefaultPolicyDC930F96:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:"
+                  - Ref: AWS::Partition
+                  - ":iam::"
+                  - Ref: AWS::AccountId
+                  - :role/cdk-hnb659fds-*
+          - Action: ecr:GetAuthorizationToken
+            Effect: Allow
+            Resource: "*"
+          - Action:
+              - ecr:BatchCheckLayerAvailability
+              - ecr:InitiateLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:CompleteLayerUpload
+              - ecr:PutImage
+              - ecr:DescribeImages
+              - ecr:BatchGetImage
+            Effect: Allow
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:"
+                  - Ref: AWS::Partition
+                  - ":ecr:"
+                  - Ref: AWS::Region
+                  - ":"
+                  - Ref: AWS::AccountId
+                  - :repository/wms-server-*
+          - Action: ecs:RunTask
+            Effect: Allow
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:"
+                  - Ref: AWS::Partition
+                  - ":ecs:"
+                  - Ref: AWS::Region
+                  - ":"
+                  - Ref: AWS::AccountId
+                  - :task-definition/WmsData*:*
+          - Action: ecs:DescribeTasks
+            Effect: Allow
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:"
+                  - Ref: AWS::Partition
+                  - ":ecs:"
+                  - Ref: AWS::Region
+                  - ":"
+                  - Ref: AWS::AccountId
+                  - :task/*
+          - Action: iam:PassRole
+            Condition:
+              StringEquals:
+                iam:PassedToService: ecs-tasks.amazonaws.com
+            Effect: Allow
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:"
+                  - Ref: AWS::Partition
+                  - ":iam::"
+                  - Ref: AWS::AccountId
+                  - :role/WmsData-*
+        Version: "2012-10-17"
+      PolicyName: DeployRoleDefaultPolicyDC930F96
+      Roles:
+        - Ref: DeployRole885297C3
+  Budget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetLimit:
+          Amount:
+            Ref: MonthlyBudgetUsd
+          Unit: USD
+        BudgetName: wms-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+      NotificationsWithSubscribers:
+        - Notification:
+            ComparisonOperator: GREATER_THAN
+            NotificationType: ACTUAL
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - Address:
+                Ref: BudgetEmail
+              SubscriptionType: EMAIL
+        - Notification:
+            ComparisonOperator: GREATER_THAN
+            NotificationType: FORECASTED
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - Address:
+                Ref: BudgetEmail
+              SubscriptionType: EMAIL
+    Condition: WantBudget
+Outputs:
+  DeployRoleArn:
+    Description: "Put this in GitHub: repository variable AWS_DEPLOY_ROLE_ARN"
+    Value:
+      Fn::GetAtt:
+        - DeployRole885297C3
+        - Arn
+

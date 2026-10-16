@@ -41,6 +41,7 @@ export const KeyboardIcon = () => (<svg {...base}><rect x="2" y="6" width="20" h
 /** Clipboard with a tick: tasks */
 export const TasksIcon = () => (<svg {...base}><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4h6v3H9z" /><path d="m9 13 2 2 4-4" /></svg>);
 /** Lines of a record: logs */
+export const TeamIcon = () => (<svg {...base}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" /><circle cx="17" cy="9" r="2.4" /><path d="M15.5 14.2c2.4.1 4.3 1.7 4.9 4.8" /></svg>);
 export const LogsIcon = () => (<svg {...base}><path d="M5 4h14v16H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>);
 /** Pallet with a clock: the worker's screen */
 export const WorkIcon = () => (<svg {...base}><path d="M3 18h18M5 18v-3h14v3" /><rect x="7" y="7" width="10" height="8" rx="1" /><path d="M12 9v3l2 1" /></svg>);

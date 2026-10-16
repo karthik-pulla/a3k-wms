@@ -5,6 +5,7 @@
 //  - Data: AES-256-GCM (authenticated encryption) with a fresh 12-byte IV for every write.
 //  - Sharing a key with someone without knowing their password: ECDH P-256 + HKDF-SHA256 + AES-256-GCM.
 import { tenant } from "../tenant";
+import { passwordProblems as sharedProblems, passwordStrength as sharedStrength } from "../../../server/src/shared/passwords.ts";
 
 export const PBKDF2_ITERATIONS = 600_000;
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -68,30 +69,12 @@ export async function openFrom(privPkcs8: Uint8Array, s: SealedTo): Promise<Uint
   return open(await sharedKey(await importPriv(privPkcs8), await importPub(s.eph)), s);
 }
 
-// ---------- Password rules for new passwords ----------
-const COMMON = new Set(["password", "password1", "password123", "123456", "12345678", "123456789", "1234567890", "qwerty", "qwerty123", "letmein", "welcome", "admin", "admin123", "iloveyou", "monkey", "dragon", "football", "baseball", "abc123", "111111", "000000", "warehouse", "passw0rd", "changeme"]);
-/** The warehouse's own name, squeezed together ("a3kimports"): as guessable as "password" */
-const ownNames = () => {
-  try {
-    const c = tenant().config, squeeze = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
-    return new Set([c.tenant.id, c.tenant.name, c.branding.appTitle, c.branding.mark].map(squeeze).filter(x => x.length >= 3));
-  } catch { return new Set<string>(); }
+// ---------- Password rules for new passwords (shared with the server: server/src/shared/passwords.ts) ----------
+/** The warehouse's own name and words count as common passwords */
+const ownWords = () => {
+  try { const c = tenant().config; return [c.tenant.id, c.tenant.name, c.branding.appTitle, c.branding.mark]; } catch { return []; }
 };
-const isCommon = (pw: string) => COMMON.has(pw.toLowerCase()) || ownNames().has(pw.toLowerCase().replace(/[^a-z0-9]/g, ""));
 /** Problems with a new password (empty = fine). At least 12 characters, not common, not containing the username. */
-export function passwordProblems(pw: string, username = ""): string[] {
-  const out: string[] = [];
-  if (pw.length < 12) out.push("at least 12 characters");
-  if (isCommon(pw) || /^(.)\1+$/.test(pw)) out.push("not a common or repeated password");
-  if (username.trim() && pw.toLowerCase().includes(username.trim().toLowerCase())) out.push("not containing your username");
-  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^\w\s]/].filter(r => r.test(pw)).length;
-  if (pw.length < 16 && kinds < 3) out.push("a mix of letters, numbers and symbols (or 16+ characters)");
-  return out;
-}
+export const passwordProblems = (pw: string, username = "") => sharedProblems(pw, username, ownWords());
 /** Rough strength 0–4 for the meter */
-export function passwordStrength(pw: string): number {
-  if (!pw) return 0;
-  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^\w\s]/].filter(r => r.test(pw)).length;
-  const bits = pw.length * Math.log2(Math.max(10, [26, 26, 10, 33].slice(0, kinds).reduce((a, b) => a + b, 0)));
-  return isCommon(pw) ? 0 : bits < 40 ? 1 : bits < 60 ? 2 : bits < 80 ? 3 : 4;
-}
+export const passwordStrength = (pw: string) => sharedStrength(pw, ownWords());

@@ -1,0 +1,17 @@
+{
+  // Node runs these files directly (cdk.json: "node bin/wms.ts"), so: erasable syntax only, imports name the .ts file
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUnusedLocals": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["bin", "lib", "test"]
+}
