@@ -8,7 +8,7 @@ export const ES: Record<string, string> = {
   // ---------- Navigation and shell ----------
   "In-bounds": "Entradas", "Inventory": "Inventario", "Out-bounds": "Salidas", "Messages": "Mensajes", "Tasks": "Tareas", "Logs": "Registros",
   "Work": "Trabajo", "Account": "Cuenta", "Settings": "Ajustes", "Home": "Inicio", "Modes": "Secciones", "Sections": "Secciones",
-  "All changes saved": "Todo guardado", "Sending…": "Enviando…", "changes will sync": "los cambios se sincronizarán", "Opening…": "Abriendo…",
+  "All changes saved": "Todo guardado", "Sending…": "Enviando…", "changes will sync": "los cambios se sincronizarán", "Opening…": "Abriendo…", "Setting up the preview in this browser (first visit only)…": "Preparando la vista previa en este navegador (solo la primera vez)…",
   "Messages and activity": "Mensajes y actividad", "Back to your own account": "Volver a tu propia cuenta",
   "This section is for coordinators and owners. Your pallet tasks and orders to pack are on your Work screen.": "Esta sección es para coordinadores y dueños. Tus tareas de tarimas y los pedidos por empacar están en tu pantalla de Trabajo.",
   "Work ›": "Trabajo ›", "Close": "Cerrar", "Cancel": "Cancelar", "Save": "Guardar", "Delete": "Eliminar", "Edit": "Editar", "Back": "Atrás", "Done": "Listo",

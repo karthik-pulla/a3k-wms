@@ -13,6 +13,7 @@ import { type Mail, type Mailer } from "../../../server/src/core/mail.ts";
 import { callTenant, tenantLog, tenantOps, useHandoff, type TenantCtx } from "../../../server/src/core/tenant-api.ts";
 import { callOps, firstOperator, opsLog, type OpsCtx } from "../../../server/src/core/ops-api.ts";
 import { totpAt, totpCounter, unseal } from "../../../server/src/core/crypto.ts";
+import { addProducts, type ProductRow } from "../../../server/src/core/products.ts";
 import { tenantId } from "../tenant";
 
 const KEY = new Uint8Array(32).fill(42); // preview only: seals authenticator secrets in this browser
@@ -60,16 +61,13 @@ let engine: Engine | null = null;
 const idb = (name: string) => `idb://wms-preview-${name}`;
 
 async function openTenantDb(id: string, fresh: boolean, config?: unknown, products?: unknown[]): Promise<Db> {
-  const pg = new PGlite(idb(`t-${id}`));
+  const pg = new PGlite(idb(`t-${id}`), { relaxedDurability: true });
   const c = conn(pg);
   await migrateDatabase(c, await migrations("tenant"));
   const db = singleConnectionDb(c);
   if (fresh) {
     await db.query("INSERT INTO settings (key, value, updated_by) VALUES ('config', $1, 'preview') ON CONFLICT (key) DO NOTHING", [JSON.stringify(config)]);
-    for (const p of (products ?? []) as any[]) {
-      await db.query("INSERT INTO products (id, client, brand, code, name, category, size, units, per_pallet, item) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING",
-        [p.id, p.client, p.brand ?? "", p.code, p.name, p.cat ?? "", p.size ?? "", p.units, p.perPallet, p.item]);
-    }
+    await addProducts(db, (products ?? []) as ProductRow[]);
   }
   return db;
 }
@@ -77,7 +75,7 @@ async function openTenantDb(id: string, fresh: boolean, config?: unknown, produc
 function start(): Engine {
   const e: Engine = { platform: null as unknown as Db, tenants: new Map(), ready: Promise.resolve() };
   e.ready = (async () => {
-    const pg = new PGlite(idb("platform"));
+    const pg = new PGlite(idb("platform"), { relaxedDurability: true });
     const c = conn(pg);
     if (!(await c.query("SELECT 1 FROM pg_roles WHERE rolname = 'wms_platform'")).rows.length) await c.query("CREATE ROLE wms_platform");
     await migrateDatabase(c, await migrations("platform"));

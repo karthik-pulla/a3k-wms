@@ -76,7 +76,7 @@ export default function ServerRoot() {
   }, [phase.kind]);
 
   let body: ReactNode;
-  if (phase.kind === "loading") body = <div className="auth-loading" role="status">Opening…</div>;
+  if (phase.kind === "loading") body = <Loading />;
   else if (phase.kind === "error") body = (
     <main className="auth-loading"><div className="glass crash-card"><h2>Can't open the warehouse</h2><p className="muted">{phase.message}</p><button className="btn primary" onClick={() => location.reload()}>Reload</button></div></main>
   );
@@ -237,6 +237,17 @@ function ServerNotes({ me }: { me: Me }) {
         <p key={s.endsAt + s.operator} className="server-note support"><b translate="no">{s.operator}</b> from the WMS team has {s.emergency ? "emergency " : ""}access until {new Date(s.endsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · <a className="link" href="#/warehouse/support">Manage</a></p>
       ))}
       {!hide && <p className="server-note">Stock, orders and messages aren't saved on the server yet: changes stay in this page until it's reloaded. <button className="link" onClick={() => setHide(true)}>OK</button></p>}
+    </div>
+  );
+}
+
+/** "Opening…"; in the preview, the first visit also builds the in-browser database, so say so after a moment */
+function Loading() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => { const t = window.setTimeout(() => setSlow(true), 2500); return () => window.clearTimeout(t); }, []);
+  return (
+    <div className="auth-loading" role="status">
+      {slow && import.meta.env.VITE_WMS_BACKEND === "preview" ? "Setting up the preview in this browser (first visit only)…" : "Opening…"}
     </div>
   );
 }

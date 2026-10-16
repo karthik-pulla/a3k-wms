@@ -202,7 +202,7 @@ export const TENANT_METHODS: Record<string, Method> = {
   },
   "tenant.products": async (_i, ctx) => {
     await actor(ctx);
-    const { rows } = await ctx.env.db.query("SELECT id, client, brand, code, name, category, size, units, per_pallet, item FROM products WHERE active ORDER BY client, code");
+    const { rows } = await ctx.env.db.query("SELECT id, client, brand, code, name, category, size, units, per_pallet, item FROM products WHERE active ORDER BY client, code, id");
     return ok(rows.map(r => ({ id: r.id, client: r.client, brand: r.brand, code: r.code, name: r.name, cat: r.category, size: r.size, units: r.units, perPallet: r.per_pallet, item: r.item })));
   },
 
