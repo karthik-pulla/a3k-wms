@@ -9,6 +9,8 @@ import type { Sql } from "./db.ts";
 import { ApiError, bad, bool, email as emailOf, forbidden, int, notFound, obj, str, strList, username as usernameOf } from "./errors.ts";
 import { inviteMail, type Mailer } from "./mail.ts";
 import { allows, cleanPermissions, effective, roleProblems, type Action, type BaseRole, type Permissions } from "../shared/permissions.ts";
+import { directory, pull, push, writeSystem, type SyncWho } from "./sync.ts";
+import { importProducts, importStock, saveSettings, setupStatus } from "./setup.ts";
 import { cleanProductText, productChanges, productEditProblems, PRODUCT_LIMITS, type ProductText } from "../shared/products.ts";
 import type { GrantView, InviteInfo, LinkResult, LogView, Me, PersonView, RequestView, RoleView, TenantPublic } from "../shared/api.ts";
 
@@ -68,6 +70,12 @@ function mayChange(a: Actor) {
   if (a.support && !a.support.canChange) throw new ApiError(403, "read-only", "This support session can look but not change anything");
 }
 
+/** Ends someone's sessions and retires the key their devices' saved data is encrypted with */
+async function endPersonSessions(env: AuthEnv, q: Sql, personId: string) {
+  await endSessions(env, q, personId);
+  await q.query("UPDATE people SET cache_key = NULL WHERE id = $1", [personId]);
+}
+
 async function log(ctx: TenantCtx, q: Sql, a: { actor: string; action: string; target?: string; detail?: Record<string, unknown> }) {
   await q.query("INSERT INTO security_log (actor, action, target, detail, ip) VALUES ($1, $2, $3, $4, $5)", [a.actor, a.action, a.target ?? null, JSON.stringify(a.detail ?? {}), ctx.meta.ip ?? null]);
 }
@@ -95,15 +103,28 @@ async function me(ctx: TenantCtx, a: Actor): Promise<Me> {
     support: a.support ? { operator: a.support.operator, canChange: a.support.canChange, endsAt: a.support.endsAt } : null,
     supportActive: rows.map(r => ({ operator: r.operator_name, endsAt: isoOrNull(r.ends_at)!, emergency: r.emergency })),
     tenant: publicOf(ctx),
+    cacheKey: p ? await cacheKeyOf(ctx.env.db, p.id) : null,
   };
 }
+
+/** The person's device key, made the first time it's asked for (and again after it's retired) */
+async function cacheKeyOf(db: Sql, personId: string): Promise<string> {
+  const cur = (await db.query("SELECT cache_key FROM people WHERE id = $1", [personId])).rows[0]?.cache_key;
+  if (cur) return cur;
+  const { rows } = await db.query("UPDATE people SET cache_key = coalesce(cache_key, $2) WHERE id = $1 RETURNING cache_key", [personId, randomToken()]);
+  return rows[0].cache_key;
+}
+
+/** Who's saving, as the sync rules need it */
+const syncWho = (a: Actor): SyncWho => ({ personId: a.person?.id ?? null, name: a.name, base: a.base, perms: a.perms, readOnly: !!a.support && !a.support.canChange, clients: a.person?.clients ?? null });
 const publicOf = (ctx: TenantCtx): TenantPublic => ({ id: ctx.tenant.id, name: ctx.tenant.name, appTitle: ctx.tenant.appTitle, mark: ctx.tenant.mark, languages: ctx.tenant.languages });
 
-async function personView(q: Sql, where: string, values: unknown[]): Promise<PersonView[]> {
+/** People as the Team page shows them; `at` is the server's clock (env.now), which decides whether a link has expired */
+async function personView(q: Sql, where: string, values: unknown[], at: string): Promise<PersonView[]> {
   const { rows } = await q.query(
     `SELECT p.id, p.name, p.username, p.email, p.role_id, r.name AS role_name, r.base, p.clients, p.groups, p.status, p.last_sign_in_at, p.created_at,
-            (SELECT i.kind FROM invites i WHERE i.person_id = p.id AND i.used_at IS NULL AND i.expires_at > now() ORDER BY i.created_at DESC LIMIT 1) AS link_pending
-       FROM people p JOIN roles r ON r.id = p.role_id ${where} ORDER BY lower(p.name)`, values);
+            (SELECT i.kind FROM invites i WHERE i.person_id = p.id AND i.used_at IS NULL AND i.expires_at > $${values.length + 1} ORDER BY i.created_at DESC LIMIT 1) AS link_pending
+       FROM people p JOIN roles r ON r.id = p.role_id ${where} ORDER BY lower(p.name)`, [...values, at]);
   return rows.map(r => ({
     id: r.id, name: r.name, username: r.username, email: r.email, roleId: r.role_id, roleName: r.role_name, base: r.base, clients: r.clients, groups: r.groups,
     status: r.status, linkPending: r.link_pending ?? null, lastSignInAt: isoOrNull(r.last_sign_in_at), createdAt: isoOrNull(r.created_at)!,
@@ -193,7 +214,7 @@ export const TENANT_METHODS: Record<string, Method> = {
   "auth.signOutEverywhere": async (_i, ctx) => {
     const a = await actor(ctx);
     if (!a.person) throw forbidden();
-    await ctx.env.db.tx(async q => { await endSessions(ctx.env, q, a.person!.id); await log(ctx, q, { actor: a.name, action: "signed out on every device" }); });
+    await ctx.env.db.tx(async q => { await endPersonSessions(ctx.env, q, a.person!.id); await log(ctx, q, { actor: a.name, action: "signed out on every device" }); });
     return { body: { ok: true }, session: "clear" };
   },
   "auth.confirm": async (i, ctx) => { const a = await actor(ctx); await confirmPassword(ctx.env, a.session, str(i.password, "Password", { max: 200 }), ctx.meta); return ok(); },
@@ -230,12 +251,40 @@ export const TENANT_METHODS: Record<string, Method> = {
       if (!productChanges(before, next)) return productView(cur);
       const { rows } = await q.query(`UPDATE products SET code = $2, name = $3, item = $4, updated_at = now(), updated_by = $5 WHERE id = $1 RETURNING ${PRODUCT_COLS}`, [id, next.code, next.name, next.item, a.name]);
       await q.query("INSERT INTO product_changes (product_id, changed_by, reason, before, after) VALUES ($1, $2, $3, $4, $5)", [id, a.name, reason, JSON.stringify(before), JSON.stringify(next)]);
+      // Every open device picks the new text up with its next catch-up
+      await writeSystem(q, [{ key: `product:${id}`, data: next }], a.name, "products.update");
       return productView(rows[0]);
     }));
   },
 
+  // ----- Setting the warehouse up: settings, products, opening stock (core/setup.ts). Owners only, password again. -----
+  "setup.status": async (_i, ctx) => { must(await actor(ctx), "manage-settings"); return ok(await setupStatus(ctx.env.db)); },
+  "setup.saveSettings": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-settings"); needConfirmed(ctx.env, a.session);
+    const r = await saveSettings(ctx.env.db, a.name, { config: i.config, logos: i.logos });
+    await log(ctx, ctx.env.db, { actor: a.name, action: "saved the warehouse settings", detail: { what: r.saved } });
+    return ok(r);
+  },
+  "setup.importProducts": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-settings"); needConfirmed(ctx.env, a.session);
+    const r = await importProducts(ctx.env.db, i.products);
+    await log(ctx, ctx.env.db, { actor: a.name, action: "imported products", detail: r });
+    return ok(r);
+  },
+  "setup.importStock": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-settings"); needConfirmed(ctx.env, a.session);
+    const r = await importStock(ctx.env.db, { id: a.person!.id, name: a.name }, { lines: i.lines, replace: i.replace });
+    await log(ctx, ctx.env.db, { actor: a.name, action: "loaded the opening stock", detail: r });
+    return ok(r);
+  },
+
+  // ----- Stock, orders, tasks, counts and messages (server/src/core/sync.ts) -----
+  "sync.push": async (i, ctx) => ok(await push(ctx.env.db, syncWho(await actor(ctx)), i)),
+  "sync.pull": async (i, ctx) => ok(await pull(ctx.env.db, syncWho(await actor(ctx)), typeof i.since === "number" ? i.since : -1)),
+  "people.directory": async (_i, ctx) => { await actor(ctx); return ok(await directory(ctx.env.db)); },
+
   // ----- People -----
-  "people.list": async (_i, ctx) => { must(await actor(ctx), "manage-people"); return ok(await personView(ctx.env.db, "", [])); },
+  "people.list": async (_i, ctx) => { must(await actor(ctx), "manage-people"); return ok(await personView(ctx.env.db, "", [], iso(ctx.env.now()))); },
 
   "people.invite": async (i, ctx) => {
     const a = await actor(ctx); must(a, "manage-people"); needConfirmed(ctx.env, a.session);
@@ -247,7 +296,7 @@ export const TENANT_METHODS: Record<string, Method> = {
         [user, str(i.name, "Name", { max: 80 }), emailOf(i.email), role.id, role.base === "owner" ? null : clientsOf(ctx, i.clients), groupsOf(ctx, i.groups), a.name]);
       const link = await makeLink(ctx, q, { personId: rows[0].id, kind: "invite", by: a.name });
       await log(ctx, q, { actor: a.name, action: "invited", target: user, detail: { role: role.id } });
-      return { person: (await personView(q, "WHERE p.id = $1", [rows[0].id]))[0], ...link };
+      return { person: (await personView(q, "WHERE p.id = $1", [rows[0].id], iso(ctx.env.now())))[0], ...link };
     }));
   },
 
@@ -270,7 +319,7 @@ export const TENANT_METHODS: Record<string, Method> = {
       if (i.email !== undefined) { await q.query("UPDATE people SET email = $2 WHERE id = $1", [id, emailOf(i.email)]); changes.email = true; }
       if (i.clients !== undefined) { await q.query("UPDATE people SET clients = $2 WHERE id = $1", [id, clientsOf(ctx, i.clients)]); changes.clients = i.clients; }
       if (i.groups !== undefined) { await q.query("UPDATE people SET groups = $2 WHERE id = $1", [id, groupsOf(ctx, i.groups)]); changes.groups = i.groups; }
-      const p = (await personView(q, "WHERE p.id = $1", [id]))[0];
+      const p = (await personView(q, "WHERE p.id = $1", [id], iso(ctx.env.now())))[0];
       if (Object.keys(changes).length) await log(ctx, q, { actor: a.name, action: "changed account", target: p.username, detail: changes });
       return p;
     }));
@@ -286,9 +335,9 @@ export const TENANT_METHODS: Record<string, Method> = {
       if (cur.base === "owner") await keepAnOwner(q, id);
       await q.query("UPDATE people SET status = 'disabled' WHERE id = $1", [id]);
       await q.query("UPDATE invites SET used_at = now() WHERE person_id = $1 AND used_at IS NULL", [id]);
-      await endSessions(ctx.env, q, id);
+      await endPersonSessions(ctx.env, q, id);
       await log(ctx, q, { actor: a.name, action: "turned off account", target: cur.username });
-      return (await personView(q, "WHERE p.id = $1", [id]))[0];
+      return (await personView(q, "WHERE p.id = $1", [id], iso(ctx.env.now())))[0];
     }));
   },
 
@@ -302,7 +351,7 @@ export const TENANT_METHODS: Record<string, Method> = {
       await q.query("UPDATE people SET status = $2, failed_count = 0, locked_until = NULL WHERE id = $1", [id, cur.ready ? "active" : "invited"]);
       const link = cur.ready ? null : await makeLink(ctx, q, { personId: id, kind: "invite", by: a.name });
       await log(ctx, q, { actor: a.name, action: "turned account back on", target: cur.username });
-      return { person: (await personView(q, "WHERE p.id = $1", [id]))[0], ...(link ?? {}) };
+      return { person: (await personView(q, "WHERE p.id = $1", [id], iso(ctx.env.now())))[0], ...(link ?? {}) };
     }));
   },
 
@@ -315,10 +364,10 @@ export const TENANT_METHODS: Record<string, Method> = {
       if (!cur || cur.status === "disabled") throw notFound();
       const invited = cur.status === "invited";
       if (!invited) await q.query("UPDATE people SET password_hash = NULL, totp_secret = NULL, totp_last_step = NULL, failed_count = 0, locked_until = NULL WHERE id = $1", [id]);
-      await endSessions(ctx.env, q, id);
+      await endPersonSessions(ctx.env, q, id);
       const link = await makeLink(ctx, q, { personId: id, kind: invited ? "invite" : "reset", by: a.name });
       await log(ctx, q, { actor: a.name, action: invited ? "sent a new invite" : "reset sign-in (password and authenticator)", target: cur.username });
-      return { person: (await personView(q, "WHERE p.id = $1", [id]))[0], ...link };
+      return { person: (await personView(q, "WHERE p.id = $1", [id], iso(ctx.env.now())))[0], ...link };
     }));
   },
 
@@ -399,7 +448,7 @@ export const TENANT_METHODS: Record<string, Method> = {
         [user, r.name, r.email, role.id, role.base === "owner" ? null : clientsOf(ctx, i.clients), groupsOf(ctx, i.groups), a.name])).rows[0];
       const link = await makeLink(ctx, q, { personId: p.id, kind: "invite", by: a.name });
       await log(ctx, q, { actor: a.name, action: "approved account request", target: user, detail: { role: role.id } });
-      return { person: (await personView(q, "WHERE p.id = $1", [p.id]))[0], ...link };
+      return { person: (await personView(q, "WHERE p.id = $1", [p.id], iso(ctx.env.now())))[0], ...link };
     }));
   },
 
@@ -500,7 +549,7 @@ export const tenantOps = {
         const cur = (await q.query("SELECT p.username, r.base FROM people p JOIN roles r ON r.id = p.role_id WHERE p.id = $1 FOR UPDATE OF p", [id])).rows[0];
         if (!cur || cur.base !== "owner") throw bad("That person isn't an owner");
         await q.query("UPDATE people SET password_hash = NULL, totp_secret = NULL, totp_last_step = NULL, failed_count = 0, locked_until = NULL, status = CASE WHEN status = 'disabled' THEN 'active' ELSE status END WHERE id = $1", [id]);
-        await endSessions(ctx.env, q, id);
+        await endPersonSessions(ctx.env, q, id);
       } else {
         const user = usernameOf(o.username);
         if ((await q.query("SELECT 1 FROM people WHERE username = $1", [user])).rows.length) throw new ApiError(409, "conflict", `The username ${user} is taken`);
@@ -509,7 +558,7 @@ export const tenantOps = {
       const status = (await q.query("SELECT status FROM people WHERE id = $1", [id])).rows[0].status;
       const link = await makeLink(ctx, q, { personId: id, kind: status === "invited" ? "invite" : "reset", by: o.by });
       await log(ctx, q, { actor: o.by, action: o.personId ? "restored an owner's access (WMS team)" : "invited an owner (WMS team)", target: (await q.query("SELECT username FROM people WHERE id = $1", [id])).rows[0].username });
-      return { person: (await personView(q, "WHERE p.id = $1", [id]))[0], ...link };
+      return { person: (await personView(q, "WHERE p.id = $1", [id], iso(ctx.env.now())))[0], ...link };
     });
   },
   async summary(ctx: TenantCtx) {
@@ -520,6 +569,6 @@ export const tenantOps = {
          FROM people p JOIN roles r ON r.id = p.role_id`)).rows[0];
     return { people: { active: r.active, invited: r.invited, owners: r.owners }, lastSignInAt: isoOrNull(r.last_sign_in), supportActive: r.support };
   },
-  async owners(ctx: TenantCtx): Promise<PersonView[]> { return personView(ctx.env.db, "WHERE r.base = 'owner'", []); },
+  async owners(ctx: TenantCtx): Promise<PersonView[]> { return personView(ctx.env.db, "WHERE r.base = 'owner'", [], iso(ctx.env.now())); },
 };
 

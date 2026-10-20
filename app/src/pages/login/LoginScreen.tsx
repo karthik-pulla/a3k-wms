@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { passwordProblems, passwordStrength } from "../../auth/crypto";
 import { LangSwitch } from "../../components/LangSwitch";
-import { requestAccount, signIn, type Session, type VaultData } from "../../auth/vault";
+import { createVault, requestAccount, signIn, type Session, type VaultData } from "../../auth/vault";
+import { sampleState } from "../../store/sample";
 import { tenant } from "../../tenant";
 
 const STRENGTH = ["Very weak", "Weak", "Fair", "Good", "Strong"];
@@ -16,6 +17,63 @@ export function LoginScreen({ message, onSignedIn }: { message?: string; onSigne
       <div className="login-card glass">
         <div className="login-brand"><span className="login-mark" aria-hidden="true" translate="no">{brand.mark}</span><div><h1 translate="no">{brand.appTitle}</h1><p className="muted small">Warehouse management</p></div></div>
         {mode === "signin" ? <SignIn message={message} onSignedIn={onSignedIn} onRequest={() => setMode("request")} /> : <RequestAccount onBack={() => setMode("signin")} />}
+      </div>
+      <LangSwitch className="login-lang" />
+      <p className="login-foot muted small">Your data is encrypted on this device and opens only after you sign in.</p>
+    </main>
+  );
+}
+
+/**
+ * A new device, outside the demo: the first person makes the owner account (there is no built-in password). It gets
+ * the admin's testing switcher; everyone else asks for an account and this owner approves them.
+ */
+export function SetUpDevice({ onDone }: { onDone: (s: Session, d: VaultData) => void }) {
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const problems = passwordProblems(pw, username);
+  const strength = passwordStrength(pw);
+  const userOk = /^[a-z0-9._-]{3,32}$/i.test(username.trim());
+  const ok = name.trim().length >= 2 && userOk && !problems.length && pw === pw2;
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ok || busy) return;
+    setBusy(true); setError(null);
+    try {
+      await createVault(sampleState, { username: username.trim(), password: pw, name: name.trim() });
+      const r = await signIn(username.trim(), pw, false);
+      if (r.ok) onDone(r.session, r.data); else setError("Set up, but signing in didn't work. Reload and sign in.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Couldn't set this device up."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <main className="login">
+      <div className="login-card glass">
+        <div className="login-brand"><span className="login-mark" aria-hidden="true" translate="no">{brand.mark}</span><div><h1 translate="no">{brand.appTitle}</h1><p className="muted small">Warehouse management</p></div></div>
+        <form className="login-form" onSubmit={submit} noValidate>
+          <h2>Set up this device</h2>
+          <p className="muted small">Nobody has used the WMS on this device yet. Make the owner account: you'll approve everyone else's account requests.</p>
+          <label className="field"><span>Your name</span><input className="input" autoComplete="name" value={name} onChange={e => setName(e.target.value)} autoFocus /></label>
+          <label className="field"><span>Username</span>
+            <input className={`input${username && !userOk ? " invalid" : ""}`} autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={e => setUsername(e.target.value)} aria-describedby="su-hint" />
+            <small id="su-hint" className="muted">3–32 letters, numbers, dots, dashes or underscores</small>
+          </label>
+          <label className="field"><span>Password</span>
+            <input className="input" type="password" autoComplete="new-password" value={pw} onChange={e => setPw(e.target.value)} aria-describedby="spw-hint" />
+            <span className="pw-meter" aria-hidden="true"><i className={`s${strength}`} style={{ width: `${(strength / 4) * 100}%` }} /></span>
+            <small id="spw-hint" className={problems.length && pw ? "warn" : "muted"}>{pw ? (problems.length ? `Needs ${problems.join(", ")}.` : `${STRENGTH[strength]} password.`) : "At least 12 characters. A short sentence works well."}</small>
+          </label>
+          <label className="field"><span>Password again</span>
+            <input className={`input${pw2 && pw !== pw2 ? " invalid" : ""}`} type="password" autoComplete="new-password" value={pw2} onChange={e => setPw2(e.target.value)} />
+            {pw2 && pw !== pw2 && <small className="warn">The passwords don't match.</small>}
+          </label>
+          {error && <p className="note warn" role="alert">{error}</p>}
+          <button className="btn primary big" disabled={!ok || busy}>{busy ? "Setting up…" : "Set up and sign in"}</button>
+        </form>
       </div>
       <LangSwitch className="login-lang" />
       <p className="login-foot muted small">Your data is encrypted on this device and opens only after you sign in.</p>

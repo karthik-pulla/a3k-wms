@@ -48,3 +48,9 @@ export const opsApi: Call = async (method, input = {}) => {
   if (import.meta.env.VITE_WMS_BACKEND === "preview") return (await import("./preview")).previewOps(method, input);
   return http("/ops/api", method, input);
 };
+
+/** The product's public page (landing.html at <domain>): its name, and "Book a visit" */
+export const siteApi: Call = async (method, input = {}) => {
+  if (import.meta.env.VITE_WMS_BACKEND === "preview") return (await import("./preview")).previewSite(method, input);
+  return http("/api", method, input);
+};

@@ -18,6 +18,7 @@ const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; 
  * SAMPLE: the 27 Sep sheet stock has no arrival dates, so it gets a made-up one (stable per slot and product).
  */
 export function arrivalDate(state: State, code: string, line: StockLine): string {
+  if (line.arrived) return line.arrived;
   if (line.shipmentId) {
     const s = state.shipments.find(x => x.id === line.shipmentId);
     const at = s?.receivedAt ?? s?.confirmedAt;

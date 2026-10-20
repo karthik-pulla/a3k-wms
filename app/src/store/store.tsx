@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useSyncExternalStore, type ReactNode } from "react";
+import type { SyncEngine } from "../sync/engine";
 import { sampleState, withOutbound, withSampleDates, withSampleWork } from "./sample";
 import type { AuditEntry, Conversation, CountEntry, CountSession, InboxMail, Message, Movement, PickStrategy, Presence, ReturnOutcome, ReturnRequest, Shipment, State, StockLine, StoreOrder, Task, User } from "./types";
 import { RECEIVING, isOpen, taskId } from "./tasks";
@@ -63,7 +64,10 @@ type Action =
   | { type: "chat/rename"; userId: string; name: string }
   | { type: "chat/escalated"; ids: string[]; at: string };
 
-const now = () => new Date().toISOString();
+// The time a change was made: from the action (so a change saved later, after being offline, keeps its real time,
+// and every device working it out again gets the same answer), else now
+let clock: string | undefined;
+const now = () => clock ?? new Date().toISOString();
 
 function reducer(state: State, a: Action): State {
   const log = (m: Omit<Movement, "id" | "at">[]): Movement[] =>
@@ -349,16 +353,27 @@ function withRoles(s: State): State {
 
 /** Who's making changes (the signed-in account), added to every action so the change log can say who did it */
 export interface Actor { id: string; name: string }
-type Logged = Action & { actor?: Actor };
+/** An action as dispatched: who, and when it was made */
+export type Logged = Action & { actor?: Actor; at?: string };
+export type { Action as StoreAction };
 
-/** Every change is applied, then recorded in the change log with who and when */
-function root(state: State, a: Logged): State {
-  const next = reducer(state, a);
-  if (next === state || !a.actor) return next;
-  const d = describe(state, a, next);
-  if (!d) return next;
-  const entry: AuditEntry = { id: `A${(state.audit?.length ?? 0) + 1}-${Date.now().toString(36)}`, at: now(), byId: a.actor.id, by: a.actor.name, ...d };
-  return { ...next, audit: [entry, ...(next.audit ?? [])].slice(0, 20000) };
+/**
+ * Every change is applied, then recorded in the change log with who and when. Pure for a given action (its `at`
+ * stands in for the clock), so the server sync (app/src/sync/) can work a change out again on newer data.
+ */
+export function root(state: State, a: Logged, opts: { keepAllLog?: boolean } = {}): State {
+  clock = a.at;
+  try {
+    const next = reducer(state, a);
+    if (next === state || !a.actor) return next;
+    const d = describe(state, a, next);
+    if (!d) return next;
+    const at = now();
+    const entry: AuditEntry = { id: `A${(state.audit?.length ?? 0) + 1}-${Date.parse(at).toString(36)}`, at, byId: a.actor.id, by: a.actor.name, ...d };
+    const audit = [entry, ...(next.audit ?? [])];
+    // On this device the log is capped; on the server it's never cut (and never shrinks)
+    return { ...next, audit: opts.keepAllLog ? audit : audit.slice(0, 20000) };
+  } finally { clock = undefined; }
 }
 
 const Ctx = createContext<{ state: State; dispatch: (a: Action) => void; setActor: (a: Actor) => void } | null>(null);
@@ -368,16 +383,30 @@ const Ctx = createContext<{ state: State; dispatch: (a: Action) => void; setActo
  * encrypted and saved (see auth/AuthGate); nothing is written to the browser unencrypted.
  */
 export function StoreProvider({ initial, onChange, children }: { initial: State | null; onChange: (s: State) => void; children: ReactNode }) {
-  const [state, raw] = useReducer(root, initial, migrate);
+  const [state, raw] = useReducer((s: State, a: Logged) => root(s, a), initial, migrate);
   // Before anything below renders, so every screen reads the edited codes and names
   applyProductEdits(state.productEdits);
   const actor = useRef<Actor | undefined>(undefined);
-  const dispatch = useCallback((a: Action) => raw({ ...a, actor: actor.current }), []);
+  const dispatch = useCallback((a: Action) => raw({ ...a, actor: actor.current, at: new Date().toISOString() }), []);
   const setActor = useCallback((a: Actor) => { actor.current = a; }, []);
   useEffect(() => { onChange(state); }, [state, onChange]);
   const value = useMemo(() => ({ state, dispatch, setActor }), [state, dispatch, setActor]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
+
+/** The same store, kept in step with the server by a SyncEngine (app/src/sync/engine.ts) instead of the vault */
+export function SyncStoreProvider({ engine, children }: { engine: SyncEngine; children: ReactNode }) {
+  const state = useSyncExternalStore(engine.subscribe, engine.getState);
+  applyProductEdits(state.productEdits);
+  const actor = useRef<Actor | undefined>(undefined);
+  const dispatch = useCallback((a: Action) => engine.dispatch({ ...a, actor: actor.current, at: new Date().toISOString() }), [engine]);
+  const setActor = useCallback((a: Actor) => { actor.current = a; }, []);
+  const value = useMemo(() => ({ state, dispatch, setActor }), [state, dispatch, setActor]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** The app's logic as the sync engine needs it: the whole change log kept (the server never shortens it) */
+export const syncReduce = (s: State, a: Logged) => root(s, a, { keepAllLog: true });
 
 export function useStore() {
   const c = useContext(Ctx);

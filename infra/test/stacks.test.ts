@@ -112,3 +112,46 @@ test("a release must be named; the stage must be staging or prod", () => {
   assert.throws(() => settingsFor("staging", () => undefined), /release/);
   assert.throws(() => settingsFor("dev", () => "x"), /stage/);
 });
+
+test("every night, each warehouse is backed up on its own; old backups go after 35 days; a failed night emails the team", () => {
+  data.hasResourceProperties("AWS::Events::Rule", { ScheduleExpression: "cron(0 8 * * ? *)", State: "ENABLED" });
+  data.hasResourceProperties("AWS::ECS::TaskDefinition", { ContainerDefinitions: [Match.objectLike({ Command: ["node", "dist/src/ops/backup.js"] })] });
+  data.hasResourceProperties("AWS::S3::Bucket", { LifecycleConfiguration: { Rules: Match.arrayWith([Match.objectLike({ Id: "backups", ExpirationInDays: 35, TagFilters: [{ Key: "wms-kind", Value: "backup" }] })]) } });
+  data.hasResourceProperties("AWS::Events::Rule", { EventPattern: Match.objectLike({ "detail-type": ["ECS Task State Change"], detail: Match.objectLike({ lastStatus: ["STOPPED"] }) }) });
+  // The backup may write backups only, and encrypt only with the warehouses' own keys and the platform's
+  const policies = JSON.stringify(data.findResources("AWS::IAM::Policy", { Properties: { Roles: [{ Ref: Match.stringLikeRegexp("BackupRole") }] } }));
+  assert.match(policies, /tenants\/\*\/backups\/\*/);
+  assert.match(policies, /alias\/wms\/staging\/tenant\/\*/);
+  assert.doesNotMatch(policies, /s3:GetObject|s3:DeleteObject/);
+  // No NAS user unless one is asked for
+  data.resourceCountIs("AWS::IAM::User", 0);
+});
+
+test("a warehouse's NAS user may read that warehouse's backups and nothing else", () => {
+  const app = new App();
+  const s = settingsFor("prod", k => ({ release: "test123", nasTenants: "a3k" } as Record<string, string>)[k]);
+  const t = Template.fromStack(new DataStack(app, "DataNas", s, { env: { account: "111111111111", region: "us-east-1" } }));
+  t.resourceCountIs("AWS::IAM::User", 1);
+  const policy = JSON.stringify(t.findResources("AWS::IAM::Policy", { Properties: { Users: [{ Ref: Match.stringLikeRegexp("Nasa3k") }] } }));
+  assert.match(policy, /tenants\/a3k\/backups\/\*/);
+  assert.match(policy, /alias\/wms\/prod\/tenant\/a3k"/);
+  assert.doesNotMatch(policy, /s3:PutObject|s3:DeleteObject|tenants\/\*/);
+});
+
+test("with a domain, order emails come in through SES to a queue the API reads; without one, nothing is set up", () => {
+  data.resourceCountIs("AWS::SES::ReceiptRuleSet", 0);
+  const app = new App();
+  const s = settingsFor("staging", k => ({ release: "test123", domain: "wms.example" } as Record<string, string>)[k]);
+  const env = { account: "111111111111", region: "us-east-1" };
+  const d = new DataStack(app, "DataMail", s, { env });
+  const a = Template.fromStack(new ApiStack(app, "ApiMail", s, d, { env }));
+  const t = Template.fromStack(d);
+  t.hasResourceProperties("AWS::SES::ReceiptRule", { Rule: Match.objectLike({ Recipients: ["orders.wms.example"], ScanEnabled: true, Actions: [Match.objectLike({ S3Action: Match.objectLike({ ObjectKeyPrefix: "inbound/" }) })] }) });
+  t.hasResourceProperties("AWS::SQS::Queue", { RedrivePolicy: Match.objectLike({ maxReceiveCount: 5 }) });
+  t.hasResourceProperties("AWS::SNS::Subscription", { Protocol: "sqs", RawMessageDelivery: true });
+  const apiEnv = JSON.stringify(a.findResources("AWS::ECS::TaskDefinition"));
+  assert.match(apiEnv, /"ORDERS_DOMAIN","Value":"orders\.wms\.example"/);
+  assert.match(apiEnv, /INBOUND_QUEUE_URL/);
+  const apiPolicy = JSON.stringify(a.findResources("AWS::IAM::Policy"));
+  assert.match(apiPolicy, /inbound\/\*/);
+});

@@ -10,6 +10,7 @@ import { setServerTenant, fetchSeed, tenantId } from "../tenant";
 import type { Me, TenantPublic } from "../../../server/src/shared/api.ts";
 import { CodeInput, InviteFlow, message } from "./authParts";
 import type { ServerStart } from "../App";
+import type { User } from "../store/types";
 // Preview only; a real build leaves it out
 const PreviewTools = import.meta.env.VITE_WMS_BACKEND === "preview" ? lazy(() => import("./PreviewTools").then(m => ({ default: m.PreviewTools }))) : null;
 import { useAppearance, useSettings } from "../settings";
@@ -38,14 +39,45 @@ export default function ServerRoot() {
     if (!config) throw new Error("This warehouse has no settings yet. The WMS team sets them up during onboarding.");
     setServerTenant({ id: me.tenant.id || tenantId(), config, products, logos: logos ?? {}, seed });
     // Loaded only now: these read the settings when they load
-    const { sampleState, emptyState } = await import("../store/sample");
+    const [{ sampleState: rawSample, emptyState: rawEmpty }, { SyncEngine }, { idbStorage }, { syncReduce, migrate }, { blankState, diff }, { deviceId }, { groupsFor }] = await Promise.all([
+      import("../store/sample"), import("../sync/engine"), import("../sync/idb"), import("../store/store"), import("../sync/entities"), import("../sync/context"), import("../auth/accountUser"),
+    ]);
+    // Brought up to today's format the way saved data is (tasks, logs and counts lists)
+    const sampleState = () => migrate(rawSample()), emptyState = () => migrate(rawEmpty());
+    // The preview's warehouse gets the sample deliveries, orders, stock and messages once, as if they'd been saved
+    if (import.meta.env.VITE_WMS_BACKEND === "preview" && seed) {
+      await (await import("./preview")).previewSeed(() => diff(blankState(emptyState()), sampleState()));
+    }
+    const tid = me.tenant.id || tenantId();
+    const engine = new SyncEngine({
+      call: (method, input) => api(method, input), reduce: (st, a) => syncReduce(st, a as Parameters<typeof syncReduce>[1]), base: emptyState(), storage: idbStorage(),
+      storageKey: `${tid}:${me.person.id}`, cacheKey: me.cacheKey, deviceId: deviceId(),
+      visible: () => !document.hidden,
+      onSignedOut: () => setPhase({ kind: "signin", note: "You were signed out. Sign in again to carry on." }),
+    });
+    // Everyone in the warehouse, for Messages and names (the preview adds its sample people)
+    const people = async () => {
+      const list = await api<{ id: string; name: string; role: User["role"]; roleName: string; groups: string[]; clients: string[] | null }[]>("people.directory").catch(() => null);
+      if (!list) return;
+      const users: User[] = list.map(p => ({ id: p.id, name: p.name, role: p.role, roleName: p.roleName, groups: [...new Set([...groupsFor(p.role), ...p.groups])] as User["groups"], ...(p.clients ? { clients: p.clients } : {}) }));
+      const extra = seed ? sampleState().chat.users.filter(u => !users.some(x => x.id === u.id)) : [];
+      engine.setLocal(st => ({ ...st, chat: { ...st.chat, users: [...users, ...extra] } }));
+    };
+    // Development only: the engine in the console (window.__wmsSync), for looking at what's waiting
+    if (import.meta.env.DEV) (window as unknown as { __wmsSync: unknown }).__wmsSync = engine;
+    await Promise.all([engine.open(), people()]);
+    window.setInterval(() => { void people(); }, 5 * 60_000);
+    // A phone may close the page once it's in the background: save the device copy first
+    document.addEventListener("visibilitychange", () => { if (document.hidden) void engine.flush(); else void engine.pullNow(); });
     const identity: Identity = {
       kind: "server", account: serverAccount(me), me, securityLog: [],
-      signOut: async (why?: string) => { await api("auth.signOut").catch(() => {}); setPhase({ kind: "signin", note: why }); },
+      signOut: async (why?: string) => { engine.stop(); await api("auth.signOut").catch(() => {}); setPhase({ kind: "signin", note: why }); },
     };
-    // Stock, orders and messages aren't on the server yet: the preview shows its sample data, a real warehouse starts empty
-    setPhase({ kind: "open", me, start: { identity, initial: seed ? sampleState() : emptyState() } });
+    setPhase({ kind: "open", me, start: { identity, engine } });
   }, []);
+
+  // Opening the warehouse failed after signing in: say so instead of staying on the sign-in card
+  const failed = useCallback((e: unknown) => setPhase({ kind: "error", message: e instanceof Error ? e.message : "Couldn't open the warehouse" }), []);
 
   const begin = useCallback(async () => {
     const [first, token] = route();
@@ -91,8 +123,8 @@ export default function ServerRoot() {
       <Background moving={settings.movingBackground} />
       <AuthCard pub={pub}>
         {phase.kind === "invite"
-          ? <InviteFlow token={phase.token} pub={pub} onDone={me => { window.location.hash = "#/"; void open(me); }} />
-          : <SignInFlow note={phase.note} onSignedIn={me => void open(me)} />}
+          ? <InviteFlow token={phase.token} pub={pub} onDone={me => { window.location.hash = "#/"; void open(me).catch(failed); }} />
+          : <SignInFlow note={phase.note} onSignedIn={me => void open(me).catch(failed)} />}
       </AuthCard>
     </>
   );
@@ -226,9 +258,8 @@ function RequestForm({ onBack }: { onBack: () => void }) {
   );
 }
 
-/** Things the server knows that the signed-in person should see: support access, and that data isn't on the server yet */
+/** Things the server knows that the signed-in person should see: support access */
 function ServerNotes({ me }: { me: Me }) {
-  const [hide, setHide] = useState(false);
   const owner = me.can["manage-support"];
   return (
     <div className="server-notes" role="status">
@@ -236,7 +267,6 @@ function ServerNotes({ me }: { me: Me }) {
       {!me.support && owner && me.supportActive.map(s => (
         <p key={s.endsAt + s.operator} className="server-note support"><b translate="no">{s.operator}</b> from the WMS team has {s.emergency ? "emergency " : ""}access until {new Date(s.endsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · <a className="link" href="#/warehouse/support">Manage</a></p>
       ))}
-      {!hide && <p className="server-note">Stock, orders and messages aren't saved on the server yet: changes stay in this page until it's reloaded. <button className="link" onClick={() => setHide(true)}>OK</button></p>}
     </div>
   );
 }

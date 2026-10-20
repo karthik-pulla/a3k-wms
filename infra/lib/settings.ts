@@ -17,13 +17,21 @@ export interface Settings {
   domain?: string;
   /** A verified SES sender for invite emails, e.g. no-reply@<domain>; without one, links are copied by hand */
   mailFrom?: string;
+  /** Warehouses whose own NAS copies their nightly backups (an IAM user that may read only those), e.g. ["a3k"] */
+  nasTenants: string[];
+  /** The product's name on its public page (not chosen yet; "WMS" until it is) */
+  productName?: string;
+  /** Who gets an email for each "Book a visit" request (defaults to alertEmail) */
+  visitEmail?: string;
 }
 
 export function settingsFor(stage: string, ctx: (key: string) => string | undefined): Settings {
   if (stage !== "staging" && stage !== "prod") throw new Error(`-c stage=staging or -c stage=prod (got "${stage}")`);
   const release = ctx("release");
   if (!release) throw new Error("-c release=<git commit> is required: it's the server image tag to run");
-  const base = { stage, release, certificateArn: ctx("certificateArn"), alertEmail: ctx("alertEmail"), domain: ctx("domain"), mailFrom: ctx("mailFrom"), perTenantMax: 3, connectionBudget: 30 } as const;
+  const base = { stage, release, certificateArn: ctx("certificateArn"), alertEmail: ctx("alertEmail"), domain: ctx("domain"), mailFrom: ctx("mailFrom"),
+    productName: ctx("productName"), visitEmail: ctx("visitEmail") ?? ctx("alertEmail"),
+    nasTenants: (ctx("nasTenants") ?? "").split(",").map(x => x.trim()).filter(Boolean), perTenantMax: 3, connectionBudget: 30 } as const;
   return stage === "prod"
     ? { ...base, dbInstanceType: "m7g.large", apiTasks: { min: 2, max: 6 } }
     : { ...base, dbInstanceType: "t4g.medium", apiTasks: { min: 1, max: 2 } };

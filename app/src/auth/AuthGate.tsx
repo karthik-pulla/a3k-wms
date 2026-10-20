@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { sampleState } from "../store/sample";
 import type { State } from "../store/types";
-import { clearSession, ensureVault, persist, restore, sessionLimits, touchSession, type Account, type Session, type VaultData } from "./vault";
-import { LoginScreen } from "../pages/login/LoginScreen";
+import { clearSession, ensureVault, needsSetup, persist, restore, sessionLimits, touchSession, type Account, type Session, type VaultData } from "./vault";
+import { LoginScreen, SetUpDevice } from "../pages/login/LoginScreen";
 import { isDemo, startOver } from "../utils/freshLoad";
 import { t } from "../i18n";
 import { IdentityContext, type Identity } from "./identity";
@@ -22,7 +22,7 @@ export function useAuth(): Auth {
   return a;
 }
 
-type Phase = { kind: "loading" } | { kind: "locked"; message?: string } | { kind: "open"; session: Session; data: VaultData };
+type Phase = { kind: "loading" } | { kind: "setup" } | { kind: "locked"; message?: string } | { kind: "open"; session: Session; data: VaultData };
 
 /**
  * Nothing of the app shows until someone signs in. Signing in opens the encrypted vault; changes are encrypted and
@@ -38,6 +38,8 @@ export function AuthGate({ children }: { children: (initial: State | null, onCha
     (async () => {
       try {
         await ensureVault(sampleState);
+        // A new device (outside the demo): the first person makes the owner account
+        if (needsSetup()) { setPhase({ kind: "setup" }); return; }
         const r = await restore();
         if (r) { dataRef.current = r.data; sessionRef.current = r.session; setPhase({ kind: "open", ...r }); }
         else setPhase({ kind: "locked" });
@@ -98,6 +100,7 @@ export function AuthGate({ children }: { children: (initial: State | null, onCha
   }, [phase, run, signOut]);
 
   if (phase.kind === "loading") return <Opening />;
+  if (phase.kind === "setup") return <SetUpDevice onDone={(session, data) => { dataRef.current = data; sessionRef.current = session; setPhase({ kind: "open", session, data }); }} />;
   if (phase.kind === "locked" || !auth) {
     return <LoginScreen message={phase.kind === "locked" ? phase.message : undefined} onSignedIn={(session, data) => { dataRef.current = data; sessionRef.current = session; setPhase({ kind: "open", session, data }); }} />;
   }

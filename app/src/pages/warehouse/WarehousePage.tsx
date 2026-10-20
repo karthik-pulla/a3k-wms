@@ -13,6 +13,7 @@ import { tenant } from "../../tenant";
 import { BASE_ROLES, SWITCHES, effective, type Action, type BaseRole, type Permissions } from "../../../../server/src/shared/permissions.ts";
 import type { GrantView, LinkResult, LogView, PersonView, RequestView, RoleView } from "../../../../server/src/shared/api.ts";
 import { ConfirmProvider, LinkPanel, useAction, useApiData } from "./useApi";
+import { DataTab } from "./DataTab";
 
 const when = (iso: string | null) => {
   if (!iso) return "never";
@@ -35,14 +36,14 @@ export function WarehousePage({ parts }: { parts: string[] }) {
       <main className="section warehouse">
         <header className="section-head">
           <h1>Team</h1>
-          <p className="crumb">{tenant().config.branding.appTitle} · {{ people: "People", roles: "Roles and switches", requests: "Account requests", support: "Support access", log: "Security log" }[tab] ?? "People"}</p>
+          <p className="crumb">{tenant().config.branding.appTitle} · {{ people: "People", roles: "Roles and switches", requests: "Account requests", support: "Support access", log: "Security log", setup: "Setup" }[tab] ?? "People"}</p>
         </header>
         <div className="team-body">
-          {tab === "roles" ? <RolesTab /> : tab === "requests" ? <RequestsTab reload={requests.reload} /> : tab === "support" ? <SupportTab data={support} /> : tab === "log" ? <LogTab /> : <PeopleTab />}
+          {tab === "setup" ? <DataTab /> : tab === "roles" ? <RolesTab /> : tab === "requests" ? <RequestsTab reload={requests.reload} /> : tab === "support" ? <SupportTab data={support} /> : tab === "log" ? <LogTab /> : <PeopleTab />}
         </div>
         <SubTabs base="warehouse" current={tab} tabs={[
           { id: "people", label: "People" }, { id: "roles", label: "Roles" },
-          { id: "requests", label: "Requests", badge: requests.data?.length ?? 0 }, { id: "support", label: "Support", badge: waiting }, { id: "log", label: "Security log" },
+          { id: "requests", label: "Requests", badge: requests.data?.length ?? 0 }, { id: "support", label: "Support", badge: waiting }, { id: "log", label: "Security log" }, { id: "setup", label: "Setup" },
         ]} />
       </main>
     </ConfirmProvider>

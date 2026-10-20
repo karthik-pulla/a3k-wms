@@ -46,6 +46,8 @@ export interface StockLine {
   lot?: string;
   bestBefore?: string;
   shipmentId?: string;
+  /** When it arrived, for stock that didn't come in through a delivery in the WMS (the opening stock), YYYY-MM-DD */
+  arrived?: string;
 }
 
 export type ReturnOutcome = "restock" | "writeoff" | "brand";
@@ -146,7 +148,8 @@ export interface InboxMail {
   subject: string;
   receivedAt: string;
   body: string;
-  attachments: { name: string; text: string }[];
+  /** text: what was read from the file; pdf: the PDF itself (base64) when it came in by email and hasn't been read yet */
+  attachments: { name: string; text: string; pdf?: string }[];
   status: "new" | "drafted" | "ignored";
   orderId?: string;
   sample?: boolean;

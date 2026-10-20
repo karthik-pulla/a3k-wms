@@ -1,6 +1,6 @@
 # The WMS server image, built from the repository root (docker build -f server/Dockerfile .) by the deploy workflow
 # (.github/workflows/deploy-aws.yml), and run on ECS Fargate: the API and the app (default command), the migration
-# loop, tenant creation and the first console account (one-off tasks with another command).
+# loop, tenant creation, the first console account and the nightly backup (one-off tasks with another command).
 
 # 1. The app and the ops console, built to talk to the server (no warehouse data in it)
 FROM node:22-alpine AS app
@@ -34,6 +34,8 @@ ENV NODE_ENV=production
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-global-bundle.pem
 RUN chmod 644 /app/rds-global-bundle.pem
 ENV NODE_EXTRA_CA_CERTS=/app/rds-global-bundle.pem
+# pg_dump for the nightly backup (src/ops/backup.ts): the same major version as the database (PostgreSQL 17)
+RUN apk add --no-cache postgresql17-client
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=server /src/server/dist/src dist/src

@@ -13,6 +13,7 @@ import { ToastProvider, useToast } from "../components/Toast";
 import { useAppearance, useSettings } from "../settings";
 import { initials } from "../auth/accountUser";
 import { ApiProvider, ConfirmProvider, LinkPanel, useAction, useApiData } from "../pages/warehouse/useApi";
+import type { VisitView } from "../../../server/src/core/site.ts";
 import { ONBOARDING_STEPS, type GrantView, type LinkResult, type OperatorMe, type PersonView, type TenantSummary } from "../../../server/src/shared/api.ts";
 
 const preview = BACKEND === "preview";
@@ -111,6 +112,7 @@ function OpsSignIn({ note, onSignedIn }: { note?: string; onSignedIn: (me: Opera
 const PAGES = [
   { id: "warehouses", label: "Warehouses" },
   { id: "team", label: "Team" },
+  { id: "visits", label: "Visits" },
   { id: "activity", label: "Activity" },
   { id: "errors", label: "Errors" },
 ] as const;
@@ -125,7 +127,7 @@ function Shell({ me, onSignOut }: { me: OperatorMe; onSignOut: () => void }) {
         <div className="ops-me"><span className="avatar" aria-hidden="true">{initials(me.name)}</span><span><b translate="no">{me.name}</b><small className="muted block" translate="no">@{me.username}</small></span><button className="link" onClick={onSignOut}>Sign out</button></div>
       </nav>
       <main className="ops-main">
-        {page === "team" ? <TeamPage me={me} /> : page === "activity" ? <ActivityPage /> : page === "errors" ? <ErrorsPage /> : page === "new" ? <NewWarehouse /> : <WarehousesPage open={page === "warehouses" ? id : undefined} />}
+        {page === "visits" ? <VisitsPage /> : page === "team" ? <TeamPage me={me} /> : page === "activity" ? <ActivityPage /> : page === "errors" ? <ErrorsPage /> : page === "new" ? <NewWarehouse /> : <WarehousesPage open={page === "warehouses" ? id : undefined} />}
       </main>
     </div>
   );
@@ -440,6 +442,51 @@ function TeamPage({ me }: { me: OperatorMe }) {
           )}
         </section>
       </div>
+    </>
+  );
+}
+
+/** "Book a visit" requests from the public page (server: core/site.ts) */
+function VisitsPage() {
+  const visits = useApiData<VisitView[]>("visits.list");
+  const act = useAction();
+  const toast = useToast();
+  const [open, setOpen] = useState<number | null>(null);
+  const [draft, setDraft] = useState<{ status: VisitView["status"]; notes: string }>({ status: "new", notes: "" });
+  const save = async (id: number) => {
+    const r = await act("visits.update", { id, ...draft });
+    if (!r.ok) { toast(r.error); return; }
+    setOpen(null); await visits.reload();
+  };
+  const STATUS: Record<VisitView["status"], string> = { new: "New", contacted: "Contacted", booked: "Visit booked", closed: "Closed" };
+  return (
+    <>
+      <header className="ops-head"><div><h1>Visits</h1><p className="muted">Requests from the public page's "Book a visit". After the visit and the contract, create the warehouse under Warehouses.</p></div></header>
+      <section className="panel glass">
+        {visits.data && !visits.data.length ? <p className="muted">No requests yet.</p> : (
+          <div className="table-wrap"><table className="lines log-table">
+            <thead><tr><th>When</th><th>Who</th><th>Where and size</th><th>Status</th></tr></thead>
+            <tbody>{(visits.data ?? []).map(v => (
+              <tr key={v.id} className={v.status === "new" ? "warn" : undefined} onClick={() => { setOpen(open === v.id ? null : v.id); setDraft({ status: v.status, notes: v.notes }); }} tabIndex={0}>
+                <td className="muted nowrap">{new Date(v.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</td>
+                <td translate="no"><b>{v.company}</b><br />{v.name} · <a className="link" href={`mailto:${v.email}`} onClick={e => e.stopPropagation()}>{v.email}</a>{v.phone ? ` · ${v.phone}` : ""}
+                  {open === v.id && (
+                    <div className="visit-detail" onClick={e => e.stopPropagation()}>
+                      {v.when && <p className="small">When suits: {v.when}</p>}
+                      {v.message && <p className="small visit-message">{v.message}</p>}
+                      <label className="field"><span>Status</span><select className="input" value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value as VisitView["status"] })}>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+                      <label className="field"><span>Notes</span><textarea className="input" rows={3} value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })} /></label>
+                      <div className="btns"><button className="btn small" onClick={() => setOpen(null)}>Cancel</button><button className="btn small primary" onClick={() => void save(v.id)}>Save</button></div>
+                    </div>
+                  )}
+                </td>
+                <td translate="no">{[v.location, v.size].filter(Boolean).join(" · ") || "—"}</td>
+                <td>{STATUS[v.status]}{v.updatedBy ? <span className="muted small"><br />{v.updatedBy}</span> : null}</td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        )}
+      </section>
     </>
   );
 }

@@ -8,11 +8,16 @@ import * as cwActions from "aws-cdk-lib/aws-cloudwatch-actions";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as ecs from "aws-cdk-lib/aws-ecs";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as kms from "aws-cdk-lib/aws-kms";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as s3 from "aws-cdk-lib/aws-s3";
+import * as ses from "aws-cdk-lib/aws-ses";
+import * as sesActions from "aws-cdk-lib/aws-ses-actions";
+import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
@@ -33,6 +38,8 @@ export class DataStack extends Stack {
   readonly opsSg: ec2.SecurityGroup;
   /** The server's app key: seals authenticator secrets in every database */
   readonly appKey: secretsmanager.Secret;
+  /** Order emails waiting to be put in their warehouse's inbox (only with a domain) */
+  readonly inboundQueue?: sqs.Queue;
 
   constructor(scope: Construct, id: string, s: Settings, props?: StackProps) {
     super(scope, id, props);
@@ -143,7 +150,13 @@ export class DataStack extends Stack {
       encryption: s3.BucketEncryption.KMS, encryptionKey: this.platformKey, bucketKeyEnabled: true,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL, enforceSSL: true, versioned: true,
       objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
-      lifecycleRules: [{ noncurrentVersionExpiration: Duration.days(30) }],
+      lifecycleRules: [
+        { noncurrentVersionExpiration: Duration.days(30) },
+        // Nightly backups (server/src/ops/backup.ts) are kept 35 days
+        { id: "backups", tagFilters: { "wms-kind": "backup" }, expiration: Duration.days(35) },
+        // Order emails as SES received them: deleted once delivered; anything stuck goes after a week
+        { id: "inbound", prefix: "inbound/", expiration: Duration.days(7) },
+      ],
       removalPolicy: keep, autoDeleteObjects: !prod,
     });
 
@@ -185,10 +198,81 @@ export class DataStack extends Stack {
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "migrate", logRetention: logs.RetentionDays.ONE_YEAR }),
     });
 
+    // ---------- The nightly backup: every warehouse dumped on its own, with its own key (server/src/ops/backup.ts) ----------
+    const backupRole = new iam.Role(this, "BackupRole", { assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"), description: "Nightly backup of every database" });
+    db.secret!.grantRead(backupRole);
+    backupRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["s3:PutObject", "s3:PutObjectTagging"],
+      resources: [this.files.arnForObjects("tenants/*/backups/*"), this.files.arnForObjects("platform/backups/*")],
+    }));
+    // Encrypting with each warehouse's own key (made when the warehouse is created, alias wms/<stage>/tenant/<id>)
+    backupRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["kms:GenerateDataKey", "kms:Encrypt"], resources: ["*"],
+      conditions: { "ForAnyValue:StringLike": { "kms:ResourceAliases": `alias/wms/${s.stage}/tenant/*` } },
+    }));
+    this.platformKey.grantEncrypt(backupRole);
+    const backup = new ecs.FargateTaskDefinition(this, "BackupTask", { cpu: 512, memoryLimitMiB: 1024, ephemeralStorageGiB: 50, taskRole: backupRole });
+    backup.addContainer("backup", {
+      image: ecs.ContainerImage.fromEcrRepository(this.repo, s.release),
+      command: ["node", "dist/src/ops/backup.js"],
+      environment: {
+        AWS_REGION: this.region, DB_DIRECT_HOST: db.dbInstanceEndpointAddress, DB_DIRECT_PORT: db.dbInstanceEndpointPort,
+        DB_MASTER_SECRET_ARN: db.secret!.secretArn, FILES_BUCKET: this.files.bucketName, PLATFORM_KEY_ARN: this.platformKey.keyArn,
+      },
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: "backup", logRetention: logs.RetentionDays.ONE_YEAR }),
+    });
+    // Every night at 08:00 UTC (3–4 am in the US East)
+    new events.Rule(this, "NightlyBackup", {
+      description: "Nightly backup of every warehouse's database", schedule: events.Schedule.cron({ minute: "0", hour: "8" }),
+      targets: [new targets.EcsTask({
+        cluster: this.cluster, taskDefinition: backup, launchType: ecs.LaunchType.FARGATE,
+        subnetSelection: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }, securityGroups: [opsSg],
+      })],
+    });
+    // A night that didn't finish emails the team
+    new events.Rule(this, "BackupFailed", {
+      description: "The nightly backup stopped with an error",
+      eventPattern: {
+        source: ["aws.ecs"], detailType: ["ECS Task State Change"],
+        detail: { clusterArn: [this.cluster.clusterArn], lastStatus: ["STOPPED"], group: [`family:${backup.family}`], containers: { exitCode: [{ "anything-but": 0 }] } },
+      },
+      targets: [new targets.SnsTopic(this.alerts, { message: events.RuleTargetInput.fromText(`WMS ${s.stage}: the nightly backup failed. Its log is in CloudWatch (stream prefix "backup").`) })],
+    });
+    // A warehouse's own NAS copying its backups: may read that warehouse's backups only (access keys made by hand, docs/aws-setup.md)
+    for (const tenant of s.nasTenants) {
+      if (!/^[a-z][a-z0-9-]{1,30}$/.test(tenant)) throw new Error(`nasTenants: "${tenant}" isn't a warehouse id`);
+      const nas = new iam.User(this, `Nas-${tenant}`, { userName: `wms-${s.stage}-nas-${tenant}` });
+      nas.addToPolicy(new iam.PolicyStatement({ actions: ["s3:ListBucket"], resources: [this.files.bucketArn], conditions: { StringLike: { "s3:prefix": [`tenants/${tenant}/backups/*`, `tenants/${tenant}/backups/`] } } }));
+      nas.addToPolicy(new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: [this.files.arnForObjects(`tenants/${tenant}/backups/*`)] }));
+      nas.addToPolicy(new iam.PolicyStatement({ actions: ["kms:Decrypt"], resources: ["*"], conditions: { "ForAnyValue:StringEquals": { "kms:ResourceAliases": `alias/wms/${s.stage}/tenant/${tenant}` } } }));
+      new CfnOutput(this, `NasUser${tenant.replace(/-/g, "")}`, { value: nas.userName, description: `Read-only user for ${tenant}'s NAS: make its access key in the IAM console` });
+    }
+
+    const alarm = (a: cloudwatch.Alarm) => a.addAlarmAction(new cwActions.SnsAction(this.alerts));
+
+    // ---------- Order emails: <id>@orders.<domain> → SES → files bucket + queue → the API → the warehouse's inbox ----------
+    if (s.domain) {
+      const ordersDomain = `orders.${s.domain}`;
+      const dead = new sqs.Queue(this, "InboundDead", { retentionPeriod: Duration.days(14), encryption: sqs.QueueEncryption.SQS_MANAGED, enforceSSL: true });
+      const queue = new sqs.Queue(this, "Inbound", {
+        visibilityTimeout: Duration.minutes(3), encryption: sqs.QueueEncryption.SQS_MANAGED, enforceSSL: true,
+        deadLetterQueue: { queue: dead, maxReceiveCount: 5 },
+      });
+      this.inboundQueue = queue;
+      const topic = new sns.Topic(this, "InboundMail", { displayName: `WMS ${s.stage} order emails` });
+      topic.addSubscription(new subs.SqsSubscription(queue, { rawMessageDelivery: true }));
+      new ses.ReceiptRuleSet(this, "InboundRules", {
+        receiptRuleSetName: `wms-${s.stage}-inbound`,
+        rules: [{ recipients: [ordersDomain], scanEnabled: true, actions: [new sesActions.S3({ bucket: this.files, objectKeyPrefix: "inbound/", kmsKey: this.platformKey, topic })] }],
+      });
+      alarm(dead.metricApproximateNumberOfMessagesVisible().createAlarm(this, "InboundStuck", { threshold: 1, evaluationPeriods: 1, alarmDescription: `An order email couldn't be put in its warehouse's inbox after 5 tries (queue ${dead.queueName}).` }));
+      new CfnOutput(this, "OrdersDomain", { value: ordersDomain, description: "Each warehouse's order address is <id>@this. Needs an MX record and the rule set made active (docs/aws-setup.md)" });
+      new CfnOutput(this, "InboundRuleSet", { value: `wms-${s.stage}-inbound` });
+    }
+
     // ---------- Alarms on connections (docs: "Watch it") ----------
     const proxyMetric = (metricName: string, statistic = "Maximum") =>
       new cloudwatch.Metric({ namespace: "AWS/RDS", metricName, dimensionsMap: { ProxyName: this.proxy.dbProxyName }, statistic, period: Duration.minutes(1) });
-    const alarm = (a: cloudwatch.Alarm) => a.addAlarmAction(new cwActions.SnsAction(this.alerts));
     alarm(new cloudwatch.MathExpression({
       expression: "100 * used / allowed",
       usingMetrics: { used: proxyMetric("DatabaseConnections"), allowed: proxyMetric("MaxDatabaseConnectionsAllowed") },
@@ -205,6 +289,8 @@ export class DataStack extends Stack {
     new CfnOutput(this, "RepoUri", { value: this.repo.repositoryUri });
     new CfnOutput(this, "ClusterName", { value: this.cluster.clusterName });
     new CfnOutput(this, "MigrateTaskDefinition", { value: migrate.taskDefinitionArn });
+    new CfnOutput(this, "BackupTaskDefinition", { value: backup.taskDefinitionArn });
+    new CfnOutput(this, "FilesBucket", { value: this.files.bucketName });
     new CfnOutput(this, "OpsSubnets", { value: Fn.join(",", appSubnets) });
     new CfnOutput(this, "OpsSecurityGroup", { value: opsSg.securityGroupId });
     new CfnOutput(this, "ProxyEndpoint", { value: this.proxy.endpoint });

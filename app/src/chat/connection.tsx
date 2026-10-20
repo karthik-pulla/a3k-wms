@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useStore } from "../store/store";
+import { useSync, useSyncStatus } from "../sync/context";
 
 export interface Connection {
   online: boolean;
   /** Offline because of the developer switch rather than the network */
   simulated: boolean;
-  /** Messages waiting for a connection */
+  /** Messages waiting for a connection (with the server: every change waiting on this device) */
   queued: number;
   /** When this device last had a connection */
   lastSyncedAt: string;
@@ -22,11 +23,15 @@ export function ConnectionProvider({ simulateOffline, children }: { simulateOffl
     window.addEventListener("online", on); window.addEventListener("offline", off);
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
-  const online = browserOnline && !simulateOffline;
+  // With the server: offline also when it can't be reached, and the waiting changes are the sync engine's
+  const sync = useSync();
+  const syncStatus = useSyncStatus();
+  useEffect(() => { sync?.setOnline(browserOnline && !simulateOffline); }, [sync, browserOnline, simulateOffline]);
+  const online = browserOnline && !simulateOffline && syncStatus?.state !== "offline";
   // The moment the connection dropped is the last time this device synced
   const [lastSyncedAt, setLastSyncedAt] = useState(() => new Date().toISOString());
   useEffect(() => { if (!online) setLastSyncedAt(new Date().toISOString()); }, [online]);
-  const queued = state.chat.messages.filter(m => m.status === "queued").length;
+  const queued = syncStatus ? syncStatus.waiting : state.chat.messages.filter(m => m.status === "queued").length;
   const simulated = browserOnline && simulateOffline;
   const value = useMemo(() => ({ online, simulated, queued, lastSyncedAt }), [online, simulated, queued, lastSyncedAt]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

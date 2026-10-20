@@ -40,6 +40,12 @@ export class ApiStack extends Stack {
     taskRole.addToPolicy(new iam.PolicyStatement({ actions: ["ecs:DescribeTasks"], resources: ["*"], conditions: { ArnEquals: { "ecs:cluster": data.cluster.clusterArn } } }));
     taskRole.addToPolicy(new iam.PolicyStatement({ actions: ["iam:PassRole"], resources: [data.opsTask.taskRole.roleArn, data.opsTask.obtainExecutionRole().roleArn] }));
     // Invite and reset emails, from one verified sender only
+    // Order emails: take them off the queue, read and delete what SES kept (encrypted with the platform key)
+    if (data.inboundQueue) {
+      taskRole.addToPolicy(new iam.PolicyStatement({ actions: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes"], resources: [data.inboundQueue.queueArn] }));
+      taskRole.addToPolicy(new iam.PolicyStatement({ actions: ["s3:GetObject", "s3:DeleteObject"], resources: [data.files.arnForObjects("inbound/*")] }));
+      taskRole.addToPolicy(new iam.PolicyStatement({ actions: ["kms:Decrypt"], resources: [data.platformKey.keyArn], conditions: { StringEquals: { "kms:ViaService": `s3.${this.region}.amazonaws.com` } } }));
+    }
     if (s.mailFrom) taskRole.addToPolicy(new iam.PolicyStatement({ actions: ["ses:SendEmail"], resources: ["*"], conditions: { StringEquals: { "ses:FromAddress": s.mailFrom } } }));
 
     const https = !!s.certificateArn;
@@ -67,8 +73,11 @@ export class ApiStack extends Stack {
           ECS_CLUSTER: data.cluster.clusterName, OPS_TASK_DEFINITION: data.opsTask.taskDefinitionArn,
           OPS_SUBNETS: Fn.join(",", data.vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds),
           OPS_SECURITY_GROUP: data.opsSg.securityGroupId,
-          ...(s.domain ? { OPS_HOST: `ops.${s.domain}` } : {}),
+          ...(s.domain ? { OPS_HOST: `ops.${s.domain}`, SITE_HOST: s.domain } : {}),
+          ...(s.productName ? { PRODUCT_NAME: s.productName } : {}),
+          ...(s.visitEmail && s.mailFrom ? { VISIT_NOTIFY: s.visitEmail } : {}),
           ...(s.mailFrom ? { MAIL_FROM: s.mailFrom } : {}),
+          ...(data.inboundQueue && s.domain ? { INBOUND_QUEUE_URL: data.inboundQueue.queueUrl, ORDERS_DOMAIN: `orders.${s.domain}` } : {}),
         },
         logDriver: ecs.LogDrivers.awsLogs({ streamPrefix: "api", logRetention: logs.RetentionDays.ONE_YEAR }),
       },

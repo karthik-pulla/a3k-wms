@@ -45,16 +45,53 @@ About 30 minutes, all in a web browser. Steps 1 and 5 are yours alone (creating 
    aws ecs run-task --cluster CLUSTER --task-definition MIGRATE_TASK --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[SUBNETS],securityGroups=[OPS_SG]}" --overrides '{"containerOverrides":[{"name":"migrate","command":["node","dist/src/ops/firstOperator.js","--name","Your Name","--username","you","--email","you@example.com","--ops-url","https://ops.example.com"]}]}'
    ```
    Its log (CloudWatch, prefix `migrate`) prints your invite link: choose a password and connect your authenticator app. Invite the rest of the team from the console after that.
-8. **First warehouses.** Create a sandbox warehouse for testing, then A3K, with the tenant-creation task. The exact command comes with the next server step, which also loads A3K's settings, products and opening count into its database.
+8. **First warehouses.** In the console (Warehouses → New warehouse), create a test warehouse first (id `sandbox`), then A3K (id `a3k`). Each gets its own database, key and address, and its first owner's invite (shown in the console; emailed once email is set up).
+9. **The test warehouse.** Sign in to `sandbox.<domain>` as its owner, open **Team → Setup**, choose the made-up demo files from the repository (`app/public/tenants/demo/config.json`, `products.json`, `logos.json`) → Save. Use it to try every release before A3K sees it. Never put real data in it.
+10. **A3K.** Sign in to `a3k.<domain>` as its owner, **Team → Setup**, choose `app/public/tenants/a3k/config.json`, `products.json` and `logos.json` → Save (480 products). Invite the team on Team → People. For go-live, run the 3-day count in **Inventory → Count** and apply it; that sets the opening stock (or fill in the `.xlsx` template from Team → Setup and load it).
 
 To regenerate the template after changing `infra/lib/setup-stack.ts`: `npm --prefix infra run setup:template` (the tests check it's up to date). To change it in AWS later: CloudFormation → `wms-setup` → Update → upload the new file.
+
+## Settings for deploys
+
+The deploy reads these from the GitHub environment (`staging` or `prod` → Environment variables). Leave out what you don't have yet:
+
+| Variable | What it is |
+| --- | --- |
+| `WMS_DOMAIN` | The product's domain. Warehouses at `<id>.<domain>`, the console at `ops.<domain>`, the public page at `<domain>`, order emails at `<id>@orders.<domain>`. |
+| `WMS_CERTIFICATE_ARN` | The HTTPS certificate (below). |
+| `WMS_MAIL_FROM` | The sender for invite emails, e.g. `no-reply@<domain>`. |
+| `WMS_ALERT_EMAIL` | Who gets alarms (database busy, backup failed, an order email stuck). |
+| `WMS_VISIT_EMAIL` | Who gets "Book a visit" requests (defaults to the alert email). |
+| `WMS_PRODUCT_NAME` | The product's name on its public page ("WMS" until it's chosen). |
+| `WMS_NAS_TENANTS` | Warehouses whose own NAS copies their backups, e.g. `a3k`. |
 
 ## Domain
 
 Until there's a domain, the API answers at the load balancer's address over plain HTTP, which is fine for staging tests with made-up data only. Before any real data goes in:
 
-- Choose the product's domain and get a certificate for `*.<domain>` in AWS Certificate Manager.
-- Deploy with `-c certificateArn=…`. The load balancer then serves HTTPS only and redirects HTTP to it.
-- Deploy with `-c domain=<domain>` too: the console then answers at `ops.<domain>`.
-- Email: verify the domain in Amazon SES (and ask AWS to lift the SES sandbox), then deploy with `-c mailFrom=no-reply@<domain>`. Until then, invite and reset links aren't emailed; whoever makes one copies it from the screen and sends it themselves.
-- Point `*.<domain>` at the load balancer. Each warehouse's address, like `a3k.<domain>`, is a row in the platform database's `domains` table, added when the tenant is created.
+- Choose the product's domain and get a certificate in AWS Certificate Manager for both `<domain>` and `*.<domain>`.
+- Set `WMS_CERTIFICATE_ARN` and `WMS_DOMAIN`, and deploy. The load balancer then serves HTTPS only; the console answers at `ops.<domain>` and the public page ("Book a visit") at `<domain>` and `www.<domain>`.
+- DNS: point `<domain>`, `www.<domain>` and `*.<domain>` at the load balancer. Each warehouse's address, like `a3k.<domain>`, is a row in the platform database's `domains` table, added when the warehouse is created.
+- Email out: verify the domain in Amazon SES (and ask AWS to lift the SES sandbox), then set `WMS_MAIL_FROM`. Until then, invite and reset links aren't emailed; whoever makes one copies it from the screen.
+
+## Order emails
+
+Each warehouse's order address is `<id>@orders.<domain>` (A3K: `a3k@orders.<domain>`). With `WMS_DOMAIN` set, the deploy sets up the receiving side; three things are done by hand once:
+
+1. DNS: an **MX** record for `orders.<domain>` → `10 inbound-smtp.us-east-1.amazonaws.com`.
+2. SES → Identities: verify `orders.<domain>` (receiving needs it).
+3. Turn the receiving rules on, in CloudShell: `aws ses set-active-receipt-rule-set --rule-set-name wms-prod-inbound` (or `wms-staging-inbound`).
+
+Then A3K forwards `orders@a3kimports.com` to `a3k@orders.<domain>` (in its email provider). Emails appear in Out-bounds → Inbox within a minute; PDFs up to 1 MB come with them. To accept orders only from known senders, add them to A3K's settings: `"orders": { "inbox": "orders@a3kimports.com", "trustedSenders": ["@patelbrothers.example", "buyer@store.example"] }`; mail from anyone else arrives marked ignored. An email that can't be delivered after 5 tries emails the alert address.
+
+## Nightly backups and A3K's NAS
+
+Every night at 08:00 UTC each warehouse's database is dumped on its own (`pg_dump`, PostgreSQL's own format) into the files bucket at `tenants/<id>/backups/<date>.dump`, encrypted with that warehouse's own key, and kept 35 days; a night that fails emails the alert address. (The database also keeps its own 14-day snapshots.)
+
+For A3K's NAS to keep its own copy:
+
+1. Set `WMS_NAS_TENANTS` to `a3k` and deploy. This makes a user `wms-prod-nas-a3k` that may only read A3K's backups.
+2. IAM → Users → `wms-prod-nas-a3k` → Security credentials → Create access key ("Third-party service"). Copy both values; they're shown once.
+3. On the NAS, add an S3 backup or sync job (Synology: Hyper Backup or Cloud Sync, "Amazon S3"; QNAP: Hybrid Backup Sync): the access key, region `us-east-1`, the bucket from the deploy's **FilesBucket** output, folder `tenants/a3k/backups/`, download only, daily.
+
+A backup is restored with `pg_restore` into a new database (docs/multi-tenant-design.md, section 9).

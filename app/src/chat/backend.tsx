@@ -6,6 +6,7 @@ import { finalize } from "./refs";
 import { useConnection } from "./connection";
 import { stubNotifier, type Notifier } from "./notify";
 import { canSeeClient } from "../auth/permissions";
+import { useSync } from "../sync/context";
 
 /**
  * Everything the Messages screens may ask of the server. This local version runs on the sample store, simulates
@@ -40,6 +41,9 @@ export function ChatBackendProvider({ me, settings, notifier = stubNotifier, chi
   stateRef.current = state;
   const onlineRef = useRef(online);
   onlineRef.current = online;
+  // With the server, messages travel through the sync (sync/engine.ts): nobody here is simulated, and the
+  // server (not each device) will send the texts for urgent messages
+  const serverMode = !!useSync();
 
   // ----- Sending, with an offline queue -----
   const deliverSoon = useCallback((ids: string[]) => {
@@ -53,22 +57,22 @@ export function ChatBackendProvider({ me, settings, notifier = stubNotifier, chi
     const mentions = fin.refs.some(r => r.type === "user" || r.type === "group");
     const message: Message = {
       id, conversationId, authorId: me.id, text: fin.text, refs: fin.refs, photos, createdAt: now(),
-      status: onlineRef.current ? "sent" : "queued",
+      status: serverMode || onlineRef.current ? "sent" : "queued",
       ...(urgent && mentions ? { urgent: true, escalateAt: new Date(Date.now() + settings.escalateMinutes * 6e4).toISOString() } : {}),
     };
     dispatch({ type: "chat/add", message });
     dispatch({ type: "chat/read", userId: me.id, conversationId, at: message.createdAt });
-    if (onlineRef.current) deliverSoon([id]);
-  }, [dispatch, me.id, settings.escalateMinutes, deliverSoon]);
+    if (onlineRef.current && !serverMode) deliverSoon([id]);
+  }, [dispatch, me.id, settings.escalateMinutes, deliverSoon, serverMode]);
 
   // When the connection comes back, send everything that was waiting
   useEffect(() => {
-    if (!online) return;
+    if (!online || serverMode) return;
     const queued = stateRef.current.chat.messages.filter(m => m.status === "queued").map(m => m.id);
     if (!queued.length) return;
     dispatch({ type: "chat/status", ids: queued, status: "sent" });
     deliverSoon(queued);
-  }, [online, dispatch, deliverSoon]);
+  }, [online, dispatch, deliverSoon, serverMode]);
 
   // ----- My presence: online, away (idle or app in background), syncing later (no connection) -----
   const lastActive = useRef(Date.now());
@@ -139,10 +143,10 @@ export function ChatBackendProvider({ me, settings, notifier = stubNotifier, chi
       }
       if (escalated.length) dispatch({ type: "chat/escalated", ids: escalated, at: now() });
     };
-    tick();
-    const t = window.setInterval(tick, HEARTBEAT_MS);
+    if (serverMode) updateMineRef.current(); else tick();
+    const t = window.setInterval(serverMode ? () => { if (!document.hidden) updateMineRef.current(); } : tick, HEARTBEAT_MS);
     return () => window.clearInterval(t);
-  }, [dispatch, me.id, notifier]);
+  }, [dispatch, me.id, notifier, serverMode]);
 
   const api = useMemo<ChatBackend>(() => ({
     send,

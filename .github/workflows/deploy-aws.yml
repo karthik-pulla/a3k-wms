@@ -54,9 +54,26 @@ jobs:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      # Settings from the GitHub environment's variables (docs/aws-setup.md); empty ones are left out
+      - name: Settings
+        env:
+          WMS_DOMAIN: ${{ vars.WMS_DOMAIN }}
+          WMS_CERTIFICATE_ARN: ${{ vars.WMS_CERTIFICATE_ARN }}
+          WMS_MAIL_FROM: ${{ vars.WMS_MAIL_FROM }}
+          WMS_ALERT_EMAIL: ${{ vars.WMS_ALERT_EMAIL }}
+          WMS_VISIT_EMAIL: ${{ vars.WMS_VISIT_EMAIL }}
+          WMS_PRODUCT_NAME: ${{ vars.WMS_PRODUCT_NAME }}
+          WMS_NAS_TENANTS: ${{ vars.WMS_NAS_TENANTS }}
+        run: |
+          ctx="-c stage=$STAGE -c release=$RELEASE"
+          add() { if [ -n "$2" ]; then ctx="$ctx -c $1=$(printf %q "$2")"; fi; }
+          add domain "$WMS_DOMAIN"; add certificateArn "$WMS_CERTIFICATE_ARN"; add mailFrom "$WMS_MAIL_FROM"; add alertEmail "$WMS_ALERT_EMAIL"
+          add visitEmail "$WMS_VISIT_EMAIL"; add productName "$WMS_PRODUCT_NAME"; add nasTenants "$WMS_NAS_TENANTS"
+          echo "CDK_CONTEXT=$ctx" >> "$GITHUB_ENV"
+
       - name: 1. Data stack
         working-directory: infra
-        run: npx cdk deploy "WmsData-$STAGE" -c stage="$STAGE" -c release="$RELEASE" --require-approval never --outputs-file ../data-outputs.json
+        run: eval npx cdk deploy "WmsData-$STAGE" $CDK_CONTEXT --require-approval never --outputs-file ../data-outputs.json
 
       - name: 2. Server image
         run: |
@@ -84,4 +101,4 @@ jobs:
 
       - name: 4. API stack
         working-directory: infra
-        run: npx cdk deploy "WmsApi-$STAGE" -c stage="$STAGE" -c release="$RELEASE" --require-approval never
+        run: eval npx cdk deploy "WmsApi-$STAGE" $CDK_CONTEXT --require-approval never

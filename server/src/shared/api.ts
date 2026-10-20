@@ -14,6 +14,8 @@ export interface Me {
   /** Support access open right now (every owner sees a banner) */
   supportActive: { operator: string; endsAt: string; emergency: boolean }[];
   tenant: TenantPublic;
+  /** Encrypts this person's saved copy of the warehouse's data on their devices (null for support: nothing is kept) */
+  cacheKey: string | null;
 }
 
 export interface PersonView {

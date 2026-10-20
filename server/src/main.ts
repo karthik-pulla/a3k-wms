@@ -6,6 +6,7 @@ import { noMail } from "./core/mail.ts";
 import { TenantPools } from "./db/pools.ts";
 import { proxyPool, proxyPoolFactory } from "./db/pg.ts";
 import { appKeyFrom, ecsCreator, sesMailer } from "./ops/aws-services.ts";
+import { startInboundWorker } from "./ops/inbound-worker.ts";
 import { TENANT_BY_HOST_SQL, TenantDirectory, rowToTenant } from "./tenancy.ts";
 
 const cfg = apiConfig();
@@ -35,6 +36,7 @@ const app = buildApp({
   appKey: await appKeyFrom(cfg.region, env.APP_KEY_SECRET_ARN ?? ""),
   mailer: env.MAIL_FROM ? sesMailer(cfg.region, env.MAIL_FROM) : noMail,
   opsHost: env.OPS_HOST,
+  siteHost: env.SITE_HOST, productName: env.PRODUCT_NAME, visitNotify: env.VISIT_NOTIFY,
   secureCookies: env.COOKIE_SECURE === "1",
   staticDir: env.STATIC_DIR ?? "/app/public",
   creator: ecsCreator({
@@ -44,7 +46,12 @@ const app = buildApp({
   logger: true,
 });
 
-const stop = async () => { await app.close(); await pools.closeAll(); await platformPool.end(); process.exit(0); };
+// Order emails: SES → queue → each warehouse's inbox (only when the domain and its mail are set up)
+const inbound = env.INBOUND_QUEUE_URL && env.ORDERS_DOMAIN
+  ? startInboundWorker({ region: cfg.region, queueUrl: env.INBOUND_QUEUE_URL, ordersDomain: env.ORDERS_DOMAIN, platform, pools })
+  : null;
+
+const stop = async () => { inbound?.stop(); await app.close(); await pools.closeAll(); await platformPool.end(); process.exit(0); };
 process.on("SIGTERM", () => void stop());
 process.on("SIGINT", () => void stop());
 

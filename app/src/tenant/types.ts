@@ -97,7 +97,8 @@ export interface TenantConfig {
   labels: { sheets: LabelSheetConfig[]; defaultSheet: string; profiles: LabelProfileConfig[] };
   /** Extra Messages groups besides owners and coordinators (receiving, shifts) */
   groups: { id: string; name: string }[];
-  orders: { inbox: string };
+  /** inbox: the address stores send orders to (forwarded to <id>@orders.<domain>); trustedSenders: addresses or "@domain.com" allowed in (none = everyone) */
+  orders: { inbox: string; trustedSenders?: string[] };
   expiry: { warnMonths: number };
   /** unscopedKeys: this warehouse's data on the device keeps the names it had before warehouses were separated
    *  (A3K only, so nothing saved then is lost). Every other warehouse's are named after it. */

@@ -5,7 +5,7 @@ import { StatusPill } from "./components/StatusPill";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Ticker } from "./components/Ticker";
 import { SettingsIcon, HomeIcon } from "./components/icons";
-import { ToastProvider } from "./components/Toast";
+import { ToastProvider, useToast } from "./components/Toast";
 import { HomeMessages } from "./components/chat/HomeMessages";
 import { Home } from "./pages/Home";
 import { initials } from "./auth/accountUser";
@@ -13,14 +13,15 @@ import { AuthGate } from "./auth/AuthGate";
 import { identityUser, useIdentity, IdentityContext, type Identity } from "./auth/identity";
 import { canManageAccounts } from "./auth/permissions";
 import { groupsFor } from "./auth/accountUser";
-import type { State } from "./store/types";
 import { RoleSwitch } from "./components/RoleSwitch";
 import { pendingCount } from "./auth/vault";
 import { can } from "./auth/permissions";
 import { useRoute } from "./router";
 import { useAppearance, useSettings } from "./settings";
 import { SessionContext, useSession } from "./session";
-import { StoreProvider, useStore } from "./store/store";
+import { StoreProvider, SyncStoreProvider, useStore } from "./store/store";
+import { SyncContext } from "./sync/context";
+import type { SyncEngine } from "./sync/engine";
 import { ConnectionProvider } from "./chat/connection";
 import { ChatBackendProvider } from "./chat/backend";
 import { OverlayProvider } from "./chat/overlay";
@@ -52,7 +53,7 @@ const WarehousePage = lazy(screens.warehouse);
 const ServerAccountPage = lazy(screens.serverAccount);
 
 /** Signed in with the server (server/ServerRoot.tsx): who it is, and the data to start with */
-export interface ServerStart { identity: Identity; initial: State }
+export interface ServerStart { identity: Identity; engine: SyncEngine }
 
 export default function App({ server }: { server?: ServerStart }) {
   const settingsApi = useSettings();
@@ -63,11 +64,14 @@ export default function App({ server }: { server?: ServerStart }) {
     <ToastProvider>
       <Background moving={settings.movingBackground} />
       {server ? (
-        // Stock, orders and messages aren't on the server yet: they live in this page until it's reloaded
+        // Stock, orders, tasks and messages kept in step with the server (sync/engine.ts)
         <IdentityContext.Provider value={server.identity}>
-          <StoreProvider initial={server.initial} onChange={() => {}}>
-            <Session {...settingsApi} />
-          </StoreProvider>
+          <SyncContext.Provider value={server.engine}>
+            <SyncStoreProvider engine={server.engine}>
+              <SyncNotices engine={server.engine} />
+              <Session {...settingsApi} />
+            </SyncStoreProvider>
+          </SyncContext.Provider>
         </IdentityContext.Provider>
       ) : (
         <AuthGate>
@@ -80,6 +84,13 @@ export default function App({ server }: { server?: ServerStart }) {
       )}
     </ToastProvider>
   );
+}
+
+/** Changes the server refused (no permission, or someone else kept changing the same thing), as toasts */
+function SyncNotices({ engine }: { engine: SyncEngine }) {
+  const toast = useToast();
+  useEffect(() => engine.onNotice(m => toast(m)), [engine, toast]);
+  return null;
 }
 
 /** Who's signed in (their account), the connection, and the chat backend. Owners can view the app as a sample person for testing. */

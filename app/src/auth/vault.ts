@@ -9,6 +9,7 @@
 //
 // What this can't do without a server: stop someone who controls this device and the app's code; two-factor sign-in;
 // revoking an account's knowledge of the vault key (disabling blocks sign-in on this app, it doesn't change the key).
+import { isDemo } from "../utils/freshLoad";
 import {
   aesKey, ecdhPair, fromB64, open, openFrom, openJson, passwordKey, random, seal, sealJson, sealTo, toB64, usernameId,
   PBKDF2_ITERATIONS, type Sealed, type SealedTo,
@@ -113,21 +114,34 @@ function expired(s: Session): boolean {
 export async function touchSession(s: Session) { s.lastActive = now(); await saveSession(s).catch(() => undefined); }
 
 // ---------- First run ----------
-/** Creates the vault with the default admin the first time, moving any unencrypted data saved before sign-in existed into it. */
+/** No vault on this device yet: the first person sets the owner account up (only the demo starts with admin / password) */
+export const needsSetup = () => !(readAuth() && readVault());
+
+/** The demo site's vault, made the first time with the default admin (told to change the password) */
 export async function ensureVault(sampleState: () => State): Promise<void> {
-  if (readAuth() && readVault()) return;
+  if (!needsSetup() || !isDemo) return;
+  await createVault(sampleState, { ...DEFAULT_ADMIN, mustChange: true });
+}
+
+/**
+ * Creates the vault with its first account, an owner with the admin powers (testing switcher), moving any
+ * unencrypted data saved before sign-in existed into it.
+ */
+export async function createVault(sampleState: () => State, first: { username: string; password: string; name: string; mustChange?: boolean }): Promise<void> {
+  if (!needsSetup()) throw new Error("This device is already set up. Sign in instead.");
   const raw = random(32);
   const vk = await aesKey(raw);
   const pair = await ecdhPair();
   const salt = random(16);
-  const pk = await passwordKey(DEFAULT_ADMIN.password, salt);
+  const pk = await passwordKey(first.password, salt);
   const adminKey = await ecdhPair();
-  const id = await usernameId(DEFAULT_ADMIN.username);
+  const username = first.username.trim();
+  const id = await usernameId(username);
   let legacy: State | null = null;
   try { const r = localStorage.getItem(LEGACY); if (r) legacy = JSON.parse(r) as State; } catch { /* start fresh */ }
-  const admin: Account = { uid: "admin", username: DEFAULT_ADMIN.username, name: DEFAULT_ADMIN.name, role: "owner", status: "active", createdAt: now(), mustChange: true, admin: true };
+  const admin: Account = { uid: "admin", username, name: first.name.trim(), role: "owner", status: "active", createdAt: now(), mustChange: !!first.mustChange, admin: true };
   const data: VaultData = { version: 1, state: legacy ?? sampleState(), accounts: [admin], vaultPriv: toB64(pair.priv),
-    log: [{ at: now(), kind: "created", who: "admin", detail: legacy ? "Vault created; the data already on this device was encrypted into it" : "Vault created" }] };
+    log: [{ at: now(), kind: "created", who: username, detail: legacy ? "Vault created; the data already on this device was encrypted into it" : "Vault created" }] };
   const auth: AuthFile = { version: 1, vaultPub: pair.pub, attempts: {}, entries: {
     [id]: { uid: "admin", salt: toB64(salt), iterations: PBKDF2_ITERATIONS, status: "active", wrapped: await seal(pk, raw),
       userKey: { pub: adminKey.pub, priv: await seal(pk, adminKey.priv) }, createdAt: now() },

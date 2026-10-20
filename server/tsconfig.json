@@ -17,5 +17,7 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test"],
+  // Runs the app's sync engine (app/src/sync/), which the app's own type-check covers
+  "exclude": ["test/sync-engine.test.ts"]
 }

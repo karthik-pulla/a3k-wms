@@ -4,8 +4,9 @@
 //
 // It plays the platform too: one warehouse (the one this app is built for), its first owner's invite waiting in the
 // preview outbox, and a first console account for you.
-import { PGlite } from "@electric-sql/pglite";
-import { singleConnectionDb, type Db } from "../../../server/src/core/db.ts";
+import type { PGlite } from "@electric-sql/pglite";
+import { PGliteWorker } from "@electric-sql/pglite/worker";
+import type { Db } from "../../../server/src/core/db.ts";
 import { migrateDatabase, type Conn, type MigrationFile } from "../../../server/src/migrate/runner.ts";
 import { OPS_TABLES, TENANT_TABLES, type AuthEnv } from "../../../server/src/core/auth.ts";
 import { ApiError } from "../../../server/src/core/errors.ts";
@@ -14,6 +15,8 @@ import { callTenant, tenantLog, tenantOps, useHandoff, type TenantCtx } from "..
 import { callOps, firstOperator, opsLog, type OpsCtx } from "../../../server/src/core/ops-api.ts";
 import { totpAt, totpCounter, unseal } from "../../../server/src/core/crypto.ts";
 import { addProducts, type ProductRow } from "../../../server/src/core/products.ts";
+import { writeSystem } from "../../../server/src/core/sync.ts";
+import { requestVisit } from "../../../server/src/core/site.ts";
 import { tenantId } from "../tenant";
 
 const KEY = new Uint8Array(32).fill(42); // preview only: seals authenticator secrets in this browser
@@ -32,13 +35,26 @@ async function migrations(kind: "platform" | "tenant"): Promise<MigrationFile[]>
   }));
 }
 
-/** PGlite as the core code's database: plain statements with values, whole files through exec */
-function conn(pg: PGlite): Conn {
+type Pg = Pick<PGlite, "query" | "exec" | "transaction">;
+type Q = Pick<PGlite, "query" | "exec">;
+const run = async (pg: Q, text: string, values?: unknown[]) => (values?.length ? { rows: (await pg.query(text, values)).rows as any[] } : { rows: ((await pg.exec(text)).at(-1)?.rows ?? []) as any[] });
+
+/** PGlite as the migration runner's connection: plain statements with values, whole files through exec */
+function conn(pg: Pg): Conn {
+  return { query: (text, values) => run(pg, text, values), end: async () => {} };
+}
+/**
+ * PGlite as the core code's database. Transactions use PGlite's own, which nothing from another tab can slip into
+ * (the tabs share one database connection).
+ */
+function previewDb(pg: Pg): Db {
   return {
-    query: async (text, values) => (values?.length ? { rows: (await pg.query(text, values)).rows as any[] } : { rows: ((await pg.exec(text)).at(-1)?.rows ?? []) as any[] }),
-    end: async () => {},
+    query: (text, values) => run(pg, text, values),
+    tx: fn => pg.transaction(t => fn({ query: (text, values) => run(t as unknown as Q, text, values) })),
   };
 }
+/** One tab at a time (first-time setup, migrations) */
+const alone = <T,>(name: string, f: () => Promise<T>): Promise<T> => (navigator.locks ? navigator.locks.request(`wms-preview-${name}`, f) as Promise<T> : f());
 
 // ---------- The preview's outbox: the emails the server would have sent ----------
 export interface PreviewMail extends Mail { at: string }
@@ -59,13 +75,14 @@ export const previewOutbox = { read: readOutbox, subscribe: (f: () => void) => {
 interface Engine { platform: Db; tenants: Map<string, Db>; ready: Promise<void> }
 let engine: Engine | null = null;
 const idb = (name: string) => `idb://wms-preview-${name}`;
-const open = (name: string) => new PGlite(idb(name));
+// Every tab of this browser shares each database (pgliteWorker.ts)
+const open = (name: string): Pg => new PGliteWorker(new Worker(new URL("./pgliteWorker.ts", import.meta.url), { type: "module" }), { dataDir: idb(name), id: `wms-preview-${name}` });
 
 async function openTenantDb(id: string, fresh: boolean, config?: unknown, products?: unknown[]): Promise<Db> {
   const pg = open(`t-${id}`);
   const c = conn(pg);
-  await migrateDatabase(c, await migrations("tenant"));
-  const db = singleConnectionDb(c);
+  await alone(`migrate-t-${id}`, async () => migrateDatabase(c, await migrations("tenant")));
+  const db = previewDb(pg);
   if (fresh) {
     await db.query("INSERT INTO settings (key, value, updated_by) VALUES ('config', $1, 'preview') ON CONFLICT (key) DO NOTHING", [JSON.stringify(config)]);
     await addProducts(db, (products ?? []) as ProductRow[]);
@@ -78,9 +95,10 @@ function start(): Engine {
   e.ready = (async () => {
     const pg = open("platform");
     const c = conn(pg);
+    await alone("setup", async () => {
     if (!(await c.query("SELECT 1 FROM pg_roles WHERE rolname = 'wms_platform'")).rows.length) await c.query("CREATE ROLE wms_platform");
     await migrateDatabase(c, await migrations("platform"));
-    e.platform = singleConnectionDb(c);
+    e.platform = previewDb(pg);
     const id = tenantId();
     const known = (await e.platform.query("SELECT id FROM tenants WHERE status <> 'deleted'")).rows.map(r => r.id as string);
     if (!known.includes(id)) {
@@ -98,6 +116,7 @@ function start(): Engine {
       await mailer.send({ to: "you@preview.test", subject: "Your WMS console account", text: `Open this link to choose your console password and connect an authenticator app:\n\n${opsLink(link)}` });
     }
     for (const t of known) if (!e.tenants.has(t)) e.tenants.set(t, await openTenantDb(t, false));
+    });
   })();
   return e;
 }
@@ -121,10 +140,11 @@ async function tenantCtx(e: Engine, id: string, token: string | undefined): Prom
 
 // ---------- The "cookies" ----------
 const SESSION = (scope: string) => `wms.preview.session.${scope}`;
-const getToken = (scope: string) => { try { return localStorage.getItem(SESSION(scope)) ?? undefined; } catch { return undefined; } };
+// The preview's "cookies" live per tab (sessionStorage), so two tabs can be two people
+const getToken = (scope: string) => { try { return sessionStorage.getItem(SESSION(scope)) ?? undefined; } catch { return undefined; } };
 const setToken = (scope: string, s: { token: string } | "clear" | undefined) => {
   if (!s) return;
-  try { if (s === "clear") localStorage.removeItem(SESSION(scope)); else localStorage.setItem(SESSION(scope), s.token); } catch { /* ignore */ }
+  try { if (s === "clear") sessionStorage.removeItem(SESSION(scope)); else sessionStorage.setItem(SESSION(scope), s.token); } catch { /* ignore */ }
 };
 
 /** Errors look like the real server's, so the screens handle them the same way */
@@ -184,6 +204,16 @@ export async function previewOps(method: string, input: Record<string, unknown>)
   });
 }
 
+/** The public page in the preview (/landing.html): visit requests land in the console's Visits and the outbox */
+export async function previewSite(method: string, input: Record<string, unknown>) {
+  return asHttp(async () => {
+    const e = await ready();
+    if (method === "site.info") return { productName: "WMS (preview)" };
+    if (method === "visit.request") return requestVisit(e.platform, input, { ip: "preview", mailer, notifyTo: "you@preview.test", productName: "WMS (preview)" });
+    throw new ApiError(404, "not-found", "No such method");
+  });
+}
+
 /** Preview tools: the code an account's authenticator app would show right now */
 export async function previewCode(scope: "tenant" | "ops", username: string): Promise<string | null> {
   const e = await ready();
@@ -192,10 +222,23 @@ export async function previewCode(scope: "tenant" | "ops", username: string): Pr
   return row?.totp_secret ? totpAt(await unseal(KEY, row.totp_secret), totpCounter(Date.now())) : null;
 }
 
+/** The preview's warehouse gets its sample data once, saved as the WMS would save an import */
+export async function previewSeed(make: () => { key: string; data: unknown }[]) {
+  const e = await ready();
+  const db = e.tenants.get(tenantId());
+  if (!db || (await db.query("SELECT 1 FROM settings WHERE key = 'preview-seeded'")).rows.length) return;
+  await db.tx(async q => {
+    await writeSystem(q, make(), "Sample data", "preview sample data");
+    await q.query("INSERT INTO settings (key, value, updated_by) VALUES ('preview-seeded', 'true', 'preview')");
+  });
+}
+
 /** Preview tools: forget everything the preview saved in this browser */
 export async function previewReset() {
   for (const k of Object.keys(localStorage)) if (k.startsWith("wms.preview.")) localStorage.removeItem(k);
+  for (const k of Object.keys(sessionStorage)) if (k.startsWith("wms.preview.")) sessionStorage.removeItem(k);
   const dbs = await indexedDB.databases?.() ?? [];
-  await Promise.all(dbs.filter(d => d.name?.includes("wms-preview")).map(d => new Promise(r => { const q = indexedDB.deleteDatabase(d.name!); q.onsuccess = q.onerror = q.onblocked = () => r(null); })));
+  // The preview's databases, and what the app kept from them on this device
+  await Promise.all(dbs.filter(d => d.name?.includes("wms-preview") || d.name === "wms-sync").map(d => new Promise(r => { const q = indexedDB.deleteDatabase(d.name!); q.onsuccess = q.onerror = q.onblocked = () => r(null); })));
   location.reload();
 }

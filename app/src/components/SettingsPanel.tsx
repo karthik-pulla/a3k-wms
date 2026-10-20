@@ -1,3 +1,4 @@
+import { usesServer } from "../server/client";
 import { useEffect, useRef } from "react";
 import type { GlassStrength, HomeCardKind, HomeSettings, ThemeChoice } from "../settings";
 import type { LastOnlineVisibility } from "../auth/permissions";
@@ -127,7 +128,7 @@ export function SettingsPanel({ settings, update, reset, onResetData, onClose }:
           <p className="card-sub">Messages wait on this device and the save pill shows them; they send when you switch this off.</p>
         </section>
 
-        {tenant().seed && <section>
+        {tenant().seed && !usesServer && <section>
           <h3>Sample data</h3>
           <p className="card-sub">Deliveries, returns, stock and messages you've changed while testing are saved on this device.</p>
           <button className="btn" onClick={() => { if (window.confirm(t("Start over with the original sample deliveries, returns, stock and messages? Your test changes will be lost."))) onResetData(); }}>Reset sample data</button>

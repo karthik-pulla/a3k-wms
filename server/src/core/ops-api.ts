@@ -4,6 +4,7 @@
 // What the console shows of a warehouse is its health and counts (people, sign-ins, errors), never its stock, orders
 // or messages. Looking inside needs a support grant: an owner approves it, or, in an outage, the team opens it as an
 // emergency and every owner is emailed at once. Everything is logged on both sides.
+import { listVisits, updateVisit } from "./site.ts";
 import {
   confirmPassword, createInvite, finishInvite, getSession, needConfirmed, readInvite, setInvitePassword, signIn, signOut, verifyCode,
   type AuthEnv, type Meta, type SessionRow,
@@ -196,6 +197,9 @@ export const OPS_METHODS: Record<string, Method> = {
     const { rows } = await ctx.platform.query("SELECT id, at, actor, action, tenant_id, detail FROM platform_audit WHERE ($1::text IS NULL OR tenant_id = $1) ORDER BY id DESC LIMIT 200", [t]);
     return ok(rows.map(r => ({ id: Number(r.id), at: isoOrNull(r.at), actor: r.actor, action: r.action, tenantId: r.tenant_id, detail: r.detail })));
   },
+  // "Book a visit" requests from the public page (core/site.ts)
+  "visits.list": async (_i, ctx) => { await operator(ctx); return ok(await listVisits(ctx.platform)); },
+  "visits.update": async (i, ctx) => { const o = await operator(ctx); return ok(await updateVisit(ctx.platform, o.name, i)); },
   "errors.list": async (_i, ctx) => {
     await operator(ctx);
     const { rows } = await ctx.platform.query("SELECT tenant_id, route, message, hour, count FROM error_events WHERE hour > now() - interval '7 days' ORDER BY hour DESC, count DESC LIMIT 200");

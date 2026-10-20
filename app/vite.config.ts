@@ -65,11 +65,14 @@ export default defineConfig({
   plugins: [react(), csp(), oneTenant()],
   // Always a fixed value in the build, so code for the other ways of running (the preview's in-browser database) is left out
   define: { "import.meta.env.VITE_WMS_BACKEND": JSON.stringify(backend) },
-  // With the server, two pages: the warehouse app, and the WMS team's ops console (served only at the console's address).
+  // With the server, three pages: the warehouse app, the WMS team's ops console (only at the console's address) and the
+  // product's public page with "Book a visit" (only at the product's own address).
   // On-device builds (the demo site) have no console.
-  build: { rollupOptions: { input: { app: path.resolve(import.meta.dirname, "index.html"), ...(withServer ? { ops: path.resolve(import.meta.dirname, "ops.html") } : {}) } } },
+  build: { rollupOptions: { input: { app: path.resolve(import.meta.dirname, "index.html"), ...(withServer ? { ops: path.resolve(import.meta.dirname, "ops.html"), landing: path.resolve(import.meta.dirname, "landing.html") } : {}) } } },
   // The app shares the roles and the sign-in logic with the server (server/src/shared, server/src/core)
   server: { port, strictPort: true, fs: { allow: [".", "../server/src", "../server/migrations", "../server/templates"] } },
   // PGlite (the preview's in-browser PostgreSQL) ships its own WebAssembly; Vite mustn't pre-bundle it
-  optimizeDeps: { exclude: ["@electric-sql/pglite"] },
+  optimizeDeps: { exclude: ["@electric-sql/pglite", "@electric-sql/pglite/worker"] },
+  // The preview shares its databases between tabs through a module worker (src/server/pgliteWorker.ts)
+  worker: { format: "es" },
 });

@@ -8,6 +8,7 @@
 // The tenant comes only from the Host header, never from anything else the browser sends. Sessions are HttpOnly
 // cookies; API calls must be JSON with an `x-wms: 1` header, which a form or link on another site can't send (no CORS),
 // so other sites can't act as a signed-in person.
+import { requestVisit } from "./core/site.ts";
 import { existsSync } from "node:fs";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
@@ -16,13 +17,13 @@ import { BusyError, type TenantPools } from "./db/pools.ts";
 import { normalizeHost, type Tenant, type TenantDirectory } from "./tenancy.ts";
 import { OPS_TABLES, TENANT_TABLES, type AuthEnv } from "./core/auth.ts";
 import type { Db } from "./core/db.ts";
-import { ApiError } from "./core/errors.ts";
+import { ApiError, obj } from "./core/errors.ts";
 import { noMail, type Mailer } from "./core/mail.ts";
 import { callTenant, tenantLog, useHandoff, type TenantCtx } from "./core/tenant-api.ts";
 import { callOps, opsLog, type OpsCtx, type TenantCreator } from "./core/ops-api.ts";
 
 declare module "fastify" {
-  interface FastifyRequest { tenant?: Tenant; ops?: boolean }
+  interface FastifyRequest { tenant?: Tenant; ops?: boolean; site?: boolean }
 }
 
 export interface AppDeps {
@@ -43,6 +44,11 @@ export interface AppDeps {
   staticDir?: string;
   creator?: TenantCreator;
   logger?: boolean;
+  /** The product's own address (<domain>, and www.<domain>): the public page with "Book a visit" (core/site.ts) */
+  siteHost?: string;
+  productName?: string;
+  /** Who gets an email for each visit request */
+  visitNotify?: string;
 }
 
 const CSP = [
@@ -66,11 +72,13 @@ class RateLimit {
 
 export function buildApp(deps: AppDeps): FastifyInstance {
   // trustProxy only for the client's IP (from the load balancer); the tenant still comes from Host, never X-Forwarded-Host
-  const app = Fastify({ logger: deps.logger ?? false, trustProxy: true, bodyLimit: 1_048_576 });
+  const app = Fastify({ logger: deps.logger ?? false, trustProxy: true, bodyLimit: 8_388_608 }); // a change may carry message photos (server/src/shared/sync.ts)
   app.register(cookie);
   const cookieName = deps.secureCookies ? "__Host-wms" : "wms";
   const limiter = new RateLimit(30, 60_000);
   const opsHost = deps.opsHost ? normalizeHost(deps.opsHost) : null;
+  const siteHost = deps.siteHost ? normalizeHost(deps.siteHost) : null;
+  const visitLimiter = new RateLimit(5, 60 * 60_000);
   const appKey = deps.appKey ?? new Uint8Array(32);
   const mailer = deps.mailer ?? noMail;
 
@@ -120,6 +128,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     if (req.url === "/api/health" || req.url.startsWith("/api/health?")) return;
     const host = normalizeHost(req.headers.host);
     if (opsHost && host === opsHost) { req.ops = true; return; }
+    if (siteHost && (host === siteHost || host === `www.${siteHost}`)) { req.site = true; return; }
     if (req.url.startsWith("/ops")) return reply.code(404).send({ error: "Not found" });
     const tenant = await deps.directory.resolve(req.headers.host);
     // The same answer for an unknown, suspended or deleted tenant: nothing says which warehouses exist
@@ -147,6 +156,16 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   }
 
   app.post<{ Params: { method: string } }>("/api/:method", async (req, reply) => {
+    // The public page: its name, and visit requests (5 an hour from one address)
+    if (req.site) {
+      guard(req, req.params.method);
+      if (req.params.method === "site.info") return { productName: deps.productName ?? "WMS" };
+      if (req.params.method === "visit.request" && deps.platform) {
+        if (!visitLimiter.allow(req.ip)) throw new ApiError(429, "busy", "Thanks, we have your request. To send another, wait a while or email us.");
+        return requestVisit(deps.platform, obj(req.body), { ip: req.ip, mailer, notifyTo: deps.visitNotify, productName: deps.productName ?? "WMS" });
+      }
+      return reply.code(404).send({ error: "Not found" });
+    }
     if (req.ops || !req.tenant) return reply.code(404).send({ error: "Not found" });
     guard(req, req.params.method);
     const ctx = await tenantCtx(req.tenant, req, req.cookies[cookieName]);
@@ -188,7 +207,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       root: deps.staticDir, index: false, wildcard: false,
       setHeaders: (res, path) => { res.header("cache-control", path.includes("/assets/") ? "public, max-age=31536000, immutable" : "no-cache"); },
     });
-    const page = (req: FastifyRequest, reply: FastifyReply) => reply.header("cache-control", "no-cache").sendFile(req.ops ? "ops.html" : "index.html");
+    const page = (req: FastifyRequest, reply: FastifyReply) => reply.header("cache-control", "no-cache").sendFile(req.ops ? "ops.html" : req.site ? "landing.html" : "index.html");
     app.get("/", page);
     // Any other address that isn't a file or the API: the app (it routes itself with #/…)
     app.setNotFoundHandler((req, reply) => (req.method === "GET" && !req.url.startsWith("/api") && !req.url.startsWith("/ops/api") ? page(req, reply) : reply.code(404).send({ error: "Not found" })));

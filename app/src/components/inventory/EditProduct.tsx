@@ -6,10 +6,12 @@ import { PRODUCTS, productText, type Product } from "../../data/catalog";
 import { useStore } from "../../store/store";
 import { useToast } from "../Toast";
 import { api, ApiCallError, usesServer } from "../../server/client";
+import { useSync } from "../../sync/context";
 import { cleanProductText, itemWithCode, productEditProblems, PRODUCT_LIMITS, type ProductText } from "../../../../server/src/shared/products.ts";
 
 export function EditProduct({ product, onDone }: { product: Product; onDone: () => void }) {
   const { dispatch } = useStore();
+  const sync = useSync();
   const toast = useToast();
   const [before] = useState<ProductText>(() => productText(product));
   const [t, setT] = useState<ProductText>(before);
@@ -30,11 +32,12 @@ export function EditProduct({ product, onDone }: { product: Product; onDone: () 
     try {
       let saved = after;
       if (usesServer) {
+        // Saved and logged on the server; every device (this one too) gets it with the next catch-up
         const p = await api<Product>("products.update", { id: product.id, ...after, reason: reason.trim(), expect: before });
         saved = productText(p);
-      }
-      dispatch({ type: "product/edit", id: product.id, before, after: saved, reason: reason.trim() });
-      toast(`${saved.code || saved.name} saved. It's in Logs.`);
+        await sync?.pullNow();
+      } else dispatch({ type: "product/edit", id: product.id, before, after: saved, reason: reason.trim() });
+      toast(usesServer ? `${saved.code || saved.name} saved.` : `${saved.code || saved.name} saved. It's in Logs.`);
       onDone();
     } catch (e) {
       setError(e instanceof ApiCallError ? e.message : "Couldn't save the product. Try again.");
