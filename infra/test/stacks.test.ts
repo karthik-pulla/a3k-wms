@@ -127,6 +127,24 @@ test("every night, each warehouse is backed up on its own; old backups go after 
   data.resourceCountIs("AWS::IAM::User", 0);
 });
 
+test("the restore task may read backups and decrypt them with the warehouses' keys, and write nothing to the bucket", () => {
+  data.hasResourceProperties("AWS::ECS::TaskDefinition", { ContainerDefinitions: [Match.objectLike({ Name: "restore", Command: ["node", "dist/src/ops/restore.js"] })] });
+  const statements = (Object.values(data.findResources("AWS::IAM::Policy", { Properties: { Roles: [{ Ref: Match.stringLikeRegexp("RestoreRole") }] } })) as any[])
+    .flatMap(p => p.Properties.PolicyDocument.Statement);
+  const get = statements.find(st => st.Action === "s3:GetObject");
+  assert.ok(get, "s3:GetObject");
+  assert.match(JSON.stringify(get.Resource), /tenants\/\*\/backups\/\*/);
+  assert.doesNotMatch(JSON.stringify(get.Resource), /platform\/backups|inbound/);
+  const decrypt = statements.find(st => st.Action === "kms:Decrypt" && st.Condition);
+  assert.deepEqual(decrypt.Condition, { "ForAnyValue:StringLike": { "kms:ResourceAliases": "alias/wms/staging/tenant/*" } });
+  const text = JSON.stringify(statements);
+  assert.doesNotMatch(text, /s3:PutObject|s3:DeleteObject|kms:Encrypt|kms:GenerateDataKey"/);
+  // Reaches the instance the same way the migration and backup tasks do (no new way in)
+  const defs = Object.values(data.findResources("AWS::ECS::TaskDefinition")) as any[];
+  const env = defs.flatMap(d => d.Properties.ContainerDefinitions).find((c: any) => c.Name === "restore").Environment.map((e: any) => e.Name);
+  for (const n of ["DB_DIRECT_HOST", "DB_MASTER_SECRET_ARN", "FILES_BUCKET"]) assert.ok(env.includes(n), n);
+});
+
 test("a warehouse's NAS user may read that warehouse's backups and nothing else", () => {
   const app = new App();
   const s = settingsFor("prod", k => ({ release: "test123", nasTenants: "a3k" } as Record<string, string>)[k]);

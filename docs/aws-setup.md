@@ -94,4 +94,19 @@ For A3K's NAS to keep its own copy:
 2. IAM → Users → `wms-prod-nas-a3k` → Security credentials → Create access key ("Third-party service"). Copy both values; they're shown once.
 3. On the NAS, add an S3 backup or sync job (Synology: Hyper Backup or Cloud Sync, "Amazon S3"; QNAP: Hybrid Backup Sync): the access key, region `us-east-1`, the bucket from the deploy's **FilesBucket** output, folder `tenants/a3k/backups/`, download only, daily.
 
-A backup is restored with `pg_restore` into a new database (docs/multi-tenant-design.md, section 9).
+### Restoring a warehouse's backup
+
+Two separate steps (details in docs/multi-tenant-design.md, section 9). In CloudShell, first set the stage, the warehouse and the night of the backup, and a helper that reads the deploy's outputs:
+```bash
+STAGE=prod; TENANT=a3k; DATE=2026-10-19; out() { aws cloudformation describe-stacks --stack-name "WmsData-$STAGE" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+```
+1. **Restore into a copy** (`t_a3k_restore_2026_10_19`; the live database isn't touched):
+   ```bash
+   aws ecs run-task --cluster "$(out ClusterName)" --task-definition "$(out RestoreTaskDefinition)" --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[$(out OpsSubnets)],securityGroups=[$(out OpsSecurityGroup)],assignPublicIp=DISABLED}" --overrides "{\"containerOverrides\":[{\"name\":\"restore\",\"command\":[\"node\",\"dist/src/ops/restore.js\",\"--tenant\",\"$TENANT\",\"--date\",\"$DATE\"]}]}"
+   ```
+   Its log (CloudWatch, prefix `restore`) prints the row counts to compare.
+2. **Swap it in**, only after checking the copy: suspend the warehouse in the console (Warehouses → the warehouse → Suspended), then:
+   ```bash
+   aws ecs run-task --cluster "$(out ClusterName)" --task-definition "$(out RestoreTaskDefinition)" --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[$(out OpsSubnets)],securityGroups=[$(out OpsSecurityGroup)],assignPublicIp=DISABLED}" --overrides "{\"containerOverrides\":[{\"name\":\"restore\",\"command\":[\"node\",\"dist/src/ops/restore.js\",\"--tenant\",\"$TENANT\",\"--date\",\"$DATE\",\"--swap\",\"--confirm\"]}]}"
+   ```
+   The old database stays as `t_<id>_old_<yyyymmddhhmm>`. Then run the migration loop (Actions → "Deploy to AWS" with the same release, or the migrate task), check the warehouse, and set it back to Live in the console.

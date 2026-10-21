@@ -238,6 +238,26 @@ export class DataStack extends Stack {
       },
       targets: [new targets.SnsTopic(this.alerts, { message: events.RuleTargetInput.fromText(`WMS ${s.stage}: the nightly backup failed. Its log is in CloudWatch (stream prefix "backup").`) })],
     });
+    // ---------- Restoring one warehouse from its backup into a copy, and swapping it in (server/src/ops/restore.ts, by hand) ----------
+    const restoreRole = new iam.Role(this, "RestoreRole", { assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"), description: "Restore a warehouse's nightly backup into a new database" });
+    db.secret!.grantRead(restoreRole);
+    restoreRole.addToPolicy(new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: [this.files.arnForObjects("tenants/*/backups/*")] }));
+    // Decrypting with the warehouses' own keys (and the platform key, for a warehouse backed up before it had one)
+    restoreRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["kms:Decrypt"], resources: ["*"],
+      conditions: { "ForAnyValue:StringLike": { "kms:ResourceAliases": `alias/wms/${s.stage}/tenant/*` } },
+    }));
+    this.platformKey.grantDecrypt(restoreRole);
+    const restore = new ecs.FargateTaskDefinition(this, "RestoreTask", { cpu: 512, memoryLimitMiB: 1024, ephemeralStorageGiB: 50, taskRole: restoreRole });
+    restore.addContainer("restore", {
+      image: ecs.ContainerImage.fromEcrRepository(this.repo, s.release),
+      command: ["node", "dist/src/ops/restore.js"], // started by hand with the arguments as a command override (docs/aws-setup.md)
+      environment: {
+        AWS_REGION: this.region, DB_DIRECT_HOST: db.dbInstanceEndpointAddress, DB_DIRECT_PORT: db.dbInstanceEndpointPort,
+        DB_MASTER_SECRET_ARN: db.secret!.secretArn, FILES_BUCKET: this.files.bucketName,
+      },
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: "restore", logRetention: logs.RetentionDays.ONE_YEAR }),
+    });
     // A warehouse's own NAS copying its backups: may read that warehouse's backups only (access keys made by hand, docs/aws-setup.md)
     for (const tenant of s.nasTenants) {
       if (!/^[a-z][a-z0-9-]{1,30}$/.test(tenant)) throw new Error(`nasTenants: "${tenant}" isn't a warehouse id`);
@@ -290,6 +310,7 @@ export class DataStack extends Stack {
     new CfnOutput(this, "ClusterName", { value: this.cluster.clusterName });
     new CfnOutput(this, "MigrateTaskDefinition", { value: migrate.taskDefinitionArn });
     new CfnOutput(this, "BackupTaskDefinition", { value: backup.taskDefinitionArn });
+    new CfnOutput(this, "RestoreTaskDefinition", { value: restore.taskDefinitionArn });
     new CfnOutput(this, "FilesBucket", { value: this.files.bucketName });
     new CfnOutput(this, "OpsSubnets", { value: Fn.join(",", appSubnets) });
     new CfnOutput(this, "OpsSecurityGroup", { value: opsSg.securityGroupId });
