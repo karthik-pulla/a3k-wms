@@ -1,11 +1,11 @@
-// The API's background loop for order emails (core/inbound.ts): SES keeps each email in the files bucket and puts its
+// The API's background loop for order emails (ops/inbound.ts): SES keeps each email in the files bucket and puts its
 // notice (with the recipients it saw) on a queue; this takes notices off the queue, reads the email, and delivers it
 // to each warehouse it was sent to. A notice it can't handle goes back on the queue and, after a few tries, to the
 // queue's dead-letter queue (infra/lib/data-stack.ts). Only on AWS (src/main.ts starts it when the queue is set).
 import { DeleteObjectCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { DeleteMessageCommand, ReceiveMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import type { Db } from "../core/db.ts";
-import { deliverMail, readMail, tenantsFor } from "../core/inbound.ts";
+import { deliverMail, readMail, tenantsFor } from "./inbound.ts";
 import type { TenantPools } from "../db/pools.ts";
 import { rowToTenant } from "../tenancy.ts";
 

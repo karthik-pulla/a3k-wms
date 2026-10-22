@@ -3,8 +3,8 @@
 // files bucket and puts a note on a queue; the API picks it up (src/main.ts), reads it here, and puts it in the
 // warehouse's order inbox through the sync, so every device sees it as a new email to turn into a draft order.
 import PostalMime from "postal-mime";
-import type { Sql } from "./db.ts";
-import { writeSystem } from "./sync.ts";
+import type { Sql } from "../core/db.ts";
+import { writeSystem } from "../core/sync.ts";
 
 export const INBOUND_LIMITS = { bodyChars: 100_000, pdfBytes: 1_000_000, attachments: 10 } as const;
 

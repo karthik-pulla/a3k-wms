@@ -32,7 +32,7 @@ export function Inbox() {
   const mails = state.inbox.filter(m => show === "all" || m.status === "new");
 
   const draft = async (m: InboxMail) => {
-    // PDFs that came in by email are kept as they are (server: core/inbound.ts); their text is read here, when needed
+    // PDFs that came in by email are kept as they are (server: ops/inbound.ts); their text is read here, when needed
     const texts = await Promise.all(m.attachments.map(async a => {
       if (a.text || !a.pdf) return a.text;
       try { const { pdfText } = await import("../../outbound/reader"); return (await pdfText(new File([Uint8Array.from(atob(a.pdf), c => c.charCodeAt(0))], a.name, { type: "application/pdf" }))).text; }

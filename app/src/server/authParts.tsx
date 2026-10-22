@@ -1,5 +1,6 @@
 // Sign-in pieces shared by the warehouse app and the ops console: the 6-digit code box and the invite/reset flow
 // (choose a password, connect an authenticator app). They don't touch the app's data, so the console can use them.
+import { DEMO_LOGINS, isPublicDemo } from "./demo";
 import { useEffect, useRef, useState } from "react";
 import qrcode from "qrcode-generator";
 import { api, ApiCallError, BACKEND } from "./client";
@@ -132,3 +133,15 @@ function qrImage(text: string): string {
   return q.createDataURL(6, 2);
 }
 
+/** The public demo's ready-made logins (server/demo.ts): one tap fills in the username and password */
+export function DemoLogins({ where, onPick }: { where: "warehouse" | "console"; onPick: (username: string, password: string) => void }) {
+  if (!isPublicDemo) return null;
+  const names = where === "console" ? [DEMO_LOGINS.console] : DEMO_LOGINS.warehouse;
+  return (
+    <div className="note demo-logins">
+      <p className="small"><b>Demo</b>: made-up data, kept in this browser only. Sign in as{where === "console" ? " the WMS team's console owner" : ""}:</p>
+      <div className="chip-wrap">{names.map(n => <button key={n} type="button" className="chip-btn" onClick={() => onPick(n, DEMO_LOGINS.password)} translate="no">{n}</button>)}</div>
+      <p className="muted small">Password <b className="mono" translate="no">{DEMO_LOGINS.password}</b>, then "Preview: fill in the code" stands in for the phone app.</p>
+    </div>
+  );
+}

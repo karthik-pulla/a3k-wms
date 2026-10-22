@@ -5,7 +5,7 @@
 // in an outage, emergency access, which emails every owner). Everything here is logged.
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { opsApi, ApiCallError, BACKEND } from "../server/client";
-import { CodeInput, InviteFlow, message } from "../server/authParts";
+import { CodeInput, DemoLogins, InviteFlow, message } from "../server/authParts";
 // Preview only; a real build leaves it out
 const PreviewTools = import.meta.env.VITE_WMS_BACKEND === "preview" ? lazy(() => import("../server/PreviewTools").then(m => ({ default: m.PreviewTools }))) : null;
 import { Background } from "../components/Background";
@@ -99,6 +99,7 @@ function OpsSignIn({ note, onSignedIn }: { note?: string; onSignedIn: (me: Opera
   return (
     <form className="login-form" onSubmit={submit} noValidate>
       <h2>Sign in</h2>
+      <DemoLogins where="console" onPick={(u, p) => { setUsername(u); setPassword(p); }} />
       {note && <p className="note">{note}</p>}
       <label className="field"><span>Username</span><input className="input" autoComplete="username" autoCapitalize="none" spellCheck={false} autoFocus value={username} onChange={e => setUsername(e.target.value)} /></label>
       <label className="field"><span>Password</span><input className="input" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} /></label>

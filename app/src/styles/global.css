@@ -1552,36 +1552,21 @@ table.lines.log-table tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--w
 .plain-list { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 3px; }
 .file-btn { cursor: pointer; justify-self: start; }
 
-/* The product's public page (landing.html) */
-.landing { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 18px 20px 40px; display: grid; gap: 28px; }
-.landing-top { display: flex; align-items: center; justify-content: space-between; }
-.landing-name { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: -.01em; }
-.landing-hero { display: grid; gap: 16px; padding: 48px 0 12px; max-width: 760px; }
-.landing-kicker { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
-.landing-hero h1 { margin: 0; font-family: var(--font-display); font-size: clamp(40px, 7vw, 76px); line-height: 1; letter-spacing: -.03em; font-optical-sizing: auto; }
-.landing-hero h1 em { font-weight: 400; }
-.landing-lead { margin: 0; font-size: 18px; line-height: 1.5; color: var(--muted); }
-.landing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-.landing-card { padding: 18px; border-radius: 18px; display: grid; gap: 6px; align-content: start; }
-.landing-card h3 { margin: 0; font-size: 16px; }
-.landing-card p { margin: 0; color: var(--muted); line-height: 1.45; font-size: 14.5px; }
-.landing-how h2, .landing-trust h2, .landing-visit h2 { margin: 0 0 10px; font-family: var(--font-display); font-size: 28px; letter-spacing: -.02em; }
-.landing-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-.landing-step { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--accent); color: var(--paper); }
-.landing-trust { padding: 22px; border-radius: 20px; }
-.landing-trust p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 760px; }
-.landing-visit { padding: 24px; border-radius: 22px; }
-.landing-visit form { display: grid; gap: 14px; }
-.landing-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.landing-fields .wide { grid-column: 1 / -1; }
-.landing-fields textarea { resize: vertical; font: inherit; }
+/* The product's public page (landing.html): minimal, plain background, one column */
+.lp { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-rows: auto 1fr auto; padding: 24px clamp(16px, 5vw, 56px); background: var(--bg); color: var(--ink); }
+.lp-top { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .02em; }
+.lp-hero { align-self: center; max-width: 640px; display: grid; gap: 18px; padding: 48px 0; }
+.lp-hero h1 { margin: 0; font-family: var(--font-display); font-size: clamp(38px, 7vw, 68px); line-height: 1.02; letter-spacing: -.035em; font-weight: 600; font-optical-sizing: auto; }
+.lp-hero p { margin: 0; font-size: 17px; line-height: 1.5; color: var(--muted); max-width: 520px; }
+.lp-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 6px; }
+.lp-form { display: grid; gap: 10px; max-width: 420px; padding-top: 6px; }
+.lp-form textarea { resize: vertical; font: inherit; }
+.lp-form .btn { justify-self: start; }
+.lp-done { margin: 0; color: var(--ink); }
+.lp-foot { font-size: 13px; color: var(--muted); }
+.lp-foot a { color: inherit; }
 .landing-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-.landing-thanks h2 { margin-bottom: 6px; }
-.landing-foot { text-align: center; }
-@media (max-width: 640px) {
-  .landing { padding: 14px 16px 32px; gap: 22px; }
-  .landing-hero { padding-top: 24px; }
-  .landing-fields { grid-template-columns: 1fr; }
-}
 .visit-detail { display: grid; gap: 8px; margin-top: 10px; max-width: 560px; }
 .visit-message { white-space: pre-wrap; margin: 0; }
+.demo-logins { display: grid; gap: 6px; }
+.demo-logins p { margin: 0; }

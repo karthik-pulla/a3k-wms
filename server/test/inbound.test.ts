@@ -1,8 +1,8 @@
-// Order emails (src/core/inbound.ts, src/ops/inbound-worker.ts): which warehouse an email is for, what's kept of
+// Order emails (src/ops/inbound.ts, src/ops/inbound-worker.ts): which warehouse an email is for, what's kept of
 // it, trusted senders, and an email delivered twice.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deliverMail, readMail, tenantsFor, trusted } from "../src/core/inbound.ts";
+import { deliverMail, readMail, tenantsFor, trusted } from "../src/ops/inbound.ts";
 import { readNotice } from "../src/ops/inbound-worker.ts";
 import { freshDb } from "./pg.ts";
 

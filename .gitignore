@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 outputs/labels/millet-bank/build/
 app/dist/
+app/dist-site/
 server/dist/
 infra/cdk.out/
 *.tsbuildinfo

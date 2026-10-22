@@ -8,7 +8,7 @@ import { LangSwitch } from "../components/LangSwitch";
 import { Background } from "../components/Background";
 import { setServerTenant, fetchSeed, tenantId } from "../tenant";
 import type { Me, TenantPublic } from "../../../server/src/shared/api.ts";
-import { CodeInput, InviteFlow, message } from "./authParts";
+import { CodeInput, DemoLogins, InviteFlow, message } from "./authParts";
 import type { ServerStart } from "../App";
 import type { User } from "../store/types";
 // Preview only; a real build leaves it out
@@ -200,6 +200,7 @@ function SignInFlow({ note, onSignedIn }: { note?: string; onSignedIn: (me: Me) 
     <form className="login-form" onSubmit={submitPassword} noValidate>
       <h2>Sign in</h2>
       {note && <p className="note">{note}</p>}
+      <DemoLogins where="warehouse" onPick={(u, p) => { setUsername(u); setPassword(p); }} />
       <label className="field"><span>Username</span>
         <input className="input" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} autoFocus value={username} onChange={e => setUsername(e.target.value)} />
       </label>

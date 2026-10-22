@@ -25,15 +25,19 @@ const CSP = [
   "base-uri 'none'",
   "form-action 'none'",
 ].join("; ");
+// The preview (and the demo site built from it) runs PostgreSQL as WebAssembly in the browser, which needs 'wasm-unsafe-eval'
+const cspFor = (preview: boolean) => (preview ? CSP.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'") : CSP);
 const csp = (): Plugin => ({
   name: "wms-csp",
   apply: "build",
-  transformIndexHtml: html => html.replace("<head>", `<head>\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />\n    <meta name="referrer" content="no-referrer" />`),
+  transformIndexHtml: html => html.replace("<head>", `<head>\n    <meta http-equiv="Content-Security-Policy" content="${cspFor(process.env.VITE_WMS_BACKEND === "preview")}" />\n    <meta name="referrer" content="no-referrer" />`),
 });
 
 /**
- * Demo build (VITE_WMS_DEMO=1 VITE_TENANT=demo, `npm run build:demo`): the public site on GitHub Pages, serving the
- * made-up demo warehouse. Paths are relative so it works under any folder (github.io/<repo>/).
+ * Demo builds (VITE_WMS_DEMO=1 VITE_TENANT=demo): the made-up demo warehouse, with relative paths so they work under any
+ * folder (github.io/<repo>/). `npm run build:site` is the public demo site: the server version running in the browser
+ * (the preview) with ready-made logins, the landing page in front (scripts/site.mjs). `npm run build:demo` is the
+ * older device-only demo.
  */
 const demo = process.env.VITE_WMS_DEMO === "1";
 

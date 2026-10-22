@@ -78,6 +78,25 @@
         "dev:preview"
       ],
       "port": 5175
+    },
+    {
+      "name": "wms-site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "preview",
+        "--",
+        "--outDir",
+        "dist-site",
+        "--base",
+        "/a3k-wms/",
+        "--port",
+        "4190",
+        "--strictPort"
+      ],
+      "port": 4190
     }
   ]
 }

@@ -8,7 +8,8 @@ import type { PGlite } from "@electric-sql/pglite";
 import { PGliteWorker } from "@electric-sql/pglite/worker";
 import type { Db } from "../../../server/src/core/db.ts";
 import { migrateDatabase, type Conn, type MigrationFile } from "../../../server/src/migrate/runner.ts";
-import { OPS_TABLES, TENANT_TABLES, type AuthEnv } from "../../../server/src/core/auth.ts";
+import { OPS_TABLES, TENANT_TABLES, finishInvite, setInvitePassword, type AuthEnv } from "../../../server/src/core/auth.ts";
+import type { LinkResult } from "../../../server/src/shared/api.ts";
 import { ApiError } from "../../../server/src/core/errors.ts";
 import { type Mail, type Mailer } from "../../../server/src/core/mail.ts";
 import { callTenant, tenantLog, tenantOps, useHandoff, type TenantCtx } from "../../../server/src/core/tenant-api.ts";
@@ -18,9 +19,11 @@ import { addProducts, type ProductRow } from "../../../server/src/core/products.
 import { writeSystem } from "../../../server/src/core/sync.ts";
 import { requestVisit } from "../../../server/src/core/site.ts";
 import { tenantId } from "../tenant";
+import { DEMO_LOGINS } from "./demo";
 
 const KEY = new Uint8Array(32).fill(42); // preview only: seals authenticator secrets in this browser
-const BASE = `${location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
+// This page's own folder (the demo site runs in a subfolder with relative paths): invite and console links start here
+const BASE = new URL("./", location.href).href.replace(/\/$/, "");
 /** The console is ops.html here (its own address on AWS): links made for it need the # right after the page */
 const opsLink = (s: string) => s.replace("/ops.html/#", "/ops.html#");
 
@@ -109,17 +112,45 @@ function start(): Engine {
       e.tenants.set(id, db);
       await e.platform.query("INSERT INTO tenants (id, name, status, db_name, db_user, db_host, db_direct_host) VALUES ($1, $2, 'setup', $3, $3, 'preview', 'preview')", [id, config.tenant?.name ?? id, `t_${id}`]);
       await e.platform.query("INSERT INTO domains (host, tenant_id) VALUES ($1, $2)", [location.hostname.toLowerCase(), id]);
-      // The first owner's invite, as the console would send it, and your own first console account
-      const ctx = await tenantCtx(e, id, undefined);
-      await tenantOps.restoreOwner(ctx, { by: "WMS team (preview)", name: "Owner", username: "owner", email: "owner@preview.test" });
-      const link = await firstOperator(opsEnv(e), e.platform, { name: "You", username: "you", email: "you@preview.test", baseUrl: `${BASE}/ops.html` });
-      await mailer.send({ to: "you@preview.test", subject: "Your WMS console account", text: `Open this link to choose your console password and connect an authenticator app:\n\n${opsLink(link)}` });
+      if (import.meta.env.VITE_WMS_DEMO === "1") await readyMadeLogins(e, id);
+      else {
+        // The first owner's invite, as the console would send it, and your own first console account
+        const ctx = await tenantCtx(e, id, undefined);
+        await tenantOps.restoreOwner(ctx, { by: "WMS team (preview)", name: "Owner", username: "owner", email: "owner@preview.test" });
+        const link = await firstOperator(opsEnv(e), e.platform, { name: "You", username: "you", email: "you@preview.test", baseUrl: `${BASE}/ops.html` });
+        await mailer.send({ to: "you@preview.test", subject: "Your WMS console account", text: `Open this link to choose your console password and connect an authenticator app:\n\n${opsLink(link)}` });
+      }
     }
     for (const t of known) if (!e.tenants.has(t)) e.tenants.set(t, await openTenantDb(t, false));
     });
   })();
   return e;
 }
+// ---------- The public demo (VITE_WMS_DEMO=1): ready-made logins instead of invites ----------
+
+/** Each login goes through the real invite steps (password, then the authenticator code), so they're ordinary accounts */
+async function readyMadeLogins(e: Engine, id: string) {
+  const pw = DEMO_LOGINS.password;
+  // The code from the previous 30 seconds, so the visitor's first sign-in can use the current one
+  const code = (secret: string) => totpAt(secret, totpCounter(Date.now()) - 1);
+  const join = async (env: AuthEnv, link: string) => {
+    const token = link.split("#/invite/")[1];
+    const { secret } = await setInvitePassword(env, token, pw);
+    return finishInvite(env, token, await code(secret), { ip: "preview" });
+  };
+  const ctx = await tenantCtx(e, id, undefined);
+  const { link } = await tenantOps.restoreOwner(ctx, { by: "WMS team (demo)", name: "Demo Owner", username: "owner", email: "owner@demo.test" });
+  const owner = await join(ctx.env, link);
+  const asOwner = await tenantCtx(e, id, owner.token);
+  await callTenant("auth.confirm", { password: pw }, asOwner);
+  for (const [name, username] of [["Demo Coordinator", "coordinator"], ["Demo Worker", "worker"]] as const) {
+    const r = await callTenant("people.invite", { name, username, roleId: username }, asOwner);
+    await join(ctx.env, (r.body as LinkResult).link);
+  }
+  const opsInvite = await firstOperator(opsEnv(e), e.platform, { name: "Owner", username: DEMO_LOGINS.console, email: "owner@demo.test", baseUrl: `${BASE}/ops.html` });
+  await join(opsEnv(e), opsLink(opsInvite));
+}
+
 async function ready(): Promise<Engine> { engine ??= start(); await engine.ready; return engine; }
 
 const opsEnv = (e: Engine): AuthEnv => ({ db: e.platform, tables: OPS_TABLES, appKey: KEY, now: Date.now, issuer: "WMS console (preview)", ownWords: ["wms"], log: opsLog() });
