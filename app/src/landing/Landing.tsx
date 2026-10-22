@@ -2,6 +2,7 @@
 // up; we visit and set it up). On the real site the request goes to the server (core/site.ts, the console's Visits);
 // on the demo site (GitHub can't receive it) it's an email link, and "Try the demo" opens the WMS beside it.
 import { useEffect, useState } from "react";
+import { Background } from "../components/Background";
 import { siteApi, ApiCallError } from "../server/client";
 import { DEMO_CONTACT, isPublicDemo } from "../server/demo";
 
@@ -16,7 +17,11 @@ export function Landing() {
     if (isPublicDemo) { document.title = "WMS"; return; }
     siteApi<{ productName: string }>("site.info").then(r => { setName(r.productName); document.title = r.productName; }).catch(() => {});
   }, []);
+  // The WMS's own moving colour behind the page (still when the system asks for less motion)
+  const reduced = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   return (
+    <>
+    <Background moving={!reduced} />
     <main className="lp">
       <header className="lp-top"><span translate="no">{name}</span></header>
       <section className="lp-hero">
@@ -34,6 +39,7 @@ export function Landing() {
         {isPublicDemo ? <>Made-up data, in your browser only · <a href={consoleUrl}>Console</a></> : <span translate="no">{name}</span>}
       </footer>
     </main>
+    </>
   );
 }
 
