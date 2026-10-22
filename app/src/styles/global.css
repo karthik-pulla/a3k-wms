@@ -1570,3 +1570,11 @@ table.lines.log-table tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--w
 .visit-message { white-space: pre-wrap; margin: 0; }
 .demo-logins { display: grid; gap: 6px; }
 .demo-logins p { margin: 0; }
+
+/* The product's logo (components/LatticeLogo.tsx): the image is a mask, the colour is the text colour */
+.lattice-logo { display: inline-block; background: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: left center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: left center; vertical-align: middle; flex: none; }
+.lattice-mark { display: inline-block; background: currentColor; flex: none; }
+.lattice-by { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 12px; opacity: .8; }
+.lattice-by .lattice-logo { opacity: .9; }
+.ops-logo { display: grid; gap: 8px; justify-items: start; }
+.ops-logo p { margin: 0; }

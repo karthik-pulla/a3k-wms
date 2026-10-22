@@ -159,6 +159,8 @@ To update a tool: edit its `template.html`, run `npm run build`, then republish 
 
 ## Owner decisions for the full WMS (Oct 2026)
 
+- **Product name: Lattice** (22 Oct 2026). Logo: `Lattice_Branding/` (black and white PNGs; the app uses `app/src/assets/lattice-logo.png` as a mask in the text colour, `components/LatticeLogo.tsx`; the square alone is the icon, `app/public/lattice-icon.svg`). Branding stays light inside the WMS: the warehouse's own name and mark lead; Lattice shows on the landing page, the console, small under sign-in, and as the tab icon.
+
 - **Platform**: installable web app (React + TypeScript), managed AWS services with PostgreSQL, real-time updates for several users at once, nightly backup to the NAS. Phones keep working offline and sync later, with a visible saved/syncing icon.
 - **Sign-in**: email/username and password plus two-factor for everyone.
 - **Devices**: warehouse-owned devices; workers may also use their own phones.
@@ -191,7 +193,7 @@ To update a tool: edit its `template.html`, run `npm run build`, then republish 
 - Order inbox: who sets up `orders@a3kimports.com` and receiving mail on AWS; which senders are trusted.
 - What happens after picking: paperwork, delivery, proof of delivery.
 - Sign-in on the server: two-factor method (authenticator app?), who the admins are, account recovery when someone forgets their password, how long sessions last on shared warehouse devices.
-- Domain: `wms.a3kimports.com` is likely but not confirmed; who manages DNS. Billing; budget.
+- Domain: the product (Lattice) needs its own domain; who manages DNS. Billing; budget.
 - Floor plan sketches haven't arrived yet.
 - Messages: who can see "last online" times (now owners + coordinators)?
 - Messages: should presence show outside shift hours (now a setting, off by default)?

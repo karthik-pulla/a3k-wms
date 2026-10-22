@@ -572,11 +572,11 @@ At first: the developer (with Claude Code) as operator and on call, with the run
 
 - **Landing page**: the product's public site has a "Book a visit" form only (built 19 Oct: `app/landing.html`; requests in the console under Visits). Warehouses never sign themselves up; the operator creates each one from the ops console after the contract (matches the on-site onboarding plan, section 8).
 - **Roles**: three built-in roles plus switches, and warehouses may add their own named roles built from the same switches (section 4, `roles`), with the owner-only powers kept out of reach: changing stock directly, deciding returns, applying count corrections, deleting counts, managing people and roles, warehouse settings, support access and the security log.
-- **Product name and domain**: not chosen yet. One domain for the product, a subdomain per warehouse (`a3k.<domain>`); a warehouse's own domain is a paid extra.
+- **Product name**: Lattice (22 Oct 2026). Domain not chosen yet: one domain for the product, a subdomain per warehouse (`a3k.<domain>`); a warehouse's own domain is a paid extra.
 
 ## Open questions
 
-- Product name and domain (the platform's own, separate from `a3kimports.com`).
+- The product's domain (Lattice's own, separate from `a3kimports.com`), and a trademark check on the name.
 - Does A3K stay on the shared instance or pay for silo, given they are the first and largest tenant?
 - Which customer data must stay in the US, and do any customers need it written into the contract?
 - How long to keep per-tenant backups on each plan, and how long the export link stays valid after leaving.

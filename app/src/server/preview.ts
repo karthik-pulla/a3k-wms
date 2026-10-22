@@ -239,8 +239,8 @@ export async function previewOps(method: string, input: Record<string, unknown>)
 export async function previewSite(method: string, input: Record<string, unknown>) {
   return asHttp(async () => {
     const e = await ready();
-    if (method === "site.info") return { productName: "WMS (preview)" };
-    if (method === "visit.request") return requestVisit(e.platform, input, { ip: "preview", mailer, notifyTo: "you@preview.test", productName: "WMS (preview)" });
+    if (method === "site.info") return { productName: "Lattice (preview)" };
+    if (method === "visit.request") return requestVisit(e.platform, input, { ip: "preview", mailer, notifyTo: "you@preview.test", productName: "Lattice (preview)" });
     throw new ApiError(404, "not-found", "No such method");
   });
 }

@@ -159,10 +159,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     // The public page: its name, and visit requests (5 an hour from one address)
     if (req.site) {
       guard(req, req.params.method);
-      if (req.params.method === "site.info") return { productName: deps.productName ?? "WMS" };
+      if (req.params.method === "site.info") return { productName: deps.productName ?? "Lattice" };
       if (req.params.method === "visit.request" && deps.platform) {
         if (!visitLimiter.allow(req.ip)) throw new ApiError(429, "busy", "Thanks, we have your request. To send another, wait a while or email us.");
-        return requestVisit(deps.platform, obj(req.body), { ip: req.ip, mailer, notifyTo: deps.visitNotify, productName: deps.productName ?? "WMS" });
+        return requestVisit(deps.platform, obj(req.body), { ip: req.ip, mailer, notifyTo: deps.visitNotify, productName: deps.productName ?? "Lattice" });
       }
       return reply.code(404).send({ error: "Not found" });
     }

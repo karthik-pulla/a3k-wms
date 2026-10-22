@@ -3,6 +3,7 @@
 // access, support access, the team, the platform's log and errors.
 // It never shows a warehouse's stock, orders or messages: looking inside needs a support grant from its owner (or,
 // in an outage, emergency access, which emails every owner). Everything here is logged.
+import { LatticeLogo } from "../components/LatticeLogo";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { opsApi, ApiCallError, BACKEND } from "../server/client";
 import { CodeInput, DemoLogins, InviteFlow, message } from "../server/authParts";
@@ -17,7 +18,7 @@ import type { VisitView } from "../../../server/src/core/site.ts";
 import { ONBOARDING_STEPS, type GrantView, type LinkResult, type OperatorMe, type PersonView, type TenantSummary } from "../../../server/src/shared/api.ts";
 
 const preview = BACKEND === "preview";
-const CONSOLE_PUB = { id: "ops", name: "WMS team", appTitle: "WMS console", mark: "OPS", languages: { default: "en" as const, enabled: ["en" as const] } };
+const CONSOLE_PUB = { id: "ops", name: "WMS team", appTitle: "Lattice console", mark: "OPS", languages: { default: "en" as const, enabled: ["en" as const] } };
 const DOMAIN = (import.meta.env.VITE_WMS_DOMAIN as string | undefined) ?? (preview ? "preview.test" : "example.com");
 const when = (iso: string | null | undefined) => {
   if (!iso) return "never";
@@ -39,7 +40,7 @@ export function OpsApp() {
     if (first === "invite" && token) { setPhase({ kind: "invite", token }); return; }
     opsApi<OperatorMe>("auth.me").then(me => setPhase({ kind: "open", me })).catch(() => setPhase({ kind: "signin" }));
   }, []);
-  useEffect(() => { document.title = "WMS console"; }, []);
+  useEffect(() => { document.title = "Lattice console"; }, []);
   // Signed out elsewhere or idle: back to sign-in
   useEffect(() => {
     if (phase.kind !== "open") return;
@@ -52,7 +53,7 @@ export function OpsApp() {
   else body = (
     <main className="login">
       <div className="login-card glass">
-        <div className="login-brand"><span className="login-mark ops" aria-hidden="true">OPS</span><div><h1>WMS console</h1><p className="muted small">For the WMS team only</p></div></div>
+        <div className="login-brand ops-logo"><LatticeLogo height={26} /><p className="muted small">Console · for the Lattice team only</p></div>
         {phase.kind === "invite"
           ? <InviteFlow token={phase.token} pub={CONSOLE_PUB} call={opsApi} scope="ops" onDone={me => { window.location.hash = "#/"; setPhase({ kind: "open", me }); }} />
           : <OpsSignIn note={phase.note} onSignedIn={me => setPhase({ kind: "open", me })} />}
@@ -123,7 +124,7 @@ function Shell({ me, onSignOut }: { me: OperatorMe; onSignOut: () => void }) {
   return (
     <div className="ops-shell">
       <nav className="ops-nav glass" aria-label="Console">
-        <div className="ops-brand"><span className="login-mark ops small" aria-hidden="true">OPS</span><b>WMS console</b></div>
+        <div className="ops-brand"><LatticeLogo height={17} /><span className="muted small">Console</span></div>
         {PAGES.map(p => <a key={p.id} href={`#/${p.id}`} aria-current={page === p.id || (p.id === "warehouses" && page === "new") ? "page" : undefined}>{p.label}</a>)}
         <div className="ops-me"><span className="avatar" aria-hidden="true">{initials(me.name)}</span><span><b translate="no">{me.name}</b><small className="muted block" translate="no">@{me.username}</small></span><button className="link" onClick={onSignOut}>Sign out</button></div>
       </nav>

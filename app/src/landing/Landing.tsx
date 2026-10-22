@@ -3,6 +3,7 @@
 // on the demo site (GitHub can't receive it) it's an email link, and "Try the demo" opens the WMS beside it.
 import { useEffect, useState } from "react";
 import { Background } from "../components/Background";
+import { LatticeLogo } from "../components/LatticeLogo";
 import { siteApi, ApiCallError } from "../server/client";
 import { DEMO_CONTACT, isPublicDemo } from "../server/demo";
 
@@ -11,10 +12,10 @@ const appUrl = import.meta.env.DEV ? "/" : new URL("../", import.meta.url).href;
 const consoleUrl = import.meta.env.DEV ? "/ops.html" : new URL("../ops.html", import.meta.url).href;
 
 export function Landing() {
-  const [name, setName] = useState("WMS");
+  const [name, setName] = useState("Lattice");
   const [booking, setBooking] = useState(false);
   useEffect(() => {
-    if (isPublicDemo) { document.title = "WMS"; return; }
+    if (isPublicDemo) { document.title = "Lattice"; return; }
     siteApi<{ productName: string }>("site.info").then(r => { setName(r.productName); document.title = r.productName; }).catch(() => {});
   }, []);
   // The WMS's own moving colour behind the page (still when the system asks for less motion)
@@ -23,20 +24,20 @@ export function Landing() {
     <>
     <Background moving={!reduced} />
     <main className="lp">
-      <header className="lp-top"><span translate="no">{name}</span></header>
+      <header className="lp-top"><LatticeLogo height={22} /></header>
       <section className="lp-hero">
         <h1>Every pallet, on the map.</h1>
         <p>Warehouse management for warehouses that store for several brands. We set it up at yours.</p>
         <div className="lp-actions">
           {isPublicDemo && <a className="btn primary" href={appUrl}>Try the demo</a>}
           {isPublicDemo
-            ? <a className="btn" href={`mailto:${DEMO_CONTACT}?subject=${encodeURIComponent("Visit request: WMS")}`}>Book a visit</a>
+            ? <a className="btn" href={`mailto:${DEMO_CONTACT}?subject=${encodeURIComponent("Visit request: Lattice")}`}>Book a visit</a>
             : <button className={`btn${booking ? "" : " primary"}`} onClick={() => setBooking(b => !b)} aria-expanded={booking}>Book a visit</button>}
         </div>
         {booking && !isPublicDemo && <VisitForm />}
       </section>
       <footer className="lp-foot">
-        {isPublicDemo ? <>Made-up data, in your browser only · <a href={consoleUrl}>Console</a></> : <span translate="no">{name}</span>}
+        {isPublicDemo ? <>Made-up data, in your browser only · <a href={consoleUrl}>Console</a></> : <span translate="no">{name} · {new Date().getFullYear()}</span>}
       </footer>
     </main>
     </>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LatticeLogo } from "../../components/LatticeLogo";
 import { passwordProblems, passwordStrength } from "../../auth/crypto";
 import { LangSwitch } from "../../components/LangSwitch";
 import { createVault, requestAccount, signIn, type Session, type VaultData } from "../../auth/vault";
@@ -20,6 +21,7 @@ export function LoginScreen({ message, onSignedIn }: { message?: string; onSigne
       </div>
       <LangSwitch className="login-lang" />
       <p className="login-foot muted small">Your data is encrypted on this device and opens only after you sign in.</p>
+      <div className="lattice-by"><LatticeLogo height={11} /></div>
     </main>
   );
 }
@@ -77,6 +79,7 @@ export function SetUpDevice({ onDone }: { onDone: (s: Session, d: VaultData) => 
       </div>
       <LangSwitch className="login-lang" />
       <p className="login-foot muted small">Your data is encrypted on this device and opens only after you sign in.</p>
+      <div className="lattice-by"><LatticeLogo height={11} /></div>
     </main>
   );
 }

@@ -1,6 +1,7 @@
 // Signing in with the server (VITE_WMS_BACKEND=server or preview): sign-in with an authenticator code, invite and reset
 // links, "Ask for an account", support links. Once signed in, the warehouse's settings and products come from its own
 // database and the app opens. Nothing here imports the app's data modules before then (they need the settings).
+import { LatticeLogo } from "../components/LatticeLogo";
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { api, ApiCallError, BACKEND } from "./client";
 import { serverAccount, type Identity } from "../auth/identity";
@@ -144,6 +145,7 @@ function AuthCard({ pub, children }: { pub: TenantPublic | null; children: React
       </div>
       {pub && <LangSwitch className="login-lang" enabled={pub.languages.enabled} />}
       <p className="login-foot muted small">Sign-in uses your password and a code from your phone. Nobody at the WMS team can see your password.</p>
+      <div className="lattice-by"><LatticeLogo height={11} /></div>
     </main>
   );
 }

@@ -62,7 +62,7 @@ The deploy reads these from the GitHub environment (`staging` or `prod` → Envi
 | `WMS_MAIL_FROM` | The sender for invite emails, e.g. `no-reply@<domain>`. |
 | `WMS_ALERT_EMAIL` | Who gets alarms (database busy, backup failed, an order email stuck). |
 | `WMS_VISIT_EMAIL` | Who gets "Book a visit" requests (defaults to the alert email). |
-| `WMS_PRODUCT_NAME` | The product's name on its public page ("WMS" until it's chosen). |
+| `WMS_PRODUCT_NAME` | The product's name on its public page (Lattice if left empty). |
 | `WMS_NAS_TENANTS` | Warehouses whose own NAS copies their backups, e.g. `a3k`. |
 
 ## Domain
