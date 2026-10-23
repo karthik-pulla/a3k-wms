@@ -1,11 +1,16 @@
-// The two environments. Same code; prod gets a standby database (Multi-AZ), two API tasks and deletion protection.
+// The two environments. Same code; prod gets two API tasks and deletion protection. The database's size and its standby
+// copy (Multi-AZ) are settings (WMS_DB_SIZE, WMS_DB_STANDBY), so growing is a change of setting and a deploy, not of code.
+// Owner's plan (23 Oct 2026): start prod small with no standby while there are up to 5 warehouses; scale up later.
 export type Stage = "staging" | "prod";
 
 export interface Settings {
   stage: Stage;
   /** The image tag to run: the git commit being released (the deploy workflow passes it) */
   release: string;
+  /** RDS instance class without "db.", e.g. "t4g.large" */
   dbInstanceType: string;
+  /** A standby copy of the database in a second zone that takes over by itself if the main one fails (Multi-AZ) */
+  dbStandby: boolean;
   apiTasks: { min: number; max: number };
   /** Connections one API task may hold (server/src/db/pools.ts). Tasks × this stays well under RDS Proxy's cap. */
   connectionBudget: number;
@@ -35,10 +40,15 @@ export function settingsFor(stage: string, ctx: (key: string) => string | undefi
   const cdnCertificateArn = ctx("cdnCertificateArn") ?? ctx("certificateArn");
   if (cdnCertificateArn && cdnCertificateArn.split(":")[3] !== "us-east-1")
     throw new Error(`CloudFront needs its certificate in us-east-1 (got ${cdnCertificateArn}): set -c cdnCertificateArn (WMS_CDN_CERTIFICATE_ARN)`);
+  const dbSize = ctx("dbSize");
+  if (dbSize !== undefined && !/^[a-z][a-z0-9-]*\.[a-z0-9]+$/.test(dbSize)) throw new Error(`-c dbSize is an instance class like t4g.large or m7g.large (got "${dbSize}")`);
+  const standby = ctx("dbStandby");
+  if (standby !== undefined && standby !== "true" && standby !== "false") throw new Error(`-c dbStandby is true or false (got "${standby}")`);
   const base = { stage, release, certificateArn: ctx("certificateArn"), cdnCertificateArn, alertEmail: ctx("alertEmail"), domain: ctx("domain"), mailFrom: ctx("mailFrom"),
     productName: ctx("productName"), visitEmail: ctx("visitEmail") ?? ctx("alertEmail"),
     nasTenants: (ctx("nasTenants") ?? "").split(",").map(x => x.trim()).filter(Boolean), perTenantMax: 3, connectionBudget: 30 } as const;
+  // Defaults: a small database with no standby (up to ~5 warehouses); scaling up, e.g. m7g.large with a standby, is a setting
   return stage === "prod"
-    ? { ...base, dbInstanceType: "m7g.large", apiTasks: { min: 2, max: 6 } }
-    : { ...base, dbInstanceType: "t4g.medium", apiTasks: { min: 1, max: 2 } };
+    ? { ...base, dbInstanceType: dbSize ?? "t4g.large", dbStandby: standby === "true", apiTasks: { min: 2, max: 6 } }
+    : { ...base, dbInstanceType: dbSize ?? "t4g.medium", dbStandby: standby === "true", apiTasks: { min: 1, max: 2 } };
 }

@@ -8,9 +8,9 @@ import { ApiStack } from "../lib/api-stack.ts";
 import { DataStack } from "../lib/data-stack.ts";
 import { settingsFor } from "../lib/settings.ts";
 
-function synth(stage: "staging" | "prod") {
+function synth(stage: "staging" | "prod", extra: Record<string, string> = {}) {
   const app = new App();
-  const s = settingsFor(stage, k => ({ release: "test123" } as Record<string, string>)[k]);
+  const s = settingsFor(stage, k => ({ release: "test123", ...extra } as Record<string, string>)[k]);
   const env = { account: "111111111111", region: "us-east-1" };
   const data = new DataStack(app, "Data", s, { env });
   const api = new ApiStack(app, "Api", s, data, { env });
@@ -33,7 +33,16 @@ test("RDS Proxy sits in front of the database, with TLS, IAM sign-in and a conne
 test("the database is private, encrypted and refuses unencrypted connections", () => {
   data.hasResourceProperties("AWS::RDS::DBInstance", { Engine: "postgres", PubliclyAccessible: false, StorageEncrypted: true, BackupRetentionPeriod: 14 });
   data.hasResourceProperties("AWS::RDS::DBParameterGroup", { Parameters: Match.objectLike({ "rds.force_ssl": "1" }) });
-  prod.data.hasResourceProperties("AWS::RDS::DBInstance", { MultiAZ: true, DeletionProtection: true });
+  prod.data.hasResourceProperties("AWS::RDS::DBInstance", { DeletionProtection: true });
+});
+
+test("prod starts small with no standby; size and standby are settings, so scaling up needs no code change", () => {
+  prod.data.hasResourceProperties("AWS::RDS::DBInstance", { DBInstanceClass: "db.t4g.large", MultiAZ: false });
+  data.hasResourceProperties("AWS::RDS::DBInstance", { DBInstanceClass: "db.t4g.medium", MultiAZ: false });
+  const big = synth("prod", { dbSize: "m7g.large", dbStandby: "true" });
+  big.data.hasResourceProperties("AWS::RDS::DBInstance", { DBInstanceClass: "db.m7g.large", MultiAZ: true, DeletionProtection: true });
+  assert.throws(() => settingsFor("prod", k => ({ release: "x", dbStandby: "yes" } as Record<string, string>)[k]), /true or false/);
+  assert.throws(() => settingsFor("prod", k => ({ release: "x", dbSize: "huge" } as Record<string, string>)[k]), /instance class/);
 });
 
 test("the API is configured with the proxy, never the instance, and a connection budget", () => {

@@ -16,7 +16,12 @@ This is done once per AWS account. After that, every release is: GitHub → Acti
 | ECS Fargate | The API (1 task in staging, 2–6 in prod) | ~$18 per task |
 | S3, KMS, Secrets Manager, CloudWatch | Files, keys, logins, logs and alarms | a few dollars |
 
-So about **$150–200 a month for staging**. Prod costs more: a bigger database with a standby copy in a second zone (Multi-AZ), and at least two API tasks. These are estimates; check the AWS pricing pages; the setup template (step 3) sets a budget alert.
+So about **$150–200 a month for staging**. Prod starts small (owner's plan, 23 Oct 2026: up to about 5 warehouses): a `t4g.large` database with no standby and two API tasks, roughly $200–250 a month. These are estimates; check the AWS pricing pages; the setup template (step 3) sets a budget alert.
+
+**Scaling up later** is two GitHub variables (prod's environment) and a deploy, no code change:
+- `WMS_DB_SIZE`: the database's instance class, e.g. `m7g.large` (more warehouses or busier ones). The change restarts the database: a few minutes offline (about a minute with a standby); do it after hours.
+- `WMS_DB_STANDBY`: `true` adds a standby copy in a second zone that takes over by itself if the main one fails (Multi-AZ). AWS sets it up while the app keeps running; it roughly doubles the database's cost.
+- Watch the database CPU alarm: the small `t4g` sizes run on CPU credits that run out under steady heavy use. That's the sign to move up a size.
 
 ## One-time setup
 
@@ -66,6 +71,8 @@ The deploy reads these from the GitHub environment (`staging` or `prod` → Envi
 | `WMS_VISIT_EMAIL` | Who gets "Book a visit" requests (defaults to the alert email). |
 | `WMS_PRODUCT_NAME` | The product's name on its public page (Lattice if left empty). |
 | `WMS_NAS_TENANTS` | Warehouses whose own NAS copies their backups, e.g. `a3k`. |
+| `WMS_DB_SIZE` | Optional. The database's instance class, e.g. `m7g.large`. Empty: `t4g.large` (prod), `t4g.medium` (staging). |
+| `WMS_DB_STANDBY` | Optional. `true` for a standby database in a second zone (Multi-AZ). Empty: no standby. |
 
 ## Domain
 

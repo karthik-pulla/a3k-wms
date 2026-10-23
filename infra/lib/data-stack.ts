@@ -92,7 +92,7 @@ export class DataStack extends Stack {
       credentials: rds.Credentials.fromGeneratedSecret("wmsadmin", { secretName: `wms/${s.stage}/db/master`, encryptionKey: this.platformKey }),
       storageEncrypted: true, storageEncryptionKey: this.platformKey,
       allocatedStorage: 50, maxAllocatedStorage: 500, storageType: rds.StorageType.GP3,
-      multiAz: prod,
+      multiAz: s.dbStandby,
       parameterGroup: params,
       caCertificate: rds.CaCertificate.RDS_CA_RSA2048_G1,
       backupRetention: Duration.days(14),

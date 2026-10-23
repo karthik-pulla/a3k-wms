@@ -65,11 +65,14 @@ jobs:
           WMS_VISIT_EMAIL: ${{ vars.WMS_VISIT_EMAIL }}
           WMS_PRODUCT_NAME: ${{ vars.WMS_PRODUCT_NAME }}
           WMS_NAS_TENANTS: ${{ vars.WMS_NAS_TENANTS }}
+          WMS_DB_SIZE: ${{ vars.WMS_DB_SIZE }}
+          WMS_DB_STANDBY: ${{ vars.WMS_DB_STANDBY }}
         run: |
           ctx="-c stage=$STAGE -c release=$RELEASE"
           add() { if [ -n "$2" ]; then ctx="$ctx -c $1=$(printf %q "$2")"; fi; }
           add domain "$WMS_DOMAIN"; add certificateArn "$WMS_CERTIFICATE_ARN"; add cdnCertificateArn "$WMS_CDN_CERTIFICATE_ARN"; add mailFrom "$WMS_MAIL_FROM"; add alertEmail "$WMS_ALERT_EMAIL"
           add visitEmail "$WMS_VISIT_EMAIL"; add productName "$WMS_PRODUCT_NAME"; add nasTenants "$WMS_NAS_TENANTS"
+          add dbSize "$WMS_DB_SIZE"; add dbStandby "$WMS_DB_STANDBY"
           echo "CDK_CONTEXT=$ctx" >> "$GITHUB_ENV"
 
       - name: 1. Data stack
