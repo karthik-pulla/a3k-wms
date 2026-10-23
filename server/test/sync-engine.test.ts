@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { accept, browser, ownerSignedIn } from "./warehouse.ts";
 import { SyncEngine, type SyncAction, type SyncStorage } from "../../app/src/sync/engine.ts";
+import { writeSystem } from "../src/core/sync.ts";
 import type { State } from "../../app/src/store/types.ts";
 
 const BASE = {
@@ -12,11 +13,11 @@ const BASE = {
   chat: { users: [], conversations: [], messages: [], reads: {}, presence: {}, seq: 0 },
 } as unknown as State;
 
-/** "move" adds cases to a slot (anyone may move pallets); "stock/adjust" sets them (owners only) */
+/** "stock/scan-adjust" adds cases to what's on a slot (anyone may correct a slot); "stock/adjust" sets them (owners only) */
 function reduce(s: State, a: SyncAction): State {
   const code = a.code as string;
   const now = s.stock[code]?.[0]?.cases ?? 0;
-  if (a.type === "move") return { ...s, stock: { ...s.stock, [code]: [{ productId: "S1", cases: now + (a.add as number) }] } };
+  if (a.type === "stock/scan-adjust") return { ...s, stock: { ...s.stock, [code]: [{ productId: "S1", cases: now + (a.add as number) }] } };
   if (a.type === "stock/adjust") return { ...s, stock: { ...s.stock, [code]: [{ productId: "S1", cases: a.cases as number }] } };
   return s;
 }
@@ -71,11 +72,11 @@ test("two people adding to the same slot at once: neither change is lost", async
   await omar.e.pullNow();
   // Omar adds 5 while his connection is down; meanwhile the owner's device adds 10
   omar.e.setOnline(false);
-  omar.e.dispatch({ type: "move", code: "01A-01-L1-B1", add: 5 });
+  omar.e.dispatch({ type: "stock/scan-adjust", code: "01A-01-L1-B1", add: 5 });
   assert.equal(omar.e.getStatus().state, "offline");
   assert.equal(omar.e.getStatus().waiting, 1);
   assert.equal(cases(omar.e), 45, "his own change shows while it waits");
-  owner.e.dispatch({ type: "move", code: "01A-01-L1-B1", add: 10 });
+  owner.e.dispatch({ type: "stock/scan-adjust", code: "01A-01-L1-B1", add: 10 });
   await settle();
   // Back online: his change meets newer data, is worked out again on it, and saved
   omar.e.setOnline(true);
@@ -89,11 +90,12 @@ test("two people adding to the same slot at once: neither change is lost", async
 test("changes made offline survive a reload and are saved once the connection is back", async () => {
   const t = await two();
   const storage = memory();
+  await t.db.tx(q => writeSystem(q, [{ key: "stock:02A-01-L1-B1", data: [{ productId: "S1", cases: 1 }] }], "Import", "test stock"));
   const first = t.make(t.omarB, "omar", storage);
   await first.e.open();
   first.e.setOnline(false);
-  first.e.dispatch({ type: "move", code: "02A-01-L1-B1", add: 3 });
-  first.e.dispatch({ type: "move", code: "02A-01-L1-B1", add: 4 });
+  first.e.dispatch({ type: "stock/scan-adjust", code: "02A-01-L1-B1", add: 3 });
+  first.e.dispatch({ type: "stock/scan-adjust", code: "02A-01-L1-B1", add: 4 });
   await settle();
   await first.e.flush();
   first.e.stop();
@@ -103,27 +105,28 @@ test("changes made offline survive a reload and are saved once the connection is
   const again = t.make(t.omarB, "omar", storage);
   await again.e.open();
   await settle();
-  await until(() => again.e.getStatus().waiting === 0 && cases(again.e, "02A-01-L1-B1") === 7);
+  await until(() => again.e.getStatus().waiting === 0 && cases(again.e, "02A-01-L1-B1") === 8);
   assert.equal(again.e.getStatus().waiting, 0);
-  assert.equal(cases(again.e, "02A-01-L1-B1"), 7);
+  assert.equal(cases(again.e, "02A-01-L1-B1"), 8);
   const owner = t.make(t.owner, "owner");
   await owner.e.open();
-  assert.equal(cases(owner.e, "02A-01-L1-B1"), 7);
+  assert.equal(cases(owner.e, "02A-01-L1-B1"), 8);
   // Sent once each, even though the first page might have sent them already
-  assert.equal((await t.db.query("SELECT count(*)::int AS n FROM sync_log WHERE action = 'move'")).rows[0].n, 2);
+  assert.equal((await t.db.query("SELECT count(*)::int AS n FROM sync_log WHERE action = 'stock/scan-adjust'")).rows[0].n, 2);
 });
 
 test("two pages with the same device id never mix up their changes", async () => {
   const t = await two();
+  await t.db.tx(q => writeSystem(q, [{ key: "stock:01A-01-L1-B1", data: [{ productId: "S1", cases: 5 }] }], "Import", "test stock"));
   const owner = t.make(t.owner, "same"), omar = t.make(t.omarB, "same");
   await owner.e.open(); await omar.e.open();
-  omar.e.dispatch({ type: "move", code: "01A-01-L1-B1", add: 1 });
+  omar.e.dispatch({ type: "stock/scan-adjust", code: "01A-01-L1-B1", add: 1 });
   await settle();
-  owner.e.dispatch({ type: "move", code: "02A-01-L1-B1", add: 2 });
+  owner.e.dispatch({ type: "stock/adjust", code: "02A-01-L1-B1", cases: 2 });
   await settle();
   await owner.e.pullNow(); await omar.e.pullNow();
   assert.equal(cases(omar.e, "02A-01-L1-B1"), 2, "the owner's change was saved, not taken for Omar's first one");
-  assert.equal(cases(owner.e, "01A-01-L1-B1"), 1);
+  assert.equal(cases(owner.e, "01A-01-L1-B1"), 6);
 });
 
 test("a change the server refuses is dropped, the person is told, and the screen goes back", async () => {

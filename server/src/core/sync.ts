@@ -1,9 +1,20 @@
 // A warehouse's stock, orders, tasks, counts and messages on the server: saving a device's change (push) and
 // catching a device up (pull). The rules are in ../shared/sync.ts; docs/multi-tenant-design.md, "Data on the server".
 // Every query is plain (no session settings, no advisory locks), so it works through RDS Proxy without pinning.
+//
+// What a change may do. The switch and kinds of piece (ACTION_RULES) say who may send an action; ./sync-checks.ts
+// says what that action's pieces may be, so nobody sends owner-only stock changes under the name of a move or a
+// slot correction. Those are shape checks on the saved and sent pieces, not the app's own logic (`root`) run
+// again here: the server gets the changed pieces, not the action, and working an action out needs the whole
+// warehouse (picking plans read every slot and order), the warehouse's product list and slot layout, which the
+// app holds in its own modules. Loading all of that inside every save would make each push read the whole
+// warehouse under the save lock. The checks need only the pieces in the change (already read and locked for the
+// version check) and, now and then, one more saved piece. They hold the line that matters (no cases appear or
+// vanish, only the places named change) while the app's logic stays free to choose (the slot, the pallets to pick).
 import type { Db, Sql } from "./db.ts";
 import { ApiError, bad, forbidden } from "./errors.ts";
 import { allows, type Action, type BaseRole, type Permissions } from "../shared/permissions.ts";
+import { checkAction } from "./sync-checks.ts";
 import { ACTION_RULES, APPEND_ONLY, SERVER_ONLY, SYNC_LIMITS, idOf, kindOf, type Change, type Kind, type PullResult, type PushInput, type PushResult, type SyncRow } from "../shared/sync.ts";
 
 /** Who is saving: a person, or the WMS team through a support grant (personId null) */
@@ -130,11 +141,14 @@ export async function push(db: Db, who: SyncWho, raw: Record<string, unknown>): 
     if (dup) {
       // Sent again after the answer was lost: already saved
       const { rows } = await q.query("SELECT key, version FROM entities WHERE key = ANY($1)", [keys]);
-      return { ok: true, seq: Number(dup.seq), versions: Object.fromEntries(rows.map(r => [r.key, r.version])) };
+      return { ok: true, seq: Number(dup.seq), versions: Object.fromEntries(rows.map(r => [r.key, r.version]))};
     }
     const cur = new Map<string, Row>(((await q.query("SELECT key, version, data, audience FROM entities WHERE key = ANY($1) FOR UPDATE", [keys])).rows as Row[]).map(r => [r.key, r]));
     const conflicts = input.changes.filter(c => (cur.get(c.key)?.version ?? 0) !== c.base).map(c => c.key);
     if (conflicts.length) return { ok: false, reason: "conflict", keys: conflicts };
+    // The pieces must be what this action does to the saved data (under the save lock, so nothing changes meanwhile)
+    await checkAction(input.type, who, input.changes, key => cur.get(key)?.data ?? null,
+      async more => new Map((await q.query("SELECT key, data FROM entities WHERE key = ANY($1)", [more])).rows.map(r => [r.key, r.data])));
 
     // Conversations the messages in this change belong to: in the change itself, or already saved
     const convIds = new Set<string>();

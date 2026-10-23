@@ -35,44 +35,44 @@ export interface PullResult { rows: SyncRow[]; seq: number; more: boolean }
 /** A catch-up page (rowsPerPull) is always bigger than one change (changesPerPush), so a page never splits a change */
 export const SYNC_LIMITS = { changesPerPush: 2000, bytesPerChange: 1_500_000, rowsPerPull: 5000 } as const;
 
-const STOCK: Kind[] = ["shipment", "stock", "return", "movement", "order", "meta", "count", "countentry", "inbox", "task", "audit"];
-
 /**
  * Which app actions may be sent, the switch each needs (null = anyone signed in), and which kinds of piece each
- * may change. Actions not listed are never sent: "local" ones only change what this device shows.
+ * may change (what the app's own logic changes for it, plus its line in the change log). Actions not listed are
+ * never sent: "local" ones only change what this device shows. The stock actions any role may send are also
+ * checked piece by piece on the server (server/src/core/sync-checks.ts).
  */
 export const ACTION_RULES: Record<string, { can: string | null; kinds: Kind[] } | "local" | "refused"> = {
-  saveShipment: { can: "use-inbounds", kinds: STOCK },
-  receive: { can: "use-inbounds", kinds: STOCK },
-  putaway: { can: "confirm-inbound", kinds: STOCK },
-  submitReturn: { can: "use-inbounds", kinds: STOCK },
-  decideReturn: { can: "decide-return", kinds: STOCK },
-  move: { can: "move-stock", kinds: STOCK },
-  "stock/adjust": { can: "adjust-stock", kinds: STOCK },
+  saveShipment: { can: "use-inbounds", kinds: ["shipment", "audit"] },
+  receive: { can: "use-inbounds", kinds: ["shipment", "movement", "audit"] },
+  putaway: { can: "confirm-inbound", kinds: ["shipment", "task", "audit"] },
+  submitReturn: { can: "use-inbounds", kinds: ["return", "meta", "audit"] },
+  decideReturn: { can: "decide-return", kinds: ["return", "shipment", "movement", "audit"] },
+  move: { can: "move-stock", kinds: ["stock", "movement", "audit"] },
+  "stock/adjust": { can: "adjust-stock", kinds: ["stock", "movement", "audit"] },
   // A slot's quantities corrected after scanning its QR code (the products on it stay; any role, by switch)
-  "stock/scan-adjust": { can: "scan-adjust", kinds: STOCK },
-  "count/start": { can: "start-count", kinds: STOCK },
-  "count/set": { can: "view-stock", kinds: STOCK },
-  "count/status": { can: "start-count", kinds: STOCK },
-  "count/delete": { can: "delete-count", kinds: STOCK },
-  "count/decide": { can: "approve-count", kinds: STOCK },
-  "order/save": { can: "create-order", kinds: STOCK },
-  "order/approve": { can: "approve-order", kinds: STOCK },
-  "order/plan": { can: "approve-order", kinds: STOCK },
-  "order/pick": { can: "pack-orders", kinds: STOCK },
-  "order/unpick": { can: "pack-orders", kinds: STOCK },
-  "order/ship": { can: "ship-order", kinds: STOCK },
-  "order/cancel": { can: "cancel-order", kinds: STOCK },
-  "order/delete": { can: "create-order", kinds: STOCK },
-  "order/assign": { can: "assign-work", kinds: STOCK },
-  "inbox/add": { can: "create-order", kinds: STOCK },
-  "inbox/status": { can: "create-order", kinds: STOCK },
-  "task/create": { can: "move-stock", kinds: STOCK },
-  "task/assign": { can: "assign-work", kinds: STOCK },
-  "task/start": { can: "move-stock", kinds: STOCK },
-  "task/blocked": { can: "move-stock", kinds: STOCK },
-  "task/cancel": { can: "move-stock", kinds: STOCK },
-  "task/done": { can: "move-stock", kinds: STOCK },
+  "stock/scan-adjust": { can: "scan-adjust", kinds: ["stock", "movement", "audit"] },
+  "count/start": { can: "start-count", kinds: ["count", "countentry", "audit"] },
+  "count/set": { can: "view-stock", kinds: ["countentry", "audit"] },
+  "count/status": { can: "start-count", kinds: ["count", "audit"] },
+  "count/delete": { can: "delete-count", kinds: ["count", "countentry", "audit"] },
+  "count/decide": { can: "approve-count", kinds: ["count", "stock", "movement", "audit"] },
+  "order/save": { can: "create-order", kinds: ["order", "audit"] },
+  "order/approve": { can: "approve-order", kinds: ["order", "audit"] },
+  "order/plan": { can: "approve-order", kinds: ["order", "audit"] },
+  "order/pick": { can: "pack-orders", kinds: ["order", "stock", "movement", "audit"] },
+  "order/unpick": { can: "pack-orders", kinds: ["order", "stock", "movement", "audit"] },
+  "order/ship": { can: "ship-order", kinds: ["order", "audit"] },
+  "order/cancel": { can: "cancel-order", kinds: ["order", "stock", "movement", "audit"] },
+  "order/delete": { can: "create-order", kinds: ["order", "audit"] },
+  "order/assign": { can: "assign-work", kinds: ["order", "audit"] },
+  "inbox/add": { can: "create-order", kinds: ["inbox", "audit"] },
+  "inbox/status": { can: "create-order", kinds: ["inbox", "audit"] },
+  "task/create": { can: "move-stock", kinds: ["task", "audit"] },
+  "task/assign": { can: "assign-work", kinds: ["task", "audit"] },
+  "task/start": { can: "move-stock", kinds: ["task", "audit"] },
+  "task/blocked": { can: "move-stock", kinds: ["task", "audit"] },
+  "task/cancel": { can: "move-stock", kinds: ["task", "audit"] },
+  "task/done": { can: "move-stock", kinds: ["task", "stock", "shipment", "movement", "audit"] },
   // Manage warehouse: the picking rule, email routing and contacts; announcements; work teams (owners and coordinators)
   "warehouse/settings": { can: "manage-settings", kinds: ["setting", "audit"] },
   "notice/post": { can: "manage-settings", kinds: ["notice", "audit"] },
