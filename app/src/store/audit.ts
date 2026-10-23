@@ -37,9 +37,16 @@ export function describe(before: State, a: any, after: State): Described | null 
     case "count/status": return { area: "count", action: `${a.status === "review" ? "Finished counting" : a.status === "closed" ? "Closed" : "Reopened"} "${before.counts.find(x => x.id === a.id)?.name}"` };
     case "count/decide": return { area: "count", action: `${a.apply.length ? `Applied ${a.apply.length} count correction${a.apply.length > 1 ? "s" : ""} (${a.apply.join(", ")})` : ""}${a.apply.length && a.keep.length ? "; " : ""}${a.keep.length ? `kept system stock for ${a.keep.join(", ")}` : ""}${a.note ? `: ${a.note}` : ""}` };
     case "count/delete": return { area: "count", action: `Deleted count "${before.counts.find(x => x.id === a.id)?.name}"` };
-    case "order/save": return { area: "outbound", action: `${before.orders.some(o => o.id === a.order.id) ? "Edited" : "Created"} ${a.order.id} for ${a.order.store}: ${lines(a.order.lines)}` };
-    case "order/approve": return { area: "outbound", action: `Approved ${a.id}; picks planned (${strategyName(a.strategy).toLowerCase()})` };
-    case "order/plan": return { area: "outbound", action: `Re-planned the picks for ${a.id} (${strategyName(a.strategy).toLowerCase()})` };
+    case "order/save": {
+      // A new order that had to take another number (someone else took its first one) is logged under the number it got
+      const made = a.isNew ? after.orders.find(o => o.createdAt === a.order.createdAt && o.createdBy === a.order.createdBy) : undefined;
+      return { area: "outbound", action: `${made || !before.orders.some(o => o.id === a.order.id) ? "Created" : "Edited"} ${made?.id ?? a.order.id} for ${a.order.store}: ${lines(a.order.lines)}` };
+    }
+    case "order/approve": {
+      const id = (a.created && after.orders.find(o => o.createdAt === a.created && o.approvedAt)?.id) || a.id;
+      return { area: "outbound", action: `Approved ${id}; picks planned (${strategyName(a.strategy).replace(/^./, c => c.toLowerCase())})` };
+    }
+    case "order/plan": return { area: "outbound", action: `Re-planned the picks for ${a.id} (${strategyName(a.strategy).replace(/^./, c => c.toLowerCase())})` };
     case "order/assign": return { area: "outbound", action: `Gave ${a.id} to ${person(a.assignee)} to pack` };
     case "order/pick": { const p = before.orders.find(o => o.id === a.id)?.picks?.find(x => x.key === a.key); return { area: "outbound", pallet: true, action: `Picked ${cs(a.cases)} of ${pn(p?.productId)} from ${p?.location} for ${a.id}${a.note ? ` (${a.note})` : ""}` }; }
     case "order/unpick": { const p = before.orders.find(o => o.id === a.id)?.picks?.find(x => x.key === a.key); return { area: "outbound", pallet: true, action: `Put ${cs(p?.picked?.cases ?? 0)} of ${pn(p?.productId)} back on ${p?.location} (${a.id})` }; }

@@ -70,9 +70,9 @@ export function OrderEditor({ order }: { order?: StoreOrder }) {
       status: "draft", source: source.kind, sourceName: source.name, sourceText: source.text || undefined,
       createdBy: order?.createdBy ?? me.name, createdAt: order?.createdAt ?? new Date().toISOString(),
     };
-    dispatch({ type: "order/save", order: next });
-    if (approve) dispatch({ type: "order/approve", id, by: me.name, strategy: next.strategy ?? defaultStrategy(state) });
-    toast(approve ? `${id} saved and approved. Pallets planned: ${strategyName(next.strategy ?? defaultStrategy(state)).toLowerCase()}.` : `${id} saved as a draft for approval.`);
+    dispatch({ type: "order/save", order: next, isNew: !order });
+    if (approve) dispatch({ type: "order/approve", id, by: me.name, strategy: next.strategy ?? defaultStrategy(state), created: next.createdAt });
+    toast(approve ? `${id} saved and approved. Pallets planned: ${strategyName(next.strategy ?? defaultStrategy(state)).replace(/^./, c => c.toLowerCase())}.` : `${id} saved as a draft for approval.`);
     go(`#/outbounds/orders/${encodeURIComponent(id)}`);
   };
 

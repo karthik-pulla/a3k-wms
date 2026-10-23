@@ -58,8 +58,8 @@ export function Inbox() {
       notes: r.unread.length ? `Lines not read from the email:\n${r.unread.join("\n")}` : undefined,
       createdBy: "Order inbox", createdAt: new Date().toISOString(),
     };
-    dispatch({ type: "order/save", order });
-    dispatch({ type: "inbox/status", id: m.id, status: "drafted", orderId: id });
+    dispatch({ type: "order/save", order, isNew: true });
+    dispatch({ type: "inbox/status", id: m.id, status: "drafted", orderId: id, orderCreated: order.createdAt });
     toast(`${id} drafted from the email: ${r.lines.length} line${r.lines.length === 1 ? "" : "s"}. Check it, then approve.`);
     go(`#/outbounds/orders/${encodeURIComponent(id)}/edit`);
   };

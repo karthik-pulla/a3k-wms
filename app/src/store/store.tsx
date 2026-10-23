@@ -7,7 +7,7 @@ import { CLIENTS, applyProductEdits, productById } from "../data/catalog";
 import type { ProductText } from "../../../server/src/shared/products.ts";
 import { describe } from "./audit";
 import { canSeeClient } from "../auth/permissions";
-import { planOrder, putBack, statusOf, takeFrom } from "../outbound/plan";
+import { nextOrderId, planOrder, putBack, statusOf, takeFrom } from "../outbound/plan";
 import { sampleChat } from "../chat/sampleChat";
 import type { PalletPlan } from "./putaway";
 
@@ -30,8 +30,11 @@ type Action =
   /** Removes the count and what was entered in it. Corrections already applied stay in stock and the history. */
   | { type: "count/delete"; id: string }
   // Out-bounds
-  | { type: "order/save"; order: StoreOrder }
-  | { type: "order/approve"; id: string; by: string; strategy: PickStrategy }
+  /** isNew: a new order. Its number was picked on this device; if someone else (another device, the client portal) took
+   *  that number first, the order gets the next free one instead of replacing theirs. */
+  | { type: "order/save"; order: StoreOrder; isNew?: boolean }
+  /** created: the order's createdAt, so approving an order just saved finds it even if it had to take another number */
+  | { type: "order/approve"; id: string; by: string; strategy: PickStrategy; created?: string }
   /** Plan the not-yet-picked part again (stock changed, or a different strategy) */
   | { type: "order/plan"; id: string; strategy: PickStrategy }
   | { type: "order/pick"; id: string; key: string; cases: number; by: string; note?: string }
@@ -41,7 +44,7 @@ type Action =
   | { type: "order/cancel"; id: string; by: string; reason: string }
   | { type: "order/delete"; id: string }
   | { type: "inbox/add"; mail: InboxMail }
-  | { type: "inbox/status"; id: string; status: InboxMail["status"]; orderId?: string; shipmentId?: string }
+  | { type: "inbox/status"; id: string; status: InboxMail["status"]; orderId?: string; shipmentId?: string; orderCreated?: string }
   /** The signed-in account as a person in the app (Messages, history): added or updated, and given the team channel and the threads of clients they may see */
   | { type: "account/user"; user: User }
   // Roles: guarded owner edits, pallet tasks, packing assignments
@@ -72,6 +75,15 @@ type Action =
   | { type: "chat/conversation"; conversation: Conversation }
   | { type: "chat/rename"; userId: string; name: string }
   | { type: "chat/escalated"; ids: string[]; at: string };
+
+/** The same order: made at the same moment by the same person (its number may differ, see order/save) */
+const sameOrder = (x: StoreOrder, y: StoreOrder) => !!x.createdAt && x.createdAt === y.createdAt && x.createdBy === y.createdBy;
+/** An order by number; with `created`, the order made then even if it had to take another number */
+function orderFor(state: State, id: string, created?: string): StoreOrder | undefined {
+  const byId = state.orders.find(o => o.id === id);
+  if (!created || byId?.createdAt === created) return byId;
+  return state.orders.find(o => o.createdAt === created) ?? byId;
+}
 
 // The time a change was made: from the action (so a change saved later, after being offline, keeps its real time,
 // and every device working it out again gets the same answer), else now
@@ -236,17 +248,19 @@ function reducer(state: State, a: Action): State {
         return { ...c, entries };
       }) };
     case "order/save": {
-      const exists = state.orders.some(o => o.id === a.order.id);
-      return { ...state, orders: exists ? state.orders.map(o => (o.id === a.order.id ? a.order : o)) : [a.order, ...state.orders] };
+      const cur = state.orders.find(o => o.id === a.order.id);
+      // A new order whose number someone else took meanwhile (seen when this change is worked out again on newer data)
+      if (a.isNew && cur && !sameOrder(cur, a.order)) return { ...state, orders: [{ ...a.order, id: nextOrderId(state.orders) }, ...state.orders] };
+      return { ...state, orders: cur ? state.orders.map(o => (o.id === a.order.id ? a.order : o)) : [a.order, ...state.orders] };
     }
     case "order/approve":
     case "order/plan": {
-      const o = state.orders.find(x => x.id === a.id);
+      const o = orderFor(state, a.id, a.type === "order/approve" ? a.created : undefined);
       if (!o) return state;
       const plan = planOrder(state, o, a.strategy);
       const next: StoreOrder = { ...o, strategy: a.strategy, picks: plan.picks, short: plan.short,
         ...(a.type === "order/approve" ? { status: "approved" as const, approvedBy: a.by, approvedAt: now() } : {}) };
-      return { ...state, orders: state.orders.map(x => (x.id === a.id ? next : x)) };
+      return { ...state, orders: state.orders.map(x => (x.id === o.id ? next : x)) };
     }
     case "order/pick": {
       const o = state.orders.find(x => x.id === a.id);
@@ -317,7 +331,7 @@ function reducer(state: State, a: Action): State {
     case "inbox/add":
       return { ...state, inbox: [a.mail, ...state.inbox] };
     case "inbox/status":
-      return { ...state, inbox: state.inbox.map(m => (m.id === a.id ? { ...m, status: a.status, orderId: a.orderId ?? m.orderId, shipmentId: a.shipmentId ?? m.shipmentId } : m)) };
+      return { ...state, inbox: state.inbox.map(m => (m.id === a.id ? { ...m, status: a.status, orderId: (a.orderId && orderFor(state, a.orderId, a.orderCreated)?.id) ?? a.orderId ?? m.orderId, shipmentId: a.shipmentId ?? m.shipmentId } : m)) };
     case "count/delete":
       return { ...state, counts: state.counts.filter(c => c.id !== a.id) };
     case "count/status":

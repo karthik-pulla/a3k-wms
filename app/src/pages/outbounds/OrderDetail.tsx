@@ -132,7 +132,7 @@ export function OrderDetail({ order: o }: { order: StoreOrder }) {
         </div>
         <div className="btns">
           {status === "draft" && <a className="btn small" href={`#/outbounds/orders/${encodeURIComponent(o.id)}/edit`}>Edit</a>}
-          {status === "draft" && can(me, "approve-order") && <button className="btn small primary" disabled={!o.lines.length} onClick={() => { const strategy = o.strategy ?? defaultStrategy(state); dispatch({ type: "order/approve", id: o.id, by: me.name, strategy }); toast(`${o.id} approved. Pallets planned: ${strategyName(strategy).toLowerCase()}.`); }}>Approve & plan picks</button>}
+          {status === "draft" && can(me, "approve-order") && <button className="btn small primary" disabled={!o.lines.length} onClick={() => { const strategy = o.strategy ?? defaultStrategy(state); dispatch({ type: "order/approve", id: o.id, by: me.name, strategy }); toast(`${o.id} approved. Pallets planned: ${strategyName(strategy).replace(/^./, c => c.toLowerCase())}.`); }}>Approve & plan picks</button>}
           {status === "draft" && !can(me, "approve-order") && <span className="muted small">A coordinator or owner approves orders.</span>}
           {status === "draft" && <button className="btn small danger" onClick={() => { if (window.confirm(t(`Delete the draft ${o.id}?`))) { dispatch({ type: "order/delete", id: o.id }); go("#/outbounds/orders"); } }}>Delete draft</button>}
           {status !== "draft" && can(me, "print-labels") && <a className="btn small" href={`#/outbounds/labels/${encodeURIComponent(o.id)}`}>Case labels</a>}
