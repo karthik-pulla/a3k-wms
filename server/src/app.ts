@@ -2,6 +2,7 @@
 //   POST /api/<method>          the warehouse API (server/src/core/tenant-api.ts), for the warehouse at this address
 //   GET  /api/auth/handoff      a one-time support link from the ops console
 //   POST /ops/api/<method>      the ops console API (server/src/core/ops-api.ts), only at the ops address
+//   POST /portal/api/<method>   the client portal's API (server/src/core/portal-api.ts), its own cookie; page at /portal
 //   GET  /api/health            for the load balancer
 //   everything else             the app (index.html), or the console (ops.html) at the ops address
 //
@@ -21,6 +22,7 @@ import { ApiError, obj } from "./core/errors.ts";
 import { noMail, type Mailer } from "./core/mail.ts";
 import { callTenant, tenantLog, useHandoff, type TenantCtx } from "./core/tenant-api.ts";
 import { callOps, opsLog, type OpsCtx, type TenantCreator } from "./core/ops-api.ts";
+import { callPortal } from "./core/portal-api.ts";
 
 declare module "fastify" {
   interface FastifyRequest { tenant?: Tenant; ops?: boolean; site?: boolean }
@@ -58,6 +60,8 @@ const CSP = [
 
 /** Methods anyone can call before signing in: limited per address, so passwords and links can't be guessed at speed */
 const LIMITED = new Set(["auth.signIn", "auth.verify", "auth.confirm", "invite.read", "invite.password", "invite.finish", "requests.create"]);
+/** The client portal's: the same limit, counted apart from the warehouse app's */
+const PORTAL_LIMITED = new Set(["auth.signIn", "auth.verify", "invite.read", "invite.password", "invite.finish"]);
 class RateLimit {
   private readonly hits = new Map<string, { n: number; until: number }>();
   private readonly limit: number;
@@ -75,6 +79,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({ logger: deps.logger ?? false, trustProxy: true, bodyLimit: 8_388_608 }); // a change may carry message photos (server/src/shared/sync.ts)
   app.register(cookie);
   const cookieName = deps.secureCookies ? "__Host-wms" : "wms";
+  // The client portal's session is a cookie of its own: a client login is never a warehouse session, nor the other way
+  const portalCookie = deps.secureCookies ? "__Host-wms-portal" : "wms-portal";
   const limiter = new RateLimit(30, 60_000);
   const opsHost = deps.opsHost ? normalizeHost(deps.opsHost) : null;
   const siteHost = deps.siteHost ? normalizeHost(deps.siteHost) : null;
@@ -116,11 +122,11 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return rows[0]?.host ?? "localhost";
   }
 
-  const setSession = (reply: FastifyReply, s: { token: string; maxAgeSec: number } | "clear" | undefined) => {
+  const setSession = (reply: FastifyReply, s: { token: string; maxAgeSec: number } | "clear" | undefined, name = cookieName) => {
     if (!s) return;
     const opts = { path: "/", httpOnly: true, sameSite: "lax" as const, secure: !!deps.secureCookies };
-    if (s === "clear") reply.clearCookie(cookieName, opts);
-    else reply.setCookie(cookieName, s.token, { ...opts, maxAge: s.maxAgeSec });
+    if (s === "clear") reply.clearCookie(name, opts);
+    else reply.setCookie(name, s.token, { ...opts, maxAge: s.maxAgeSec });
   };
 
   // ---------- Every request: which tenant, or the console ----------
@@ -142,7 +148,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     reply.header("referrer-policy", "no-referrer");
     reply.header("x-frame-options", "DENY");
     if (deps.secureCookies) reply.header("strict-transport-security", "max-age=31536000; includeSubDomains");
-    if (req.url.startsWith("/api") || req.url.startsWith("/ops/api")) reply.header("cache-control", "no-store");
+    if (req.url.startsWith("/api") || req.url.startsWith("/ops/api") || req.url.startsWith("/portal/api")) reply.header("cache-control", "no-store");
   });
 
   app.get("/api/health", async (_req, reply) => {
@@ -150,9 +156,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   });
 
   /** Same checks for both APIs: JSON with x-wms (no other site can send that), then the per-address limit */
-  function guard(req: FastifyRequest, method: string) {
+  function guard(req: FastifyRequest, method: string, portal = false) {
     if (req.headers["x-wms"] !== "1" || !String(req.headers["content-type"] ?? "").startsWith("application/json")) throw new ApiError(400, "bad-request", "Not an app request");
-    if (LIMITED.has(method) && !limiter.allow(`${req.ip}|${req.ops ? "ops" : req.tenant?.id}|${method}`)) throw new ApiError(429, "busy", "Too many tries from here. Wait a minute.");
+    if ((portal ? PORTAL_LIMITED : LIMITED).has(method) && !limiter.allow(`${req.ip}|${req.ops ? "ops" : req.tenant?.id}|${portal ? "portal:" : ""}${method}`)) throw new ApiError(429, "busy", "Too many tries from here. Wait a minute.");
   }
 
   app.post<{ Params: { method: string } }>("/api/:method", async (req, reply) => {
@@ -171,6 +177,16 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     const ctx = await tenantCtx(req.tenant, req, req.cookies[cookieName]);
     const r = await callTenant(req.params.method, req.body, ctx);
     setSession(reply, r.session);
+    return r.body;
+  });
+
+  // The client portal: a warehouse's clients sign in here (own accounts, own cookie) to order and announce deliveries
+  app.post<{ Params: { method: string } }>("/portal/api/:method", async (req, reply) => {
+    if (req.ops || req.site || !req.tenant) return reply.code(404).send({ error: "Not found" });
+    guard(req, req.params.method, true);
+    const ctx = await tenantCtx(req.tenant, req, req.cookies[portalCookie]);
+    const r = await callPortal(req.params.method, req.body, ctx);
+    setSession(reply, r.session, portalCookie);
     return r.body;
   });
 
@@ -209,6 +225,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     });
     const page = (req: FastifyRequest, reply: FastifyReply) => reply.header("cache-control", "no-cache").sendFile(req.ops ? "ops.html" : req.site ? "landing.html" : "index.html");
     app.get("/", page);
+    // The client portal's page, at every warehouse's own address
+    const portalPage = (req: FastifyRequest, reply: FastifyReply) => (req.tenant ? reply.header("cache-control", "no-cache").sendFile("portal.html") : page(req, reply));
+    app.get("/portal", portalPage);
+    app.get("/portal/", portalPage);
     // Any other address that isn't a file or the API: the app (it routes itself with #/…)
     app.setNotFoundHandler((req, reply) => (req.method === "GET" && !req.url.startsWith("/api") && !req.url.startsWith("/ops/api") ? page(req, reply) : reply.code(404).send({ error: "Not found" })));
   }

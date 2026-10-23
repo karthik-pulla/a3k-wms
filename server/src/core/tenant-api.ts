@@ -12,7 +12,8 @@ import { allows, cleanPermissions, effective, roleProblems, type Action, type Ba
 import { directory, pull, push, writeSystem, type SyncWho } from "./sync.ts";
 import { codeFormatStatus, importProducts, importStock, saveSettings, setCodeFormat, setupStatus } from "./setup.ts";
 import { cleanProductText, productChanges, productEditProblems, PRODUCT_LIMITS, type ProductText } from "../shared/products.ts";
-import type { GrantView, InviteInfo, LinkResult, LogView, Me, PersonView, RequestView, RoleView, TenantPublic } from "../shared/api.ts";
+import { clientLoginViews, portalEnv, portalLink } from "./portal-api.ts";
+import type { ClientLoginView, GrantView, InviteInfo, LinkResult, LogView, Me, PersonView, RequestView, RoleView, TenantPublic } from "../shared/api.ts";
 
 export interface TenantCtx {
   env: AuthEnv;
@@ -22,6 +23,8 @@ export interface TenantCtx {
   meta: Meta;
   /** e.g. https://a3k.example.com: invite links start with it */
   baseUrl: string;
+  /** The client portal's page (default <baseUrl>/portal): client logins' invite links start with it */
+  portalUrl?: string;
   mailer: Mailer;
 }
 
@@ -424,6 +427,67 @@ export const TENANT_METHODS: Record<string, Method> = {
       await q.query("DELETE FROM roles WHERE id = $1", [id]);
       await log(ctx, q, { actor: a.name, action: "deleted role", target: r.name });
       return { ok: true };
+    }));
+  },
+
+  // ----- Client portal logins (core/portal-api.ts): owners make them, one client each -----
+  "clientLogins.list": async (_i, ctx) => { must(await actor(ctx), "manage-people"); return ok(await clientLoginViews(ctx, ctx.env.db)); },
+
+  "clientLogins.invite": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-people"); needConfirmed(ctx.env, a.session); mayChange(a);
+    const client = str(i.client, "Client", { max: 80 });
+    if (!ctx.tenant.clients.some(c => c.id === client)) throw bad(`Unknown client ${client}`);
+    return ok(await ctx.env.db.tx(async q => {
+      const user = usernameOf(i.username);
+      if ((await q.query("SELECT 1 FROM client_accounts WHERE username = $1", [user])).rows.length) throw new ApiError(409, "conflict", `The username ${user} is taken`);
+      const { rows } = await q.query("INSERT INTO client_accounts (username, name, email, client, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        [user, str(i.name, "Name", { max: 80 }), emailOf(i.email), client, a.name]);
+      const link = await portalLink(ctx, q, { personId: rows[0].id, kind: "invite", by: a.name });
+      await log(ctx, q, { actor: a.name, action: "made a client portal login", target: user, detail: { client } });
+      return { login: (await clientLoginViews(ctx, q, rows[0].id))[0], ...link } satisfies LinkResult & { login: ClientLoginView };
+    }));
+  },
+
+  "clientLogins.disable": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-people"); needConfirmed(ctx.env, a.session); mayChange(a);
+    const id = str(i.id, "Login", { max: 40 });
+    return ok(await ctx.env.db.tx(async q => {
+      const cur = (await q.query("SELECT username FROM client_accounts WHERE id = $1 FOR UPDATE", [id])).rows[0];
+      if (!cur) throw notFound();
+      await q.query("UPDATE client_accounts SET status = 'disabled' WHERE id = $1", [id]);
+      await q.query("UPDATE client_invites SET used_at = now() WHERE person_id = $1 AND used_at IS NULL", [id]);
+      await endSessions(portalEnv(ctx), q, id);
+      await log(ctx, q, { actor: a.name, action: "turned off a client portal login", target: cur.username });
+      return (await clientLoginViews(ctx, q, id))[0];
+    }));
+  },
+
+  "clientLogins.enable": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-people"); needConfirmed(ctx.env, a.session); mayChange(a);
+    const id = str(i.id, "Login", { max: 40 });
+    return ok(await ctx.env.db.tx(async q => {
+      const cur = (await q.query("SELECT username, password_hash IS NOT NULL AND totp_secret IS NOT NULL AS ready FROM client_accounts WHERE id = $1 AND status = 'disabled' FOR UPDATE", [id])).rows[0];
+      if (!cur) throw notFound();
+      await q.query("UPDATE client_accounts SET status = $2, failed_count = 0, locked_until = NULL WHERE id = $1", [id, cur.ready ? "active" : "invited"]);
+      const link = cur.ready ? null : await portalLink(ctx, q, { personId: id, kind: "invite", by: a.name });
+      await log(ctx, q, { actor: a.name, action: "turned a client portal login back on", target: cur.username });
+      return { login: (await clientLoginViews(ctx, q, id))[0], ...(link ?? {}) };
+    }));
+  },
+
+  /** Lost phone or forgotten password: the old ones stop at once; a 24-hour link sets new ones */
+  "clientLogins.resetAccess": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-people"); needConfirmed(ctx.env, a.session); mayChange(a);
+    const id = str(i.id, "Login", { max: 40 });
+    return ok(await ctx.env.db.tx(async q => {
+      const cur = (await q.query("SELECT username, status FROM client_accounts WHERE id = $1 FOR UPDATE", [id])).rows[0];
+      if (!cur || cur.status === "disabled") throw notFound();
+      const invited = cur.status === "invited";
+      if (!invited) await q.query("UPDATE client_accounts SET password_hash = NULL, totp_secret = NULL, totp_last_step = NULL, failed_count = 0, locked_until = NULL WHERE id = $1", [id]);
+      await endSessions(portalEnv(ctx), q, id);
+      const link = await portalLink(ctx, q, { personId: id, kind: invited ? "invite" : "reset", by: a.name });
+      await log(ctx, q, { actor: a.name, action: invited ? "sent a client portal login a new invite" : "reset a client portal login's sign-in", target: cur.username });
+      return { login: (await clientLoginViews(ctx, q, id))[0], ...link };
     }));
   },
 

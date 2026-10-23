@@ -74,3 +74,35 @@ export const ONBOARDING_STEPS: { id: string; label: string }[] = [
   { id: "count", label: "Opening count approved by the owner" },
   { id: "live", label: "First real order shipped; setup mode ended" },
 ];
+
+// ---------- Client portal (<warehouse address>/portal, server/src/core/portal-api.ts) ----------
+/** A client's portal login, as owners see it in Manage warehouse → Clients */
+export interface ClientLoginView {
+  id: string; name: string; username: string; email: string | null;
+  client: string; clientName: string;
+  status: "invited" | "active" | "disabled";
+  linkPending: "invite" | "reset" | null;
+  lastSignInAt: string | null; createdAt: string;
+}
+
+/** Who is signed in to the portal: one client's login */
+export interface PortalMe {
+  account: { id: string; name: string; username: string; email: string | null };
+  client: { id: string; name: string };
+  warehouse: TenantPublic;
+}
+
+/** One of the client's own products (nothing about stock or where it is) */
+export interface PortalProduct { id: string; code: string; name: string; brand: string; size: string; units: number | null }
+
+/** Something the client's logins sent through the portal, with where it stands now */
+export type PortalSent = {
+  key: string; sentAt: string; sentBy: string;
+  lines: { code: string; name: string; cases: number; pallets?: number }[];
+} & (
+  | { kind: "order"; id: string; status: "draft" | "approved" | "picking" | "picked" | "shipped" | "cancelled" | "removed"; store: string; ref: string | null; due: string | null }
+  | { kind: "delivery"; id: string; number: string; status: "incoming" | "pending" | "putaway" | "stored" | "removed"; expected: string; ref: string | null }
+);
+
+/** Limits on what one portal order or delivery notice may hold */
+export const PORTAL_LIMITS = { lines: 200, cases: 100_000, palletsPerLine: 60, pallets: 200, store: 80, ref: 60, notes: 1000, lot: 40, supplier: 80 } as const;

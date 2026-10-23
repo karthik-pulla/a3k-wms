@@ -4,6 +4,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { checkSwap, createRestoreSql, oldDbName, parseRestoreArgs, restoreArgs, restoreCounts, restoreGrantsSql, restorePlan, swapSql } from "../src/ops/restore.ts";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import { migrationsDir } from "../src/migrate/main.ts";
 import { freshDb } from "./pg.ts";
 
 const today = "2026-10-20";
@@ -53,7 +56,7 @@ test("the counts read a warehouse's own tables", async () => {
   assert.equal(counts.products, 0);
   assert.deepEqual(counts.people, {});
   assert.equal(counts.lastChange, 1);
-  assert.match(counts.lastMigration, /^0005_/);
+  assert.equal(counts.lastMigration, readdirSync(join(migrationsDir(), "tenant")).filter(f => f.endsWith(".sql")).sort().at(-1));
 });
 
 test("the swap runs only on a suspended warehouse with a restored copy, and keeps the old database", () => {

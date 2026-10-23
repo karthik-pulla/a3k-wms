@@ -8,10 +8,100 @@ import { tenant } from "../../tenant";
 import { mailRoute, routeProblems } from "../../outbound/routing";
 import { newId } from "../../store/warehouse";
 import type { Contact, MailRoute } from "../../store/types";
+import { useIdentity } from "../../auth/identity";
+import { LinkPanel, useAction, useApiData } from "../warehouse/useApi";
+import type { ClientLoginView, LinkResult } from "../../../../server/src/shared/api.ts";
 
-/** Clients and carriers: who the warehouse deals with, and which client each email to the order inbox comes from */
+/** Clients and carriers: who the warehouse deals with, their portal logins, and which client each email to the order inbox comes from */
 export function ClientsTab() {
-  return <div className="stack"><Routing /><Contacts /></div>;
+  return <div className="stack"><PortalLogins /><Routing /><Contacts /></div>;
+}
+
+/** Where clients sign in: <this address>/portal on the server (portal.html beside this page in the preview) */
+const portalAddress = () => (import.meta.env.VITE_WMS_BACKEND === "preview" ? new URL("./portal.html", location.href).href.split("#")[0] : `${location.origin}/portal`);
+const when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "never");
+
+/**
+ * The client portal: each client's own logins, for placing orders and announcing deliveries. Orders arrive as drafts
+ * in Out-bounds, delivery notices as expected deliveries in In-bounds. Owners only; needs the server.
+ */
+function PortalLogins() {
+  const { kind, me: serverMe } = useIdentity();
+  const allowed = kind === "server" && !!serverMe?.can["manage-people"];
+  const logins = useApiData<ClientLoginView[]>(allowed ? "clientLogins.list" : null);
+  const act = useAction();
+  const toast = useToast();
+  const [name, setName] = useState(""), [username, setUsername] = useState(""), [email, setEmail] = useState(""), [client, setClient] = useState(CLIENTS[0] ?? "");
+  const [link, setLink] = useState<(LinkResult & { who: string; kind: "invite" | "reset" }) | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (kind !== "server") return (
+    <section className="panel glass">
+      <h2 className="plain-h">Client portal</h2>
+      <p className="muted small">With the server, each client gets its own logins to a page where they place orders and tell you about deliveries on their way. Until then, clients email the order inbox (rules below).</p>
+    </section>
+  );
+  if (!allowed) return null;
+  const userOk = /^[a-z0-9][a-z0-9._-]{1,39}$/.test(username.trim().toLowerCase());
+  const emailOk = !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const ok = name.trim().length >= 2 && userOk && emailOk && !!client;
+  const run = async (method: string, input: Record<string, unknown>, done?: (v: any) => void) => {
+    setBusy(true);
+    const r = await act<any>(method, input);
+    setBusy(false);
+    if (!r.ok) { if (r.error !== "Cancelled") toast(r.error); return; }
+    done?.(r.value);
+    void logins.reload();
+  };
+  const invite = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ok || busy) return;
+    void run("clientLogins.invite", { name: name.trim(), username: username.trim().toLowerCase(), email: email.trim() || null, client }, v => {
+      setLink({ link: v.link, emailed: v.emailed, who: name.trim(), kind: "invite" });
+      setName(""); setUsername(""); setEmail("");
+    });
+  };
+  const address = portalAddress();
+  return (
+    <section className="panel glass">
+      <h2 className="plain-h">Client portal</h2>
+      <p className="muted small">Clients sign in at <a className="link" href={address} target="_blank" rel="noreferrer" translate="no">{address}</a> with their own login (a password and a code from their phone) to place orders and announce deliveries. Their orders arrive as drafts in Out-bounds → Orders for approval; delivery notices as expected deliveries in In-bounds → Incoming. A login sees only its own client's products and what its client sent, never stock or anything else here.</p>
+      {link && <LinkPanel link={link.link} emailed={link.emailed} who={link.who} kind={link.kind} onClose={() => setLink(null)} />}
+      {logins.error && <p className="note warn">{logins.error}</p>}
+      <div className="table-wrap">
+        <table className="lines">
+          <thead><tr><th>Login</th><th>Client</th><th>Status</th><th>Last sign-in</th><th aria-label="Actions" /></tr></thead>
+          <tbody>
+            {(logins.data ?? []).map(l => (
+              <tr key={l.id} className={l.status === "disabled" ? "off" : undefined}>
+                <td><b translate="no">{l.name}</b><small className="muted block" translate="no">@{l.username}{l.email ? ` · ${l.email}` : ""}</small></td>
+                <td translate="no">{l.clientName}</td>
+                <td>{l.status === "disabled" ? <span className="status off">Login off</span> : l.status === "invited" ? <span className="status wait">Invited{l.linkPending ? " · link waiting" : " · link expired"}</span> : l.linkPending === "reset" ? <span className="status wait">Reset · link waiting</span> : <span className="status ok">Active</span>}</td>
+                <td className="muted">{when(l.lastSignInAt)}</td>
+                <td><span className="btns">
+                  {l.status === "disabled"
+                    ? <button className="btn small" disabled={busy} onClick={() => void run("clientLogins.enable", { id: l.id }, v => { if (v.link) setLink({ link: v.link, emailed: v.emailed, who: l.name, kind: "invite" }); })}>Turn on</button>
+                    : <>
+                      <button className="btn small" disabled={busy} onClick={() => { if (window.confirm(t(`Reset ${l.name}'s sign-in? Their password and phone stop working at once, and they get a new link.`))) void run("clientLogins.resetAccess", { id: l.id }, v => setLink({ link: v.link, emailed: v.emailed, who: l.name, kind: l.status === "invited" ? "invite" : "reset" })); }}>{l.status === "invited" ? "New link" : "Reset sign-in"}</button>
+                      <button className="btn small" disabled={busy} onClick={() => { if (window.confirm(t(`Turn off ${l.name}'s login? They're signed out at once.`))) void run("clientLogins.disable", { id: l.id }); }}>Turn off</button>
+                    </>}
+                </span></td>
+              </tr>
+            ))}
+            {logins.data && !logins.data.length && <tr><td colSpan={5} className="empty-row">No client logins yet.</td></tr>}
+            {!logins.data && !logins.error && <tr><td colSpan={5} className="empty-row" role="status">Loading…</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <form className="route-form portal-login-form" onSubmit={invite}>
+        <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Full name" aria-label="Full name" autoComplete="off" />
+        <input className={`input${username && !userOk ? " invalid" : ""}`} value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" aria-label="Username" autoCapitalize="none" spellCheck={false} autoComplete="off" />
+        <input className={`input${!emailOk ? " invalid" : ""}`} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email (for the link)" aria-label="Email" autoComplete="off" />
+        <select className="input" value={client} onChange={e => setClient(e.target.value)} aria-label="Client">{CLIENTS.map(c => <option key={c} value={c}>{clientConfig(c)?.name ?? c}</option>)}</select>
+        <button className="btn primary" disabled={!ok || busy}>Make a login</button>
+      </form>
+      <p className="muted small">They get a link (by email, or copy it) to choose a password and connect an authenticator app. Making, resetting and turning off logins asks for your password again.</p>
+    </section>
+  );
 }
 
 function Routing() {

@@ -54,3 +54,9 @@ export const siteApi: Call = async (method, input = {}) => {
   if (import.meta.env.VITE_WMS_BACKEND === "preview") return (await import("./preview")).previewSite(method, input);
   return http("/api", method, input);
 };
+
+/** The client portal (portal.html at <warehouse address>/portal): clients' own logins, their own cookie */
+export const portalApi: Call = async (method, input = {}) => {
+  if (import.meta.env.VITE_WMS_BACKEND === "preview") return (await import("./preview")).previewPortal(method, input);
+  return http("/portal/api", method, input);
+};

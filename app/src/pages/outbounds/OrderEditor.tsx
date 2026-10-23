@@ -145,7 +145,7 @@ export function OrderEditor({ order }: { order?: StoreOrder }) {
           <h2 className="plain-h">Other ways orders come in</h2>
           <p className="small">Read from a PDF: the store's order slip or PO. Codes, cases, store, due date and PO number are filled in; you check and save.</p>
           <p className="small">Email: orders sent to the order inbox show up under Inbox, ready to turn into drafts.</p>
-          <p className="small muted">Clients will be able to enter orders themselves in the client portal (later phase); they arrive here as drafts.</p>
+          <p className="small muted">Clients can also send orders themselves from the client portal; they arrive here as drafts.</p>
         </div>
       )}
     </div>

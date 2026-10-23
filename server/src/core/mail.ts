@@ -31,3 +31,21 @@ export const inviteMail = (o: { to: string; name: string; warehouse: string; lin
     "If you didn't expect this, you can ignore it.",
   ].join("\n"),
 });
+
+/** A client's login for the warehouse's client portal (placing orders, announcing deliveries) */
+export const portalInviteMail = (o: { to: string; name: string; warehouse: string; client: string; link: string; kind: "invite" | "reset"; from: string }): Mail => ({
+  to: o.to,
+  subject: o.kind === "invite" ? `Your ${o.warehouse} client portal login` : `Set up your ${o.warehouse} client portal sign-in again`,
+  text: [
+    `Hi ${o.name},`,
+    "",
+    o.kind === "invite"
+      ? `${o.from} made you a login for the client portal of ${o.warehouse}, for ${o.client}: place orders and tell the warehouse about deliveries on their way. Open this link to choose a password and connect an authenticator app on your phone:`
+      : `${o.from} reset your client portal sign-in. Open this link to choose a new password and connect your authenticator app again:`,
+    "",
+    o.link,
+    "",
+    o.kind === "invite" ? "The link works for 7 days." : "The link works for 24 hours. Your old password and phone no longer work.",
+    "If you didn't expect this, you can ignore it.",
+  ].join("\n"),
+});

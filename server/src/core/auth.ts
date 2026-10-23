@@ -1,5 +1,5 @@
-// Signing in, sessions and invite links, the same for a warehouse's people (its own database) and the WMS team's
-// operators (the platform database); only the table names differ.
+// Signing in, sessions and invite links, the same for a warehouse's people and its clients' portal logins (its own
+// database) and the WMS team's operators (the platform database); only the table names differ.
 //
 // Sign-in is two steps: username + password gives a 5-minute ticket; the ticket + a code from the person's
 // authenticator app gives a session. Five wrong tries lock the account for 30 s, doubling up to 15 minutes. Unknown
@@ -13,6 +13,8 @@ export interface AuthTables { people: string; tickets: string; sessions: string;
 // Constants only (never anything a person typed), so they're safe to put into SQL
 export const TENANT_TABLES: AuthTables = { people: "people", tickets: "sign_in_tickets", sessions: "sessions", invites: "invites" };
 export const OPS_TABLES: AuthTables = { people: "operators", tickets: "operator_tickets", sessions: "operator_sessions", invites: "operator_invites" };
+/** The client portal's logins (a client's own people), kept apart from the warehouse's people (core/portal-api.ts) */
+export const CLIENT_TABLES: AuthTables = { people: "client_accounts", tickets: "client_tickets", sessions: "client_sessions", invites: "client_invites" };
 
 export interface AuthEnv {
   db: Db;

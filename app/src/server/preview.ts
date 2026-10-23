@@ -14,6 +14,7 @@ import { ApiError } from "../../../server/src/core/errors.ts";
 import { type Mail, type Mailer } from "../../../server/src/core/mail.ts";
 import { callTenant, tenantLog, tenantOps, useHandoff, type TenantCtx } from "../../../server/src/core/tenant-api.ts";
 import { callOps, firstOperator, opsLog, type OpsCtx } from "../../../server/src/core/ops-api.ts";
+import { callPortal, portalEnv } from "../../../server/src/core/portal-api.ts";
 import { totpAt, totpCounter, unseal } from "../../../server/src/core/crypto.ts";
 import { addProducts, type ProductRow } from "../../../server/src/core/products.ts";
 import { writeSystem } from "../../../server/src/core/sync.ts";
@@ -147,6 +148,12 @@ async function readyMadeLogins(e: Engine, id: string) {
     const r = await callTenant("people.invite", { name, username, roleId: username }, asOwner);
     await join(ctx.env, (r.body as LinkResult).link);
   }
+  // A client portal login (portal.html) for the warehouse's first client
+  const client = ctx.tenant.clients[0]?.id;
+  if (client) {
+    const r = await callTenant("clientLogins.invite", { name: "Demo Buyer", username: DEMO_LOGINS.portal, client }, asOwner);
+    await join(portalEnv(ctx), (r.body as LinkResult).link);
+  }
   const opsInvite = await firstOperator(opsEnv(e), e.platform, { name: "Owner", username: DEMO_LOGINS.console, email: "owner@demo.test", baseUrl: `${BASE}/ops.html` });
   await join(opsEnv(e), opsLink(opsInvite));
 }
@@ -165,7 +172,7 @@ async function tenantCtx(e: Engine, id: string, token: string | undefined): Prom
     env: { db, tables: TENANT_TABLES, appKey: KEY, now: Date.now, issuer: `${appTitle} (preview)`, ownWords: [id, t?.name ?? "", appTitle, c.branding?.mark ?? ""], log: tenantLog() },
     tenant: { id, name: t?.name ?? id, appTitle, mark: c.branding?.mark ?? "", languages: c.languages ?? { default: "en", enabled: ["en"] },
       clients: (c.clients ?? []).map((x: any) => ({ id: x.id, name: x.name })), groups: (c.groups ?? []).map((x: any) => ({ id: x.id, name: x.name })) },
-    token, meta: { ip: "preview", userAgent: navigator.userAgent }, baseUrl: BASE, mailer,
+    token, meta: { ip: "preview", userAgent: navigator.userAgent }, baseUrl: BASE, portalUrl: `${BASE}/portal.html`, mailer,
   };
 }
 
@@ -194,6 +201,17 @@ export async function previewTenant(method: string, input: Record<string, unknow
     const id = tenantId();
     const r = await callTenant(method, input, await tenantCtx(e, id, getToken(id)));
     setToken(id, r.session);
+    return r.body;
+  });
+}
+
+/** The client portal (portal.html): its own "cookie", apart from the warehouse app's */
+export async function previewPortal(method: string, input: Record<string, unknown>) {
+  return asHttp(async () => {
+    const e = await ready();
+    const id = tenantId();
+    const r = await callPortal(method, input, await tenantCtx(e, id, getToken(`portal-${id}`)));
+    setToken(`portal-${id}`, r.session);
     return r.body;
   });
 }
@@ -246,10 +264,10 @@ export async function previewSite(method: string, input: Record<string, unknown>
 }
 
 /** Preview tools: the code an account's authenticator app would show right now */
-export async function previewCode(scope: "tenant" | "ops", username: string): Promise<string | null> {
+export async function previewCode(scope: "tenant" | "ops" | "portal", username: string): Promise<string | null> {
   const e = await ready();
   const db = scope === "ops" ? e.platform : e.tenants.get(tenantId())!;
-  const row = (await db.query(`SELECT totp_secret FROM ${scope === "ops" ? "operators" : "people"} WHERE username = $1`, [username.trim().toLowerCase()])).rows[0];
+  const row = (await db.query(`SELECT totp_secret FROM ${scope === "ops" ? "operators" : scope === "portal" ? "client_accounts" : "people"} WHERE username = $1`, [username.trim().toLowerCase()])).rows[0];
   return row?.totp_secret ? totpAt(await unseal(KEY, row.totp_secret), totpCounter(Date.now())) : null;
 }
 

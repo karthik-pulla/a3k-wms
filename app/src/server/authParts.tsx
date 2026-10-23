@@ -12,7 +12,7 @@ const preview = BACKEND === "preview";
 export const message = (e: unknown) => (e instanceof ApiCallError ? e.message : "Something went wrong. Try again.");
 
 /** Six boxes' worth of digits in one field (works with phone autofill and pasting); sends itself at 6 digits */
-export function CodeInput({ busy, onCode, previewUser, previewScope = "tenant", secret }: { busy: boolean; onCode: (code: string) => void; previewUser?: string; previewScope?: "tenant" | "ops"; secret?: string }) {
+export function CodeInput({ busy, onCode, previewUser, previewScope = "tenant", secret }: { busy: boolean; onCode: (code: string) => void; previewUser?: string; previewScope?: "tenant" | "ops" | "portal"; secret?: string }) {
   const [code, setCode] = useState("");
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { if (!busy) ref.current?.focus(); }, [busy]);
@@ -41,7 +41,7 @@ export function CodeInput({ busy, onCode, previewUser, previewScope = "tenant", 
 // ---------- Invite and reset links ----------
 export function InviteFlow({ token, pub, onDone, call = api, scope = "tenant" }: {
   token: string; pub: TenantPublic | null; onDone: (me: any) => void;
-  call?: typeof api; scope?: "tenant" | "ops";
+  call?: typeof api; scope?: "tenant" | "ops" | "portal";
 }) {
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,12 +134,12 @@ function qrImage(text: string): string {
 }
 
 /** The public demo's ready-made logins (server/demo.ts): one tap fills in the username and password */
-export function DemoLogins({ where, onPick }: { where: "warehouse" | "console"; onPick: (username: string, password: string) => void }) {
+export function DemoLogins({ where, onPick }: { where: "warehouse" | "console" | "portal"; onPick: (username: string, password: string) => void }) {
   if (!isPublicDemo) return null;
-  const names = where === "console" ? [DEMO_LOGINS.console] : DEMO_LOGINS.warehouse;
+  const names = where === "console" ? [DEMO_LOGINS.console] : where === "portal" ? [DEMO_LOGINS.portal] : DEMO_LOGINS.warehouse;
   return (
     <div className="note demo-logins">
-      <p className="small"><b>Demo</b>: made-up data, kept in this browser only. Sign in as{where === "console" ? " the WMS team's console owner" : ""}:</p>
+      <p className="small"><b>Demo</b>: made-up data, kept in this browser only. Sign in as{where === "console" ? " the WMS team's console owner" : where === "portal" ? " a buyer from one of the brands" : ""}:</p>
       <div className="chip-wrap">{names.map(n => <button key={n} type="button" className="chip-btn" onClick={() => onPick(n, DEMO_LOGINS.password)} translate="no">{n}</button>)}</div>
       <p className="muted small">Password <b className="mono" translate="no">{DEMO_LOGINS.password}</b>, then "Preview: fill in the code" stands in for the phone app.</p>
     </div>
