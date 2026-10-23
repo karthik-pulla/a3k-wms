@@ -14,7 +14,7 @@ import { ApiError } from "../../../server/src/core/errors.ts";
 import { type Mail, type Mailer } from "../../../server/src/core/mail.ts";
 import { callTenant, tenantLog, tenantOps, useHandoff, type TenantCtx } from "../../../server/src/core/tenant-api.ts";
 import { callOps, firstOperator, opsLog, type OpsCtx } from "../../../server/src/core/ops-api.ts";
-import { callPortal, portalEnv } from "../../../server/src/core/portal-api.ts";
+import { callPortal, portalEnv, portalLink } from "../../../server/src/core/portal-api.ts";
 import { totpAt, totpCounter, unseal } from "../../../server/src/core/crypto.ts";
 import { addProducts, type ProductRow } from "../../../server/src/core/products.ts";
 import { writeSystem } from "../../../server/src/core/sync.ts";
@@ -123,6 +123,8 @@ function start(): Engine {
       }
     }
     for (const t of known) if (!e.tenants.has(t)) e.tenants.set(t, await openTenantDb(t, false));
+    // A demo saved in this browser before a ready-made login existed (the client portal's) gets it now
+    if (import.meta.env.VITE_WMS_DEMO === "1" && known.includes(id)) await demoBuyer(e, id);
     });
   })();
   return e;
@@ -148,14 +150,25 @@ async function readyMadeLogins(e: Engine, id: string) {
     const r = await callTenant("people.invite", { name, username, roleId: username }, asOwner);
     await join(ctx.env, (r.body as LinkResult).link);
   }
-  // A client portal login (portal.html) for the warehouse's first client
-  const client = ctx.tenant.clients[0]?.id;
-  if (client) {
-    const r = await callTenant("clientLogins.invite", { name: "Demo Buyer", username: DEMO_LOGINS.portal, client }, asOwner);
-    await join(portalEnv(ctx), (r.body as LinkResult).link);
-  }
+  await demoBuyer(e, id);
   const opsInvite = await firstOperator(opsEnv(e), e.platform, { name: "Owner", username: DEMO_LOGINS.console, email: "owner@demo.test", baseUrl: `${BASE}/ops.html` });
   await join(opsEnv(e), opsLink(opsInvite));
+}
+
+/** The client portal's ready-made login (portal.html) for the warehouse's first client, if it isn't there yet */
+async function demoBuyer(e: Engine, id: string) {
+  const ctx = await tenantCtx(e, id, undefined);
+  const client = ctx.tenant.clients[0]?.id;
+  const db = e.tenants.get(id);
+  if (!client || !db || (await db.query("SELECT 1 FROM client_accounts WHERE username = $1", [DEMO_LOGINS.portal])).rows.length) return;
+  const env = portalEnv(ctx);
+  const link = await db.tx(async q => {
+    const { rows } = await q.query("INSERT INTO client_accounts (username, name, email, client, created_by) VALUES ($1, 'Demo Buyer', NULL, $2, 'WMS team (demo)') RETURNING id", [DEMO_LOGINS.portal, client]);
+    return (await portalLink(ctx, q, { personId: rows[0].id, kind: "invite", by: "WMS team (demo)" })).link;
+  });
+  const token = link.split("#/invite/")[1];
+  const { secret } = await setInvitePassword(env, token, DEMO_LOGINS.password);
+  await finishInvite(env, token, await totpAt(secret, totpCounter(Date.now()) - 1), { ip: "preview" });
 }
 
 async function ready(): Promise<Engine> { engine ??= start(); await engine.ready; return engine; }

@@ -50,7 +50,7 @@ export function WorkPage({ parts }: { parts: string[] }) {
 
 function WorkHome() {
   const { state } = useStore();
-  const { me, settings, update } = useSession();
+  const { me } = useSession();
   const now = useClock();
   const { mine, pool } = myQueue(state, me);
   const orders = state.orders.filter(o => o.assignee === me.id && ["approved", "picking"].includes(statusOf(o)) && canSeeClient(me, o.client));
@@ -78,13 +78,13 @@ function WorkHome() {
               <li key={o.id}><a className="link" href={`#/work/order/${encodeURIComponent(o.id)}`}><b>{o.id}</b> · {o.store}</a><small className={`due-tag ${dueTone(o)}`}>{dueText(o)}</small><small className="muted">{pickedCases(o)}/{orderCases(o)} cases picked</small></li>
             ))}</ul> : <p className="muted small">A coordinator gives you orders to pack.</p>}
           </section>
-          {settings.workMessages ? <section className="panel glass">
-            <div className="panel-foot"><h2 className="plain-h">Messages</h2><span className="card-acts">{unread.count > 0 && <span className="badge">{unread.count}</span>}<button type="button" className="iconbtn small" aria-label="Hide Messages from this screen" title="Hide from this screen" onClick={() => update({ workMessages: false })}>×</button></span></div>
+          <section className="panel glass">
+            <div className="panel-foot"><h2 className="plain-h">Messages</h2>{unread.count > 0 && <span className="badge">{unread.count}</span>}</div>
             <ul className="notice-list">{alerts.map(({ m, unread: u }) => (
               <li key={m.id} className={u ? "unread" : ""}><a href={`#/messages/${encodeURIComponent(m.conversationId)}/${m.id}`}><b>{state.chat.users.find(x => x.id === m.authorId)?.name}</b> <span translate="no">{visibleText(state, me, m, "…").slice(0, 120)}</span><small className="muted"> · {roughAgo(m.createdAt)}</small></a></li>
             ))}{!alerts.length && <li className="muted small">No messages for you.</li>}</ul>
             <a className="link" href="#/messages">All messages ›</a>
-          </section> : <button className="link small" onClick={() => update({ workMessages: true })}>Show Messages here</button>}
+          </section>
         </aside>
       </div>
     </main>

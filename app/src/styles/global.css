@@ -1861,7 +1861,18 @@ table.lines.log-table tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--w
   .portal-product { min-width: 160px; }
   .portal-login-form { grid-template-columns: 1fr; }
 }
-.card-acts { display: inline-flex; align-items: center; gap: 6px; }
-.widget-hide { position: relative; z-index: 2; width: 26px; height: 26px; border-color: transparent; background: none; color: var(--faint); font-size: 18px; }
-.widget-hide:hover { color: var(--ink); }
 .home-foot { justify-content: flex-end; }
+
+/* Messages tucked away: a tab on the right edge brings it back; the panel slides in from the side */
+.msg-tab { position: fixed; z-index: 6; right: 0; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 14px 9px; border-radius: 16px 0 0 16px; border-right: none; color: var(--ink); box-shadow: var(--shadow); animation: tab-in .3s ease-out; }
+.msg-tab:hover { background: var(--glass-hover); padding-right: 13px; }
+.msg-tab svg { width: 20px; height: 20px; }
+.msg-tab-label { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12.5px; font-weight: 560; letter-spacing: .03em; }
+.rail { animation: rail-in .3s ease-out; }
+.hm-tuck svg { width: 16px; height: 16px; }
+.hmc-acts { position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 6px; }
+@keyframes tab-in { from { transform: translate(100%, -50%); } to { transform: translate(0, -50%); } }
+@keyframes rail-in { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .msg-tab, .rail { animation: none; } }
+@media (max-width: 760px) { .msg-tab { top: auto; bottom: calc(120px + env(safe-area-inset-bottom)); transform: none; animation: none; } }

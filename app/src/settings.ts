@@ -23,8 +23,8 @@ export interface HomeSettings {
   cards: { kind: HomeCardKind; visible: boolean }[];
   /** People (ids) on this device who have finished or skipped the tour; the others see it when they sign in */
   toured: string[];
-  /** Workers' Work screen: show the Messages panel */
-  workMessages: boolean;
+  /** Home: Messages tucked away to the side (a tab on the right edge brings it back) */
+  messagesTucked: boolean;
   // Messages
   lastOnlineVisibleTo: LastOnlineVisibility;
   hidePresenceOffShift: boolean;
@@ -62,7 +62,7 @@ export const DEFAULT_SETTINGS: HomeSettings = {
     { kind: "stockByBrand", visible: false },
   ],
   toured: [],
-  workMessages: true,
+  messagesTucked: false,
   lastOnlineVisibleTo: "owners-coordinators",
   hidePresenceOffShift: false,
   shiftStart: "07:00",

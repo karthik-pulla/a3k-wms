@@ -9,7 +9,7 @@ import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { MessageText } from "./MessageText";
 import { ExpandIcon } from "../icons";
-import { HideWidget } from "../home/HideWidget";
+import { TuckButton } from "../home/MessagesTab";
 
 const SEL_KEY = "wms.home.chat.sel";
 const readSel = () => { try { return localStorage.getItem(SEL_KEY) ?? ""; } catch { return ""; } };
@@ -42,7 +42,7 @@ export function HomeMessages({ placement }: { placement: "rail" | "grid" }) {
         {totals.count > 0 && <span className="badge">{totals.count}</span>}
         {totals.mentions > 0 && <a className="badge mention" href="#/messages/mentions" title="Unread mentions">@{totals.mentions}</a>}
         <button className="iconbtn hm-full" onClick={() => go(`#/messages/${selected ? encodeURIComponent(selected) : ""}`)} aria-label="Open full screen" title="Open full screen"><ExpandIcon /></button>
-        <HideWidget kind="messages" />
+        <TuckButton />
       </header>
       <div className="hm-body">
         <div className="hm-convs">{strip.map(c => <ConversationRow key={c.id} c={c} active={c.id === selected} onOpen={setSel} />)}</div>
@@ -69,7 +69,7 @@ export function HomeMessagesCompact() {
       <a className="hmc-link" href="#/messages"><span className="sr-only">Open Messages</span></a>
       <div className="card-head">
         <div><h3 className="card-title" id="hmc-title">Messages</h3><p className="card-sub">{totals.count ? `${totals.count} unread${totals.mentions ? ` · ${totals.mentions} mention${totals.mentions > 1 ? "s" : ""}` : ""}` : "All caught up"}</p></div>
-        <span className="card-acts"><span className={`count${totals.mentions ? " warn" : ""}`}>{totals.count}</span><HideWidget kind="messages" /></span>
+        <span className="hmc-acts"><span className={`count${totals.mentions ? " warn" : ""}`}>{totals.count}</span><TuckButton /></span>
       </div>
       {latest.length > 0 && (
         <ul className="items">

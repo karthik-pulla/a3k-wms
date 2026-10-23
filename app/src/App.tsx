@@ -5,6 +5,7 @@ import { StatusPill } from "./components/StatusPill";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SettingsIcon, HomeIcon, HelpIcon } from "./components/icons";
 import { Tour } from "./help/Tour";
+import { MessagesTab } from "./components/home/MessagesTab";
 import { ToastProvider, useToast } from "./components/Toast";
 import { HomeMessages } from "./components/chat/HomeMessages";
 import { Home } from "./pages/Home";
@@ -141,7 +142,8 @@ function Shell({ reset, viewingAs }: { reset: () => void; viewingAs: boolean }) 
   const home = route.mode === "home" && lead;
   const messagesCard = settings.cards.find(c => c.kind === "messages")?.visible ?? false;
   // Wide screens: Messages (when chosen as a widget) sits in a right-hand rail; narrower, it joins the other widgets
-  const rail = home && wide && messagesCard;
+  const rail = home && wide && messagesCard && !settings.messagesTucked;
+  const tucked = home && messagesCard && settings.messagesTucked;
   useEffect(() => { const t = window.setTimeout(() => Object.values(screens).forEach(load => load().catch(() => {})), 1500); return () => window.clearTimeout(t); }, []);
 
   return (
@@ -163,6 +165,7 @@ function Shell({ reset, viewingAs }: { reset: () => void; viewingAs: boolean }) 
           : <OutboundsPage parts={route.parts} />}
         </Suspense>
         {rail && <aside className="rail" aria-label="Messages"><HomeMessages placement="rail" /></aside>}
+        {tucked && <MessagesTab />}
         <div className="topbar">
           <StatusPill />
           {account.admin && <RoleSwitch compact />}

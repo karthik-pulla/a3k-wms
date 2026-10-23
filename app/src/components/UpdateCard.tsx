@@ -1,5 +1,4 @@
 import type { UpdateGroup } from "../home/updates";
-import { HideWidget } from "./home/HideWidget";
 
 const MAX_ITEMS = 3;
 
@@ -12,11 +11,8 @@ export function UpdateCard({ group }: { group: UpdateGroup }) {
           <h3 className="card-title" id={`card-${group.kind}`}>{group.title}</h3>
           <p className="card-sub">{group.subtitle}</p>
         </div>
-        <span className="card-acts">
-          <span className={`count${group.tone === "warn" ? " warn" : group.tone === "danger" ? " danger" : ""}`} aria-label={`${group.count} waiting`}>
-            {group.count}
-          </span>
-          <HideWidget kind={group.kind} />
+        <span className={`count${group.tone === "warn" ? " warn" : group.tone === "danger" ? " danger" : ""}`} aria-label={`${group.count} waiting`}>
+          {group.count}
         </span>
       </div>
       {group.items.length ? (
