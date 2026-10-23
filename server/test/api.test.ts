@@ -1,6 +1,9 @@
 // Tenant routing in the API: the Host header picks the tenant, nothing else does, and one tenant never reaches another's database.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { buildApp } from "../src/app.ts";
 import { TenantPools, type PoolLike, type TenantDb } from "../src/db/pools.ts";
 import { TenantDirectory, normalizeHost, type Tenant } from "../src/tenancy.ts";
@@ -89,6 +92,27 @@ test("answers carry the security headers", async () => {
 test("health needs no tenant", async () => {
   const { app } = setup();
   assert.equal((await app.inject({ url: "/api/health", headers: { host: "anything" } })).statusCode, 200);
+});
+
+// CloudFront (infra/lib/api-stack.ts) keeps whatever the server says it may: hashed files for a year, nothing else
+test("hashed files may be kept for a year; pages and other files are checked every time", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "wms-static-"));
+  mkdirSync(join(dir, "assets"));
+  for (const f of ["index.html", "portal.html", "theme.js", "assets/index-Ab12Cd34.js", "assets/inter-latin-wght-normal-Xy9.woff2"]) writeFileSync(join(dir, f), f);
+  const app = buildApp({ directory: new TenantDirectory(async h => TENANTS[h] ?? null), pools: new TenantPools(() => { throw new Error("no database"); }), platformHealth: async () => {}, staticDir: dir });
+  const get = (url: string) => app.inject({ method: "GET", url, headers: { host: "alpha.wms.test" } });
+  for (const url of ["/assets/index-Ab12Cd34.js", "/assets/inter-latin-wght-normal-Xy9.woff2"]) {
+    const r = await get(url);
+    assert.equal(r.statusCode, 200, url);
+    assert.equal(r.headers["cache-control"], "public, max-age=31536000, immutable", url);
+  }
+  // Pages, the app's routes, unhashed files, and a hashed name that isn't there (it gets the app's page)
+  for (const url of ["/", "/index.html", "/portal", "/inventory", "/theme.js", "/assets/index-Gone0000.js"]) {
+    const r = await get(url);
+    assert.equal(r.statusCode, 200, url);
+    assert.equal(r.headers["cache-control"], "no-cache", url);
+  }
+  assert.equal((await app.inject(pub("alpha.wms.test"))).headers["cache-control"], "no-store");
 });
 
 test("tenant lookups are cached per address", async () => {

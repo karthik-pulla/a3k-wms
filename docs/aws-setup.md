@@ -11,7 +11,8 @@ This is done once per AWS account. After that, every release is: GitHub → Acti
 | PostgreSQL (RDS, `t4g.medium`) | One instance; a database per warehouse, plus the platform database | ~$50 |
 | RDS Proxy | In front of PostgreSQL from day one, so connections can never run out | ~$22 (billed per database vCPU, 2 minimum) |
 | NAT gateway | Lets the server reach AWS services from its private network | ~$33 + traffic |
-| Load balancer | The public address of the API | ~$18 |
+| Load balancer | Behind CloudFront: what CloudFront fetches from | ~$18 |
+| CloudFront | The public address: keeps the app's scripts, styles and fonts near visitors (North America and Europe edges) | a few dollars (pay per traffic) |
 | ECS Fargate | The API (1 task in staging, 2–6 in prod) | ~$18 per task |
 | S3, KMS, Secrets Manager, CloudWatch | Files, keys, logins, logs and alarms | a few dollars |
 
@@ -39,7 +40,7 @@ About 30 minutes, all in a web browser. Steps 1 and 5 are yours alone (creating 
 5. **GitHub settings** for the repository (github.com → the repository → Settings):
     - Secrets and variables → Actions → **Variables** tab → New repository variable: `AWS_DEPLOY_ROLE_ARN` = the DeployRoleArn from step 3, and `AWS_REGION` = `us-east-1`.
     - **Environments** → New environment `staging`; New environment `prod` → tick "Required reviewers" and add yourself, so nothing reaches the real warehouse without your approval.
-6. **First deploy.** The deploy workflow and the server code have to be on GitHub for this, so it needs a push first (your call). Then Actions → "Deploy to AWS" → Run workflow → `staging`. It builds everything, runs the migration loop and starts the API; the first run takes about 30 minutes (the database is the slow part). The API's address is printed at the end (ApiUrl).
+6. **First deploy.** The deploy workflow and the server code have to be on GitHub for this, so it needs a push first (your call). Then Actions → "Deploy to AWS" → Run workflow → `staging`. It builds everything, runs the migration loop and starts the API; the first run takes about 30 minutes (the database is the slow part). The public address is printed at the end (**CdnDomain**, `d….cloudfront.net`); **ApiUrl** is the load balancer behind it.
 7. **Your console account.** Once the domain is set up (the console lives at `ops.<domain>`), run the one-off task once in CloudShell, with the values the deploy printed:
    ```bash
    aws ecs run-task --cluster CLUSTER --task-definition MIGRATE_TASK --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[SUBNETS],securityGroups=[OPS_SG]}" --overrides '{"containerOverrides":[{"name":"migrate","command":["node","dist/src/ops/firstOperator.js","--name","Your Name","--username","you","--email","you@example.com","--ops-url","https://ops.example.com"]}]}'
@@ -59,6 +60,7 @@ The deploy reads these from the GitHub environment (`staging` or `prod` → Envi
 | --- | --- |
 | `WMS_DOMAIN` | The product's domain. Warehouses at `<id>.<domain>`, the console at `ops.<domain>`, the public page at `<domain>`, order emails at `<id>@orders.<domain>`. |
 | `WMS_CERTIFICATE_ARN` | The HTTPS certificate (below). |
+| `WMS_CDN_CERTIFICATE_ARN` | Only if the stacks run outside `us-east-1`: the same certificate made in `us-east-1`, for CloudFront. Leave empty otherwise (CloudFront then uses `WMS_CERTIFICATE_ARN`). |
 | `WMS_MAIL_FROM` | The sender for invite emails, e.g. `no-reply@<domain>`. |
 | `WMS_ALERT_EMAIL` | Who gets alarms (database busy, backup failed, an order email stuck). |
 | `WMS_VISIT_EMAIL` | Who gets "Book a visit" requests (defaults to the alert email). |
@@ -67,11 +69,14 @@ The deploy reads these from the GitHub environment (`staging` or `prod` → Envi
 
 ## Domain
 
-Until there's a domain, the API answers at the load balancer's address over plain HTTP, which is fine for staging tests with made-up data only. Before any real data goes in:
+Visitors reach the WMS through **CloudFront**, which sits in front of the load balancer. It keeps the app's hashed files (`/assets/`: scripts, styles, fonts) at edges near visitors for up to a year, compressed (Brotli or gzip), over HTTP/2 and HTTP/3. Pages and the APIs (`/api/`, `/ops/api/`, `/portal/api/`) are never cached: they go straight to the API with the visitor's address (Host header, which picks the warehouse) and cookies. A new release changes the files' names, so nothing needs clearing after a deploy.
 
-- Choose the product's domain and get a certificate in AWS Certificate Manager for both `<domain>` and `*.<domain>`.
-- Set `WMS_CERTIFICATE_ARN` and `WMS_DOMAIN`, and deploy. The load balancer then serves HTTPS only; the console answers at `ops.<domain>` and the public page ("Book a visit") at `<domain>` and `www.<domain>`.
-- DNS: point `<domain>`, `www.<domain>` and `*.<domain>` at the load balancer. Each warehouse's address, like `a3k.<domain>`, is a row in the platform database's `domains` table, added when the warehouse is created.
+Until there's a domain, CloudFront answers at its own address (**CdnDomain**) and talks plain HTTP to the load balancer, which is fine for staging tests with made-up data only. (A warehouse answers only at an address in the `domains` table, so a test warehouse at that address needs that row.) Before any real data goes in:
+
+- Choose the product's domain and get a certificate in AWS Certificate Manager for both `<domain>` and `*.<domain>`, in **us-east-1** (N. Virginia). CloudFront only takes certificates from us-east-1; the stacks run there too, so one certificate serves both CloudFront and the load balancer.
+- Set `WMS_CERTIFICATE_ARN` and `WMS_DOMAIN`, and deploy. CloudFront and the load balancer then serve HTTPS only; the console answers at `ops.<domain>` and the public page ("Book a visit") at `<domain>` and `www.<domain>`.
+- DNS: point `<domain>`, `www.<domain>` and `*.<domain>` at **CloudFront** (the deploy's **CdnDomain** output, `d….cloudfront.net`), not at the load balancer. In Route 53, make each an **Alias** record to that CloudFront distribution (A and AAAA); with another DNS provider, use CNAME records for `www` and `*`, and the provider's ALIAS/ANAME (or "CNAME flattening") for the bare `<domain>`, which can't be a CNAME. Each warehouse's address, like `a3k.<domain>`, is a row in the platform database's `domains` table, added when the warehouse is created; no DNS change per warehouse.
+- **Moving from the load balancer to CloudFront** (a domain already pointed at the load balancer before this change): deploy first, then change the three DNS records to CloudFront. CloudFront refuses a domain that another distribution already has; if the deploy says so, remove it from that one first.
 - Email out: verify the domain in Amazon SES (and ask AWS to lift the SES sandbox), then set `WMS_MAIL_FROM`. Until then, invite and reset links aren't emailed; whoever makes one copies it from the screen.
 
 ## Order emails

@@ -12,6 +12,9 @@ export interface Settings {
   perTenantMax: number;
   /** HTTPS certificate (ACM) for *.<domain>; without one the load balancer serves plain HTTP (staging, before a domain) */
   certificateArn?: string;
+  /** The same kind of certificate for CloudFront, which only takes ones in us-east-1. Defaults to certificateArn (the
+   *  usual case: the stacks run in us-east-1); a stack in another region needs its own one here. */
+  cdnCertificateArn?: string;
   alertEmail?: string;
   /** The product's domain: warehouses at <id>.<domain>, the ops console at ops.<domain> */
   domain?: string;
@@ -29,7 +32,10 @@ export function settingsFor(stage: string, ctx: (key: string) => string | undefi
   if (stage !== "staging" && stage !== "prod") throw new Error(`-c stage=staging or -c stage=prod (got "${stage}")`);
   const release = ctx("release");
   if (!release) throw new Error("-c release=<git commit> is required: it's the server image tag to run");
-  const base = { stage, release, certificateArn: ctx("certificateArn"), alertEmail: ctx("alertEmail"), domain: ctx("domain"), mailFrom: ctx("mailFrom"),
+  const cdnCertificateArn = ctx("cdnCertificateArn") ?? ctx("certificateArn");
+  if (cdnCertificateArn && cdnCertificateArn.split(":")[3] !== "us-east-1")
+    throw new Error(`CloudFront needs its certificate in us-east-1 (got ${cdnCertificateArn}): set -c cdnCertificateArn (WMS_CDN_CERTIFICATE_ARN)`);
+  const base = { stage, release, certificateArn: ctx("certificateArn"), cdnCertificateArn, alertEmail: ctx("alertEmail"), domain: ctx("domain"), mailFrom: ctx("mailFrom"),
     productName: ctx("productName"), visitEmail: ctx("visitEmail") ?? ctx("alertEmail"),
     nasTenants: (ctx("nasTenants") ?? "").split(",").map(x => x.trim()).filter(Boolean), perTenantMax: 3, connectionBudget: 30 } as const;
   return stage === "prod"

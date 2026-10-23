@@ -173,3 +173,56 @@ test("with a domain, order emails come in through SES to a queue the API reads; 
   const apiPolicy = JSON.stringify(a.findResources("AWS::IAM::Policy"));
   assert.match(apiPolicy, /inbound\/\*/);
 });
+
+test("CloudFront keeps the app's hashed files for a year and never caches pages or the APIs", () => {
+  const CACHING_DISABLED = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad", ALL_VIEWER = "216adef6-5c7f-47e4-b989-5492eafa07d3";
+  const app = new App();
+  const s = settingsFor("staging", k => ({ release: "t", domain: "wms.example", certificateArn: "arn:aws:acm:us-east-1:111111111111:certificate/x" } as Record<string, string>)[k]);
+  const env = { account: "111111111111", region: "us-east-1" };
+  const t = Template.fromStack(new ApiStack(app, "ACdn", s, new DataStack(app, "DCdn", s, { env }), { env }));
+  t.resourceCountIs("AWS::CloudFront::Distribution", 1);
+  const dist = (Object.values(t.findResources("AWS::CloudFront::Distribution"))[0] as any).Properties.DistributionConfig;
+  assert.equal(dist.HttpVersion, "http2and3");
+  // Every warehouse's address, the console and the public page, on the us-east-1 certificate
+  assert.deepEqual(dist.Aliases, ["wms.example", "www.wms.example", "*.wms.example"]);
+  assert.equal(dist.ViewerCertificate.AcmCertificateArn, "arn:aws:acm:us-east-1:111111111111:certificate/x");
+  assert.equal(dist.ViewerCertificate.SslSupportMethod, "sni-only");
+  // The load balancer is reached over HTTPS when there's a certificate
+  assert.equal(dist.Origins[0].CustomOriginConfig.OriginProtocolPolicy, "https-only");
+
+  // Pages (the default) and the three APIs: not cached; Host, cookies and query strings all reach the API
+  const byPath = Object.fromEntries((dist.CacheBehaviors as any[]).map(b => [b.PathPattern, b]));
+  for (const b of [dist.DefaultCacheBehavior, byPath["/api/*"], byPath["/ops/api/*"], byPath["/portal/api/*"]]) {
+    assert.ok(b, "behavior");
+    assert.equal(b.CachePolicyId, CACHING_DISABLED);
+    assert.equal(b.OriginRequestPolicyId, ALL_VIEWER);
+    assert.ok(b.AllowedMethods.includes("POST"));
+    assert.equal(b.ViewerProtocolPolicy, "redirect-to-https");
+  }
+
+  // /assets/* (scripts, styles, fonts): cached as long as the server says, up to a year, compressed, keyed by Host only
+  const assets = byPath["/assets/*"];
+  assert.equal(assets.Compress, true);
+  assert.deepEqual(assets.AllowedMethods, ["GET", "HEAD"]);
+  assert.deepEqual(assets.CachePolicyId, { Ref: Object.keys(t.findResources("AWS::CloudFront::CachePolicy"))[0] });
+  t.hasResourceProperties("AWS::CloudFront::CachePolicy", { CachePolicyConfig: Match.objectLike({
+    MinTTL: 0, MaxTTL: 31536000,
+    ParametersInCacheKeyAndForwardedToOrigin: {
+      EnableAcceptEncodingGzip: true, EnableAcceptEncodingBrotli: true,
+      HeadersConfig: { HeaderBehavior: "whitelist", Headers: ["Host"] },
+      CookiesConfig: { CookieBehavior: "none" }, QueryStringsConfig: { QueryStringBehavior: "none" },
+    },
+  }) });
+  // Only /assets/ is cached: nothing else gets a cache policy of its own
+  assert.deepEqual(Object.keys(byPath).sort(), ["/api/*", "/assets/*", "/ops/api/*", "/portal/api/*"]);
+});
+
+test("without a domain CloudFront answers at its own address; a certificate outside us-east-1 needs its own CloudFront one", () => {
+  const dist = (Object.values(api.findResources("AWS::CloudFront::Distribution"))[0] as any).Properties.DistributionConfig;
+  assert.equal(dist.Aliases, undefined);
+  assert.equal(dist.Origins[0].CustomOriginConfig.OriginProtocolPolicy, "http-only");
+  const ctx = (extra: Record<string, string>) => (k: string) => ({ release: "t", domain: "wms.example", ...extra } as Record<string, string>)[k];
+  assert.throws(() => settingsFor("prod", ctx({ certificateArn: "arn:aws:acm:eu-west-1:111111111111:certificate/x" })), /us-east-1/);
+  const s = settingsFor("prod", ctx({ certificateArn: "arn:aws:acm:eu-west-1:111111111111:certificate/x", cdnCertificateArn: "arn:aws:acm:us-east-1:111111111111:certificate/y" }));
+  assert.equal(s.cdnCertificateArn, "arn:aws:acm:us-east-1:111111111111:certificate/y");
+});

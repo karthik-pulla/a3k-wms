@@ -59,6 +59,7 @@ jobs:
         env:
           WMS_DOMAIN: ${{ vars.WMS_DOMAIN }}
           WMS_CERTIFICATE_ARN: ${{ vars.WMS_CERTIFICATE_ARN }}
+          WMS_CDN_CERTIFICATE_ARN: ${{ vars.WMS_CDN_CERTIFICATE_ARN }}
           WMS_MAIL_FROM: ${{ vars.WMS_MAIL_FROM }}
           WMS_ALERT_EMAIL: ${{ vars.WMS_ALERT_EMAIL }}
           WMS_VISIT_EMAIL: ${{ vars.WMS_VISIT_EMAIL }}
@@ -67,7 +68,7 @@ jobs:
         run: |
           ctx="-c stage=$STAGE -c release=$RELEASE"
           add() { if [ -n "$2" ]; then ctx="$ctx -c $1=$(printf %q "$2")"; fi; }
-          add domain "$WMS_DOMAIN"; add certificateArn "$WMS_CERTIFICATE_ARN"; add mailFrom "$WMS_MAIL_FROM"; add alertEmail "$WMS_ALERT_EMAIL"
+          add domain "$WMS_DOMAIN"; add certificateArn "$WMS_CERTIFICATE_ARN"; add cdnCertificateArn "$WMS_CDN_CERTIFICATE_ARN"; add mailFrom "$WMS_MAIL_FROM"; add alertEmail "$WMS_ALERT_EMAIL"
           add visitEmail "$WMS_VISIT_EMAIL"; add productName "$WMS_PRODUCT_NAME"; add nasTenants "$WMS_NAS_TENANTS"
           echo "CDK_CONTEXT=$ctx" >> "$GITHUB_ENV"
 

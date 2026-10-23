@@ -6,6 +6,8 @@ import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as patterns from "aws-cdk-lib/aws-ecs-patterns";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
@@ -87,6 +89,50 @@ export class ApiStack extends Stack {
     const scaling = svc.service.autoScaleTaskCount({ minCapacity: s.apiTasks.min, maxCapacity: s.apiTasks.max });
     scaling.scaleOnCpuUtilization("Cpu", { targetUtilizationPercent: 60 });
 
+    // CloudFront in front of the load balancer, so visitors fetch the app from a nearby edge. Only the built app's
+    // hashed files (/assets/: scripts, styles, fonts; their names change with their content) are kept there, for as
+    // long as the server says (a year). Pages, the three APIs and everything else are never cached and reach the API
+    // with the visitor's Host header (it picks the warehouse, server/src/tenancy.ts), cookies and query string.
+    const origin = new origins.LoadBalancerV2Origin(svc.loadBalancer, {
+      protocolPolicy: https ? cloudfront.OriginProtocolPolicy.HTTPS_ONLY : cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+      originSslProtocols: [cloudfront.OriginSslPolicy.TLS_V1_2],
+    });
+    const passThrough: cloudfront.BehaviorOptions = {
+      origin, viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS, allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+      cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED, originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER, compress: true,
+    };
+    const assetsCache = new cloudfront.CachePolicy(this, "AssetsCache", {
+      comment: `WMS ${s.stage}: the app's hashed files, as long as the server says`,
+      // 0 minimum: a "no-cache" answer (a missing file gets the app's page) is never kept
+      minTtl: Duration.seconds(0), defaultTtl: Duration.days(1), maxTtl: Duration.days(365),
+      // Host is in the key: the API needs it, and an unknown address's 404 then stays with that address. No cookies.
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList("Host"),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(), queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
+      enableAcceptEncodingGzip: true, enableAcceptEncodingBrotli: true,
+    });
+    const domainNames = s.domain && s.cdnCertificateArn ? [s.domain, `www.${s.domain}`, `*.${s.domain}`] : undefined;
+    const cdn = new cloudfront.Distribution(this, "Cdn", {
+      comment: `WMS ${s.stage}`,
+      defaultBehavior: passThrough,
+      additionalBehaviors: {
+        "/assets/*": {
+          origin, viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS, allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+          cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD, cachePolicy: assetsCache, compress: true,
+        },
+        // The same as the default, spelled out so they stay uncached whatever happens to it
+        "/api/*": passThrough, "/ops/api/*": passThrough, "/portal/api/*": passThrough,
+      },
+      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      ...(domainNames ? {
+        domainNames, certificate: acm.Certificate.fromCertificateArn(this, "CdnCert", s.cdnCertificateArn!),
+        minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+      } : {}),
+    });
+
+    // Point <domain>, www.<domain> and *.<domain> here (docs/aws-setup.md)
+    new CfnOutput(this, "CdnDomain", { value: cdn.distributionDomainName });
+    // The load balancer itself, for checks; visitors go through CloudFront
     new CfnOutput(this, "ApiUrl", { value: `${https ? "https" : "http"}://${svc.loadBalancer.loadBalancerDnsName}` });
     // Worst case connections from the API to the proxy: tasks × budget (the proxy's own cap protects the database anyway)
     new CfnOutput(this, "MaxApiConnections", { value: String(s.apiTasks.max * s.connectionBudget) });
