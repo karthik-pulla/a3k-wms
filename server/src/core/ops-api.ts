@@ -161,6 +161,18 @@ export const OPS_METHODS: Record<string, Method> = {
     return ok(r);
   },
 
+  /** The slot code format: set by the WMS team, only while the warehouse has no stock (core/setup.ts) */
+  "tenants.codeFormat": async (i, ctx) => { await operator(ctx); const id = tenantId(i.id); await tenantRow(ctx.platform, id); return ok(await tenantOps.codeFormat(await ctx.tenant(id))); },
+  "tenants.setCodeFormat": async (i, ctx) => {
+    const o = await operator(ctx); needConfirmed(ctx.env, o.session);
+    const id = tenantId(i.id);
+    await tenantRow(ctx.platform, id);
+    const reason = str(i.reason, "Reason", { min: 3, max: 300 });
+    const r = await tenantOps.setCodeFormat(await ctx.tenant(id), `${o.name} (WMS team)`, i.codeFormat);
+    await audit(ctx.platform, o.name, "changed the slot code format", id, { reason, codeFormat: i.codeFormat });
+    return ok(r);
+  },
+
   // ----- Support access -----
   "support.request": async (i, ctx) => {
     const o = await operator(ctx);

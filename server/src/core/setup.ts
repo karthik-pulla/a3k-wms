@@ -10,6 +10,8 @@ import { PRODUCT_LIMITS } from "../shared/products.ts";
 export const IMPORT_LIMITS = { products: 20_000, stockLines: 20_000, settingsBytes: 2_000_000, logosBytes: 6_000_000 } as const;
 
 const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
+/** A value as text with its keys sorted (the database keeps JSON keys in its own order) */
+const same = (v: unknown): string => JSON.stringify(v, (_k, x) => (isObj(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x));
 const text = (v: unknown, name: string, max: number, optional = false): string => {
   if (v === undefined || v === null || v === "") { if (optional) return ""; throw bad(`${name} is missing`); }
   if (typeof v !== "string" && typeof v !== "number") throw bad(`${name} must be text`);
@@ -38,13 +40,20 @@ export async function setupStatus(db: Db) {
   return { config: when("config"), logos: when("logos"), products: products.rows[0].n, stockLocations: stock.rows[0].n, stockLines: stock.rows[0].lines, people: people.rows[0].n };
 }
 
-/** The warehouse's settings (tenant config: layout, clients, labels…) and/or brand logos, as our team prepared them */
+/**
+ * The warehouse's settings (tenant config: layout, clients, labels…) and/or brand logos, as our team prepared them,
+ * or as an owner changed them in Manage warehouse (name, racks). Once set, the slot code format is the Lattice
+ * team's to change (setCodeFormat), never an owner's: every saved location depends on it.
+ */
 export async function saveSettings(db: Db, by: string, input: { config?: unknown; logos?: unknown }) {
   const writes: [string, unknown][] = [];
   if (input.config !== undefined) {
     const c = input.config;
     if (!isObj(c) || !isObj(c.layout) || !Array.isArray(c.clients) || !isObj(c.branding)) throw bad("That isn't a warehouse settings file (config.json): it needs layout, clients and branding");
     if (JSON.stringify(c).length > IMPORT_LIMITS.settingsBytes) throw bad("The settings file is too big");
+    const cur = (await db.query("SELECT value FROM settings WHERE key = 'config'")).rows[0]?.value;
+    if (cur?.layout?.codeFormat && same(cur.layout.codeFormat) !== same(c.layout.codeFormat))
+      throw new ApiError(403, "forbidden", "The slot code format is set by the Lattice team. Ask them to change it (Manage warehouse → Racks).");
     writes.push(["config", c]);
   }
   if (input.logos !== undefined) {
@@ -144,4 +153,51 @@ export async function importStock(db: Db, who: { id: string; name: string }, inp
     await writeSystem(q, changes, who.name, "setup.importStock");
     return { locations: byLocation.size, lines: pallets, replaced: full.length };
   });
+}
+
+/** Problems with a slot code format (empty = fine): every token it needs, short codes, sensible padding */
+export function codeFormatProblems(f: unknown): string[] {
+  if (!isObj(f)) return ["A code format is missing"];
+  const out: string[] = [];
+  const tpl = (k: string, tokens: string[]) => {
+    const v = f[k];
+    if (typeof v !== "string" || !v || v.length > 60) { out.push(`${k}: a pattern of up to 60 characters`); return; }
+    for (const t of tokens) if (!v.includes(`{${t}}`)) out.push(`${k}: needs {${t}}`);
+    if (/[^A-Za-z0-9{}\-_.\/ ]/.test(v)) out.push(`${k}: letters, digits, - _ . / and the {tokens} only`);
+  };
+  tpl("slot", ["face", "col", "level", "bay"]);
+  tpl("floor", ["face", "n"]);
+  tpl("areaSpot", ["area", "n"]);
+  if (typeof f.areaSpot === "string" && !f.areaSpot.startsWith("{area}")) out.push("areaSpot: must start with {area}");
+  for (const k of ["rackDigits", "colDigits", "spotDigits"]) if (!Number.isInteger(f[k]) || f[k] < 1 || f[k] > 4) out.push(`${k}: a whole number from 1 to 4`);
+  if (typeof f.acceptUnpadded !== "boolean") out.push("acceptUnpadded: yes or no");
+  return out;
+}
+
+/**
+ * The Lattice team sets a warehouse's slot code format (from the ops console). Only before any stock is saved:
+ * after that every location, task, order and message names slots by their codes, and changing them is a data move.
+ */
+export async function setCodeFormat(db: Db, by: string, format: unknown): Promise<{ codeFormat: unknown }> {
+  const problems = codeFormatProblems(format);
+  if (problems.length) throw bad(problems.join("; "));
+  return db.tx(async q => {
+    const cur = (await q.query("SELECT value FROM settings WHERE key = 'config' FOR UPDATE")).rows[0]?.value;
+    if (!isObj(cur) || !isObj(cur.layout)) throw bad("This warehouse has no settings yet; load its config.json first");
+    const stock = (await q.query("SELECT count(*)::int AS n FROM entities WHERE kind = 'stock' AND data IS NOT NULL")).rows[0].n;
+    if (stock > 0) throw new ApiError(409, "conflict", `This warehouse already has stock on ${stock} locations under the current codes. Changing the format then is a data move: plan it with engineering.`);
+    const next = { ...cur, layout: { ...cur.layout, codeFormat: format } };
+    await q.query("UPDATE settings SET value = $1, updated_at = now(), updated_by = $2 WHERE key = 'config'", [JSON.stringify(next), by]);
+    await q.query("INSERT INTO settings_history (key, value, changed_by) VALUES ('config', $1, $2)", [JSON.stringify(next), by]);
+    return { codeFormat: format };
+  });
+}
+
+/** The current slot code format and whether it can still change (no stock yet) */
+export async function codeFormatStatus(db: Db): Promise<{ codeFormat: unknown; stockLocations: number }> {
+  const [cfg, stock] = await Promise.all([
+    db.query("SELECT value FROM settings WHERE key = 'config'"),
+    db.query("SELECT count(*)::int AS n FROM entities WHERE kind = 'stock' AND data IS NOT NULL"),
+  ]);
+  return { codeFormat: cfg.rows[0]?.value?.layout?.codeFormat ?? null, stockLocations: stock.rows[0].n };
 }

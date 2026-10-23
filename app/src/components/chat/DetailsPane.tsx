@@ -1,4 +1,7 @@
+import { t } from "../../i18n";
 import { useState } from "react";
+import { go } from "../../router";
+import { searchPeople } from "../../chat/selectors";
 import { productById } from "../../data/catalog";
 import { canSeeClient } from "../../auth/permissions";
 import { byPresence, manualLabel } from "../../chat/presence";
@@ -33,6 +36,8 @@ export function DetailsPane({ conversationId, onClose }: { conversationId: strin
       {record && <a className="link" href={`#/inbounds/${record.status === "incoming" ? "incoming" : "pending"}/${record.id}`}>Open delivery {shipmentTitle(record)} ›</a>}
       {conv.link?.type === "order" && <p className="muted small">Order pages come with Out-bounds; this thread keeps the order's messages until then.</p>}
 
+      {(conv.kind === "group" || conv.kind === "dm") && <ManageConversation id={conv.id} />}
+
       <section>
         <h3>Your status</h3>
         <MyStatus />
@@ -64,6 +69,43 @@ export function DetailsPane({ conversationId, onClose }: { conversationId: strin
         </section>
       )}
     </aside>
+  );
+}
+
+/** Group chats: the creator renames it, adds or removes people and deletes it; anyone may leave. Direct messages: off your list. */
+function ManageConversation({ id }: { id: string }) {
+  const { state } = useStore();
+  const { me } = useSession();
+  const backend = useChatBackend();
+  const conv = state.chat.conversations.find(c => c.id === id)!;
+  const mine = conv.kind === "group" && conv.createdBy === me.id;
+  const [title, setTitle] = useState(conv.title);
+  const [adding, setAdding] = useState(false);
+  const [q, setQ] = useState("");
+  const others = searchPeople(state.chat.users.filter(u => !conv.members.includes(u.id)), q).slice(0, 8);
+  const creator = state.chat.users.find(u => u.id === conv.createdBy)?.name;
+  const leave = () => { if (window.confirm(t(conv.kind === "dm" ? "Take this conversation off your list? The other person keeps it." : "Leave this group chat?"))) { backend.leave(id); go("#/messages"); } };
+  return (
+    <section>
+      <h3>{conv.kind === "group" ? "Group chat" : "Direct message"}</h3>
+      {conv.kind === "group" && <p className="muted small">Started by {conv.createdBy === me.id ? "you" : creator ?? "someone"}{mine ? "; you can rename it, change who's in it, or delete it." : "."}</p>}
+      {mine && <>
+        <div className="link-row"><input className="input" value={title} onChange={e => setTitle(e.target.value)} aria-label="Group name" maxLength={60} /><button className="btn small" disabled={!title.trim() || title === conv.title} onClick={() => backend.updateGroup(id, { title })}>Rename</button></div>
+        <ul className="members">{state.chat.users.filter(u => conv.members.includes(u.id) && u.id !== me.id).map(u => (
+          <li key={u.id}><span className="mem-name">{u.name}</span><button className="btn small" onClick={() => backend.updateGroup(id, { members: conv.members.filter(m => m !== u.id) })}>Remove</button></li>
+        ))}</ul>
+        {adding ? <div className="stack">
+          <input className="input" autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Add someone: search a name" aria-label="Search people to add" />
+          <ul className="members">{others.map(u => <li key={u.id}><span className="mem-name">{u.name}<small>{u.role}</small></span><button className="btn small" onClick={() => backend.updateGroup(id, { members: [...conv.members, u.id] })}>Add</button></li>)}</ul>
+          <button className="link small" onClick={() => setAdding(false)}>Done adding</button>
+        </div> : <button className="btn small" onClick={() => setAdding(true)}>+ Add people</button>}
+      </>}
+      <div className="btns">
+        {mine
+          ? <button className="btn small danger" onClick={() => { if (window.confirm(t("Delete this group chat for everyone? Its messages are kept but nobody can see or write in it."))) { backend.updateGroup(id, { deleted: true }); go("#/messages"); } }}>Delete group chat</button>
+          : <button className="btn small" onClick={leave}>{conv.kind === "dm" ? "Remove from my list" : "Leave group chat"}</button>}
+      </div>
+    </section>
   );
 }
 

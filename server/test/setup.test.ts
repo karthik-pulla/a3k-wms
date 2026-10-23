@@ -79,3 +79,26 @@ test("only owners set the warehouse up, with their password again", async () => 
   for (const m of ["setup.status", "setup.saveSettings", "setup.importProducts", "setup.importStock"]) await fails(leo.call(m, { config: CONFIG }), "forbidden");
   await fails(w.owner.call("setup.saveSettings", { config: { nonsense: true } }), "bad-request");
 });
+
+test("the slot code format is the Lattice team's: owners can't change it, the team can until stock is saved", async () => {
+  const w = await ownerSignedIn();
+  const fmt = { slot: "{face}-{col}-L{level}-B{bay}", floor: "{face}-FLOOR-P{n}", areaSpot: "{area}-{n}", rackDigits: 2, colDigits: 2, spotDigits: 2, acceptUnpadded: true };
+  const config = { ...CONFIG, layout: { racks: [], codeFormat: fmt } };
+  await w.owner.call("setup.saveSettings", { config });
+  // The owner may change the name or racks, never the codes
+  assert.deepEqual((await w.owner.call("setup.saveSettings", { config: { ...config, branding: { appTitle: "Bravo North", mark: "BN" } } })).saved, ["config"]);
+  await fails(w.owner.call("setup.saveSettings", { config: { ...config, layout: { racks: [], codeFormat: { ...fmt, slot: "{face}{col}{level}{bay}" } } } }), "forbidden");
+  // The team (ops console → setCodeFormat): checked, then saved while there's no stock
+  const { setCodeFormat, codeFormatProblems } = await import("../src/core/setup.ts");
+  assert.ok(codeFormatProblems({ ...fmt, slot: "{face}-{col}" }).some(p => p.includes("{level}")));
+  await assert.rejects(setCodeFormat(w.db, "Ops", { ...fmt, rackDigits: 9 }));
+  const next = { ...fmt, slot: "{face}-{col}-{level}-{bay}" };
+  await setCodeFormat(w.db, "Ops", next);
+  assert.deepEqual((await w.owner.call("tenant.config")).config.layout.codeFormat, next);
+  assert.equal((await w.owner.call("tenant.config")).config.branding.appTitle, "Bravo North", "the rest of the settings stay");
+  // Once stock is saved under the codes, changing them is a data move, not a setting
+  await w.owner.call("setup.importProducts", { products: [{ id: "S1", client: "Sunfield", code: "1001", name: "Rice" }] });
+  await w.owner.call("setup.importStock", { lines: [{ location: "01A-01-1-1", productId: "S1", cases: 4 }] }).catch(() => null);
+  await w.owner.call("sync.push", { clientId: "device-test-9999", clientSeq: 1, type: "stock/adjust", at: "2026-10-16T12:00:00.000Z", changes: [{ key: "stock:X-1", base: 0, data: [{ productId: "S1", cases: 1 }] }] });
+  await assert.rejects(setCodeFormat(w.db, "Ops", fmt), /already has stock/);
+});

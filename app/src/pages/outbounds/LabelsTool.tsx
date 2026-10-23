@@ -8,7 +8,7 @@ import { useToast } from "../../components/Toast";
 import { ProductInput } from "../../components/ProductInput";
 import { CloseIcon } from "../../components/icons";
 import { download } from "../../utils/xlsx";
-import { candidates, reservations, statusOf } from "../../outbound/plan";
+import { candidates, defaultStrategy, reservations, statusOf } from "../../outbound/plan";
 import { pdfText, readOrder } from "../../outbound/reader";
 import {
   BRANDS, DEFAULT_OPTIONS, SHEET, brandKeyFor, buildAlignmentPdf, buildLabelsPdf, labelCount, pdfPreview, sheetCount,
@@ -40,7 +40,7 @@ function linesForOrder(state: Parameters<typeof candidates>[0], o: StoreOrder): 
   }
   // Not planned yet: the best-before of the oldest pallet it would come from
   const reserved = reservations(state, o.id);
-  return o.lines.flatMap(l => { const p = productById(l.productId); return p ? [fromProduct(p, l.cases, candidates(state, l.productId, "fifo-open-first", reserved)[0]?.bestBefore)] : []; });
+  return o.lines.flatMap(l => { const p = productById(l.productId); return p ? [fromProduct(p, l.cases, candidates(state, l.productId, defaultStrategy(state), reserved)[0]?.bestBefore)] : []; });
 }
 
 const lastName = (p: Product | null) => (p ? `${p.name} ${p.size}`.trim() : "");
@@ -93,7 +93,7 @@ export function LabelsTool({ orderId }: { orderId?: string }) {
       const read = readOrder(text, [...new Set(state.orders.map(o => o.store))]);
       const reserved = reservations(state);
       const mine = read.lines.filter(l => { const p = productById(l.productId); return p && canSeeClient(me, p.client); });
-      const got = mine.flatMap(l => { const p = productById(l.productId)!; return [fromProduct(p, l.cases, candidates(state, p.id, "fifo-open-first", reserved)[0]?.bestBefore)]; });
+      const got = mine.flatMap(l => { const p = productById(l.productId)!; return [fromProduct(p, l.cases, candidates(state, p.id, defaultStrategy(state), reserved)[0]?.bestBefore)]; });
       if (order) go("#/outbounds/labels");
       setLines(got);
       last.current = null;

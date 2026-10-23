@@ -4,7 +4,7 @@ import { conversationsFor, conversationTitle, lastMessage, mentionsFor, unreadIn
 import type { Conversation, ConversationKind } from "../../store/types";
 import { PresenceDot } from "./Presence";
 
-const SECTIONS: [ConversationKind, string][] = [["channel", "Channels"], ["dm", "Direct messages"], ["order", "Orders"], ["shipment", "Deliveries"]];
+const SECTIONS: [ConversationKind, string][] = [["channel", "Channels"], ["group", "Group chats"], ["dm", "Direct messages"], ["order", "Orders"], ["shipment", "Deliveries"]];
 
 /** One line of a conversation list: title, last message, unread count and an @ when you're mentioned. */
 export function ConversationRow({ c, active, onOpen, compact = false }: { c: Conversation; active: boolean; onOpen: (id: string) => void; compact?: boolean }) {
@@ -16,7 +16,7 @@ export function ConversationRow({ c, active, onOpen, compact = false }: { c: Con
   const author = last && (last.authorId === me.id ? "You" : state.chat.users.find(x => x.id === last.authorId)?.name);
   return (
     <button type="button" className={`conv-row${active ? " on" : ""}${u.count ? " unread" : ""}${u.mentions ? " mentioned" : ""}`} onClick={() => onOpen(c.id)} aria-current={active ? "true" : undefined}>
-      <span className="conv-ic" aria-hidden={!other}>{other ? <PresenceDot userId={other} /> : c.kind === "channel" ? "#" : c.kind === "order" ? "🧾" : "🚚"}</span>
+      <span className="conv-ic" aria-hidden={!other}>{other ? <PresenceDot userId={other} /> : c.kind === "channel" ? "#" : c.kind === "group" ? "👥" : c.kind === "order" ? "🧾" : "🚚"}</span>
       <span className="conv-main">
         <span className="conv-title">{conversationTitle(c, me, state.chat.users)}</span>
         {!compact && last && <small className="conv-last">{author}: {visibleText(state, me, last, "(hidden)") ? <span translate="no">{visibleText(state, me, last, "(hidden)")}</span> : "📷 Photo"}</small>}
@@ -41,7 +41,7 @@ export function ConversationList({ activeId, onOpen, onMentions, mentionsActive 
         {unreadMentions > 0 && <span className="badge mention">{unreadMentions}</span>}
       </button>
       {SECTIONS.map(([kind, label]) => {
-        const list = mine.filter(c => c.kind === kind && (kind === "channel" || kind === "dm" || recent(c) || c.id === activeId))
+        const list = mine.filter(c => c.kind === kind && (kind === "channel" || kind === "dm" || kind === "group" || recent(c) || c.id === activeId))
           .sort((a, b) => (kind === "channel" ? 0 : recent(b).localeCompare(recent(a))));
         if (!list.length) return null;
         return (

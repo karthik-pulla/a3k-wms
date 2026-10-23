@@ -67,6 +67,11 @@ for (const t of tenants) {
       }
     }
     for (const id of Object.keys(seed.presence)) assert.ok(people.has(id));
+    // Manage warehouse sample settings and work teams point at real clients and people
+    const clients = new Set(config.clients.map(c => c.id));
+    for (const r of seed.settings?.routes ?? []) { assert.ok(clients.has(r.client), `route ${r.match}: no client ${r.client}`); assert.ok(["order", "inbound"].includes(r.kind)); }
+    for (const c of seed.settings?.contacts ?? []) if (c.client) assert.ok(clients.has(c.client), `contact ${c.name}: no client ${c.client}`);
+    for (const t of seed.teams ?? []) for (const m of t.members) assert.ok(people.has(m), `team ${t.name}: no person ${m}`);
   });
 }
 

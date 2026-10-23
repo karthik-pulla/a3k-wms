@@ -5,8 +5,8 @@ import type { Role } from "./store/types";
 
 export type ThemeChoice = "system" | "light" | "dark";
 export type GlassStrength = "subtle" | "frosted" | "heavy";
-/** Cards on the home screen, in order. "messages" is the Messages module. */
-export type HomeCardKind = UpdateKind | "messages";
+/** Widgets on the home screen, in order. "messages" is the Messages module, "stockByBrand" the live stock table. */
+export type HomeCardKind = UpdateKind | "messages" | "stockByBrand";
 
 export interface HomeSettings {
   /** Admin account only, for testing: use the app as this person ("" = yourself) */
@@ -19,9 +19,10 @@ export interface HomeSettings {
   /** 2 once the phone default for movingBackground applies (see load) */
   motionDefaults?: number;
   showSummary: boolean;
-  showTicker: boolean;
-  /** Home cards in display order; `visible` controls whether each shows on the home screen. */
+  /** Home widgets in display order; `visible` controls whether each shows. A new home starts with none: people pick them in the tour. */
   cards: { kind: HomeCardKind; visible: boolean }[];
+  /** People (ids) on this device who have finished or skipped the tour; the others see it when they sign in */
+  toured: string[];
   // Messages
   lastOnlineVisibleTo: LastOnlineVisibility;
   hidePresenceOffShift: boolean;
@@ -45,19 +46,20 @@ export const DEFAULT_SETTINGS: HomeSettings = {
   // Off if the OS asks for less motion, and on phones and tablets: moving colour behind frosted glass makes them slow
   movingBackground: !media("(prefers-reduced-motion: reduce)") && !media("(pointer: coarse)"),
   motionDefaults: 2,
-  showSummary: true,
-  showTicker: true,
+  showSummary: false,
   cards: [
-    { kind: "messages", visible: true },
-    { kind: "outgoing", visible: true },
-    { kind: "deadlines", visible: true },
-    { kind: "ordersToApprove", visible: true },
-    { kind: "incoming", visible: true },
-    { kind: "toConfirm", visible: true },
-    { kind: "expiry", visible: true },
-    { kind: "returns", visible: true },
-    { kind: "changesToApprove", visible: true },
+    { kind: "messages", visible: false },
+    { kind: "outgoing", visible: false },
+    { kind: "deadlines", visible: false },
+    { kind: "ordersToApprove", visible: false },
+    { kind: "incoming", visible: false },
+    { kind: "toConfirm", visible: false },
+    { kind: "expiry", visible: false },
+    { kind: "returns", visible: false },
+    { kind: "changesToApprove", visible: false },
+    { kind: "stockByBrand", visible: false },
   ],
+  toured: [],
   lastOnlineVisibleTo: "owners-coordinators",
   hidePresenceOffShift: false,
   shiftStart: "07:00",
@@ -74,15 +76,16 @@ function load(): HomeSettings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    const saved = JSON.parse(raw) as Partial<HomeSettings> & { role?: string; name?: string };
+    const saved = JSON.parse(raw) as Partial<HomeSettings> & { role?: string; name?: string; showTicker?: boolean };
     delete saved.role; delete saved.name; // replaced by "Signed in as"
+    delete saved.showTicker; // the activity ticker was removed (Oct 2026)
     // Saved before phones defaulted to a still background (the old default was saved, not chosen): use the new default
     if (saved.motionDefaults !== 2) saved.movingBackground = DEFAULT_SETTINGS.movingBackground && saved.movingBackground !== false;
     if ((saved.lastOnlineVisibleTo as string) === "owners-supervisors") saved.lastOnlineVisibleTo = "owners-coordinators"; // role renamed
-    // Keep any card kinds added since the settings were saved (new ones go first, like the defaults)
+    // Keep any widget kinds added since the settings were saved (at the end, hidden)
     const known = new Set((saved.cards ?? []).map(c => c.kind));
-    const cards = [...DEFAULT_SETTINGS.cards.filter(c => !known.has(c.kind)),
-      ...(saved.cards ?? []).filter(c => DEFAULT_SETTINGS.cards.some(d => d.kind === c.kind))];
+    const cards = [...(saved.cards ?? []).filter(c => DEFAULT_SETTINGS.cards.some(d => d.kind === c.kind)),
+      ...DEFAULT_SETTINGS.cards.filter(c => !known.has(c.kind))];
     return { ...DEFAULT_SETTINGS, ...saved, cards };
   } catch {
     return DEFAULT_SETTINGS;
@@ -95,7 +98,7 @@ export function useSettings() {
     try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { /* storage blocked: settings last for this visit */ }
   }, [settings]);
   const update = useCallback((patch: Partial<HomeSettings>) => setSettings(s => ({ ...s, ...patch })), []);
-  const reset = useCallback(() => setSettings(s => ({ ...DEFAULT_SETTINGS, userId: s.userId, testRole: s.testRole })), []);
+  const reset = useCallback(() => setSettings(s => ({ ...DEFAULT_SETTINGS, userId: s.userId, testRole: s.testRole, toured: s.toured })), []);
   return { settings, update, reset };
 }
 

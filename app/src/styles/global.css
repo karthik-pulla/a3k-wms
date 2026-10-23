@@ -1,5 +1,5 @@
 /* Home layout: a narrow column of frosted mode buttons on the left, the greeting and update cards in the
-   middle, a quiet activity ticker in the bottom-right corner. Everything floats over slowly drifting colour. */
+   middle. Everything floats over slowly drifting colour. */
 :root {
   --font-display: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-body: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -28,8 +28,8 @@
   --danger: #c0302a;
   --expired-bg: #0b0b0d;
   --expired-ink: #ffffff;
-  --ticker-plus: #1d7f53;
-  --ticker-minus: #b4342e;
+  --plus-ink: #1d7f53;
+  --minus-ink: #b4342e;
   --blur: 22px;
   --paper: #ffffff; /* printed paper (label previews) stays white in both themes */
   color-scheme: light;
@@ -56,8 +56,8 @@
   --danger: #ff7b72;
   --expired-bg: #000000;
   --expired-ink: #ffffff;
-  --ticker-plus: #6ad8a3;
-  --ticker-minus: #ff8b84;
+  --plus-ink: #6ad8a3;
+  --minus-ink: #ff8b84;
   color-scheme: dark;
 }
 /* Frost levels change how milky the glass is, not only the blur: the background behind is already soft */
@@ -185,31 +185,6 @@ a { color: inherit; }
 .empty-card { color: var(--muted); font-size: 13.5px; }
 .no-cards { border-radius: 24px; padding: 22px; color: var(--muted); }
 
-/* ---------- Fun corner ---------- */
-.shell.has-ticker { grid-template-columns: 132px minmax(0, 1fr) 290px; }
-.ticker {
-  grid-column: 3; grid-row: 1; align-self: end; justify-self: end; position: sticky; bottom: max(22px, env(safe-area-inset-bottom));
-  z-index: 2; width: 280px;
-  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; color: var(--faint);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 45%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 45%);
-  cursor: default; user-select: none;
-}
-.ticker ol { list-style: none; margin: 0; padding: 0; display: grid; }
-.ticker li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ticker .plus { color: var(--ticker-plus); }
-.ticker .minus { color: var(--ticker-minus); }
-.ticker .fact { font-style: italic; }
-.ticker li.new { animation: tick-in 0.6s ease-out; }
-.ticker .cursor { display: inline-block; width: 7px; height: 13px; margin-left: 4px; vertical-align: -2px; background: var(--faint); animation: blink 1.1s steps(1) infinite; }
-@keyframes tick-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@keyframes blink { 50% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .ticker li.new, .ticker .cursor { animation: none; } }
-/* Not enough room for a third column: the ticker sits under the cards, still bottom-right */
-@media (max-width: 1299px) {
-  .shell.has-ticker { grid-template-columns: 132px minmax(0, 1fr); }
-  .ticker { grid-column: 2; grid-row: 2; position: static; margin-top: -8px; }
-}
 
 /* ---------- Settings sheet ---------- */
 .scrim { position: fixed; inset: 0; z-index: 20; background: rgba(0, 0, 0, 0.25); }
@@ -255,7 +230,7 @@ a { color: inherit; }
 
 /* ---------- Phones ---------- */
 @media (max-width: 760px) {
-  .shell, .shell.has-ticker, .shell.has-rail { grid-template-columns: minmax(0, 1fr); padding: max(16px, env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom)); }
+  .shell, .shell.has-rail { grid-template-columns: minmax(0, 1fr); padding: max(16px, env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom)); }
   .modes { position: fixed; z-index: 4; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); top: auto; height: auto; flex-direction: row; justify-content: space-around; gap: 8px; padding: 8px; border-radius: 26px; }
   .modes.glass-bar { background: var(--glass); border: 1px solid var(--glass-border); backdrop-filter: blur(var(--blur)) saturate(var(--sat)); -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat)); }
   .mode { width: auto; flex: 1; height: 64px; border-radius: 20px; box-shadow: none; border-color: transparent; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
@@ -263,7 +238,6 @@ a { color: inherit; }
   .home, .page { padding: 70px 0 20px; }
   .topbar { right: 16px; }
   .status span.label { display: none; }
-  .ticker { display: none; }
 }
 
 /* ======================= Sections (In-bounds, …) ======================= */
@@ -534,11 +508,10 @@ button.rchip:hover, a.rchip:hover { border-color: var(--accent); }
 .rchip-dot { position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); border: 2px solid var(--glass-strong); }
 .chip-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
 
-/* Shell with a right rail (home, wide screens): Messages on top, the ticker underneath */
+/* Shell with a right rail (home, wide screens): Messages */
 .shell.has-rail { grid-template-columns: 132px minmax(0, 1fr) clamp(330px, 27vw, 420px); }
 .rail { grid-column: 3; grid-row: 1; position: sticky; top: 0; height: calc(100vh - 44px); display: flex; flex-direction: column; gap: 14px;
   padding-top: 62px; min-width: 0; z-index: 2; }
-.rail .ticker { position: static; grid-column: auto; align-self: flex-end; width: 100%; max-width: 300px; flex: none; }
 .rail > .home-msgs { flex: 1 1 auto; min-height: 260px; }
 
 /* Home module: sizes itself to its container */
@@ -1001,7 +974,7 @@ details.panel summary { cursor: pointer; font-weight: 600; }
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 45%); mask-image: linear-gradient(to bottom, transparent 0, #000 45%); }
 .count-feed ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column-reverse; }
 .count-feed li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.count-feed .plus { color: var(--ticker-plus); }
+.count-feed .plus { color: var(--plus-ink); }
 .count-feed small { opacity: .8; }
 
 @media (max-width: 1500px) { .count-feed { display: none; } }
@@ -1026,7 +999,7 @@ details.panel summary { cursor: pointer; font-weight: 600; }
 
 /* Printing a table: just the content, on white */
 @media print {
-  .bg, .modes, .topbar, .subtabs, .ticker, .rail, .count-feed, .drawer, .toolbar, .btns, .chip-wrap, .stats { display: none !important; }
+  .bg, .modes, .topbar, .subtabs, .rail, .count-feed, .drawer, .toolbar, .btns, .chip-wrap, .stats { display: none !important; }
   body { background: #fff; color: #000; }
   .shell { display: block; padding: 0; }
   .section { padding: 0; }
@@ -1336,7 +1309,7 @@ table.lines.bt-table { min-width: 560px; }
   .forklift { padding-bottom: 18px; }
 }
 /* Forklift mode fills the screen: no side menu or top bar */
-.shell.fk, .shell.fk.has-ticker, .shell.fk.has-rail { grid-template-columns: minmax(0, 1fr); padding: 0; }
+.shell.fk, .shell.fk.has-rail { grid-template-columns: minmax(0, 1fr); padding: 0; }
 .shell.fk .modes, .shell.fk .topbar { display: none; }
 .fk-next .mono { font-size: inherit; }
 @media (max-width: 760px) {
@@ -1355,7 +1328,7 @@ table.lines.bt-table { min-width: 560px; }
 .card-cover { display: none; }
 @media (max-width: 760px) {
   /* Slimmer bottom menu, one-line labels */
-  .shell, .shell.has-ticker, .shell.has-rail { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .shell, .shell.has-rail { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
   .modes, .modes.many { padding: 5px; gap: 2px; border-radius: 22px; bottom: max(10px, env(safe-area-inset-bottom)); }
   .modes .mode, .modes.many .mode { height: 52px; border-radius: 16px; }
   .modes .mode span:not(.mode-ic), .modes.many .mode span:not(.mode-ic) { font-size: 10px; white-space: nowrap; }
@@ -1762,3 +1735,105 @@ table.lines.log-table tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--w
 .lattice-by .lattice-logo { opacity: .9; }
 .ops-logo { display: grid; gap: 8px; justify-items: start; }
 .ops-logo p { margin: 0; }
+
+/* ---------- Home: announcements, an empty home, widgets ---------- */
+.notices { display: grid; gap: 10px; }
+.notice { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 16px; border-radius: 18px; }
+.notice p { margin: 0; font-size: 15px; }
+.notice.urgent { border-color: color-mix(in srgb, var(--danger) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 35%, transparent), var(--shadow); }
+.notice-ic { width: 28px; height: 28px; border-radius: 14px; display: grid; place-items: center; font-size: 14px; background: var(--glass-strong); }
+.notice.urgent .notice-ic { background: var(--danger); color: #fff; font-weight: 700; }
+.notice-acts { display: flex; gap: 8px; align-items: center; }
+.iconbtn.small { width: 28px; height: 28px; border-radius: 14px; font-size: 16px; line-height: 1; }
+.home-empty { display: grid; gap: 12px; max-width: 54ch; }
+.home-empty p { margin: 0; font-size: 16px; }
+.home-foot { display: flex; justify-content: flex-end; }
+.cards > .wide-widget { grid-column: 1 / -1; }
+.widget-panel { display: grid; gap: 12px; max-width: 720px; }
+.widget-list li { grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: start; }
+.widget-list label { cursor: pointer; }
+.widget-list small { font-size: 12px; }
+
+/* ---------- The tour ---------- */
+.tour { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; }
+.tour-dim { position: fixed; inset: 0; background: rgba(6, 8, 14, 0.42); }
+.tour-ring { position: fixed; border-radius: 22px; box-shadow: 0 0 0 9999px rgba(6, 8, 14, 0.42), 0 0 0 3px var(--accent); transition: left .25s, top .25s, width .25s, height .25s; pointer-events: none; }
+.tour-card { position: relative; width: min(460px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; border-radius: 26px; padding: 22px; display: grid; gap: 12px; background: var(--glass-strong); box-shadow: var(--shadow); }
+.tour-card.wide { width: min(860px, 100%); }
+.tour-card h2 { margin: 0; font-size: 24px; letter-spacing: -0.02em; font-weight: 640; }
+.tour-card p { margin: 0; }
+.tour-count { margin: 0; }
+.tour-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.tour-map-cell { display: grid; gap: 4px; align-content: start; padding: 12px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-border); }
+.tour-tabs { color: var(--faint); font-size: 11.5px; }
+.tour-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+.tour-btns { justify-content: flex-end; }
+.btn.link-btn { border-color: transparent; background: none; color: var(--muted); margin-right: auto; }
+@media (min-width: 761px) { .tour:has(.tour-ring) { place-items: center start; padding-left: 190px; } }
+@media (max-width: 760px) { .tour { align-items: start; } }
+@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } }
+
+/* ---------- Help ---------- */
+.help-page .guide-list { display: grid; gap: 6px; }
+.guide { border-radius: 14px; padding: 8px 12px; background: var(--glass); border: 1px solid var(--glass-border); }
+.guide summary { cursor: pointer; font-weight: 560; }
+.guide ol { margin: 8px 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; }
+.help-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.help-sec h3 { margin: 0 0 4px; font-size: 18px; }
+.help-sec ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+
+/* ---------- Manage warehouse ---------- */
+.manage-seg { margin-bottom: 4px; }
+.manage-seg a { display: inline-flex; align-items: center; text-decoration: none; color: inherit; }
+.rule-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.rule-card { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--glass-border); background: var(--glass); }
+.rule-card b { font-size: 18px; letter-spacing: .02em; }
+.rule-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--glass-strong); }
+.notice-form textarea { resize: vertical; }
+.notice-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.notice-list li { display: flex; gap: 12px; justify-content: space-between; align-items: start; padding: 8px 10px; border-radius: 12px; background: var(--glass); }
+.code-facts dd { margin: 0; overflow-wrap: anywhere; }
+.code-facts dt { font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+.code-facts code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.rack-edit .input { min-width: 0; }
+.rack-edit .row-acts { white-space: nowrap; }
+.route-form { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(120px, 1fr) minmax(130px, 1fr) minmax(120px, 1.5fr) auto; gap: 8px; }
+.contact-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.contact-list .row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; }
+.tag.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.chip-gap { flex: 0 0 10px; }
+@media (max-width: 760px) {
+  .route-form { grid-template-columns: 1fr; }
+  .contact-list .row { grid-template-columns: 1fr; }
+}
+
+/* ---------- Messages: new message, people directory ---------- */
+.pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.new-conv { display: grid; gap: 12px; padding: 4px; }
+.new-conv-picked { position: sticky; bottom: 0; display: grid; gap: 8px; padding: 10px; border-radius: 16px; background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--shadow); }
+.people-dir { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.people-dir li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 12px; }
+.people-dir li:hover { background: var(--glass-hover); }
+.person-row { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; }
+.person-row .conv-main { display: grid; min-width: 0; }
+.conv-left { margin: 8px 12px 12px; }
+
+/* ---------- Tasks: which pallet, workers, teams ---------- */
+.task-pallet { margin: 0; font-size: 14px; }
+.pallet-pick { border: 1px solid var(--glass-border); border-radius: 14px; padding: 8px 12px; display: grid; gap: 6px; margin: 0; }
+.pallet-pick legend { padding: 0 4px; color: var(--muted); }
+.worker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.worker-card { display: grid; gap: 8px; align-content: start; }
+.worker-card.busy { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), var(--shadow); }
+.worker-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.worker-now { margin: 0; font-size: 14.5px; }
+.worker-tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.team-form { margin-top: 10px; }
+.members li:has(> .btn) { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.rack-edit td { padding-top: 4px; padding-bottom: 4px; }
+.panel > .btn, .stack > .btn { justify-self: start; }
+.mode span:not(.mode-ic) { text-align: center; line-height: 1.15; padding: 0 4px; }
+.mode-label .short { display: none; }
+@media (max-width: 760px) { .mode-label .long { display: none; } .mode-label .short { display: inline; } }
+.mode-label span { padding: 0; }
+.help-sec { align-content: start; }

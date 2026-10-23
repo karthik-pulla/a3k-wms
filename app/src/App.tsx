@@ -3,8 +3,8 @@ import { Background } from "./components/Background";
 import { ModeNav } from "./components/ModeNav";
 import { StatusPill } from "./components/StatusPill";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { Ticker } from "./components/Ticker";
-import { SettingsIcon, HomeIcon } from "./components/icons";
+import { SettingsIcon, HomeIcon, HelpIcon } from "./components/icons";
+import { Tour } from "./help/Tour";
 import { ToastProvider, useToast } from "./components/Toast";
 import { HomeMessages } from "./components/chat/HomeMessages";
 import { Home } from "./pages/Home";
@@ -38,7 +38,8 @@ const screens = {
   work: () => import("./pages/work/WorkPage").then(m => ({ default: m.WorkPage })),
   logs: () => import("./pages/logs/LogsPage").then(m => ({ default: m.LogsPage })),
   inventory: () => import("./pages/inventory/InventoryPage").then(m => ({ default: m.InventoryPage })),
-  warehouse: () => import("./pages/warehouse/WarehousePage").then(m => ({ default: m.WarehousePage })),
+  manage: () => import("./pages/manage/ManagePage").then(m => ({ default: m.ManagePage })),
+  help: () => import("./pages/help/HelpPage").then(m => ({ default: m.HelpPage })),
   serverAccount: () => import("./pages/account/ServerAccountPage").then(m => ({ default: m.ServerAccountPage })),
 };
 const OutboundsPage = lazy(screens.outbounds);
@@ -49,7 +50,8 @@ const TasksPage = lazy(screens.tasks);
 const WorkPage = lazy(screens.work);
 const LogsPage = lazy(screens.logs);
 const InventoryPage = lazy(screens.inventory);
-const WarehousePage = lazy(screens.warehouse);
+const ManagePage = lazy(screens.manage);
+const HelpPage = lazy(screens.help);
 const ServerAccountPage = lazy(screens.serverAccount);
 
 /** Signed in with the server (server/ServerRoot.tsx): who it is, and the data to start with */
@@ -129,20 +131,22 @@ function Shell({ reset, viewingAs }: { reset: () => void; viewingAs: boolean }) 
   const { dispatch } = useStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const route = useRoute();
+  // First time here: the tour (once per person on this device; Help starts it again)
+  const [touring, setTouring] = useState(() => !settings.toured.includes(account.uid));
+  const endTour = () => { setTouring(false); if (!settings.toured.includes(account.uid)) update({ toured: [...settings.toured, account.uid].slice(-50) }); };
   useAppearance(settings.theme, settings.glass);
   const wide = useMediaQuery("(min-width: 1300px)");
   const lead = can(me, "use-inbounds");
-  // Workers' home is their Work screen, so the home rail (Messages and ticker) is for owners and coordinators
+  // Workers' home is their Work screen, so the home rail (Messages) is for owners and coordinators
   const home = route.mode === "home" && lead;
   const messagesCard = settings.cards.find(c => c.kind === "messages")?.visible ?? false;
-  // Wide screens: Messages and the ticker share a right-hand rail; narrower, Messages joins the update cards
-  const rail = home && wide && (messagesCard || settings.showTicker);
-  const showTicker = settings.showTicker && home;
+  // Wide screens: Messages (when chosen as a widget) sits in a right-hand rail; narrower, it joins the other widgets
+  const rail = home && wide && messagesCard;
   useEffect(() => { const t = window.setTimeout(() => Object.values(screens).forEach(load => load().catch(() => {})), 1500); return () => window.clearTimeout(t); }, []);
 
   return (
     <>
-      <div className={`shell${rail ? " has-rail" : showTicker ? " has-ticker" : ""}${route.mode === "messages" ? " on-messages" : ""}${route.mode === "work" && route.parts[0] === "forklift" ? " fk" : ""}`}>
+      <div className={`shell${rail ? " has-rail" : ""}${route.mode === "messages" ? " on-messages" : ""}${route.mode === "work" && route.parts[0] === "forklift" ? " fk" : ""}`}>
         <ModeNav current={route.mode} />
         <Suspense fallback={<main className="page-loading muted" aria-busy="true">Loading…</main>}>
         {route.mode === "home" ? (lead ? <Home messagesInRail={rail && messagesCard} /> : <WorkPage parts={[]} />)
@@ -150,19 +154,15 @@ function Shell({ reset, viewingAs }: { reset: () => void; viewingAs: boolean }) 
           : route.mode === "inventory" ? <InventoryPage parts={route.parts} />
           : route.mode === "messages" ? <MessagesPage parts={route.parts} />
           : route.mode === "account" ? (kind === "server" ? <ServerAccountPage /> : <AccountPage />)
-          : route.mode === "warehouse" ? <WarehousePage parts={route.parts} />
-          : route.mode === "tasks" ? <TasksPage />
+          : route.mode === "manage" ? <ManagePage parts={route.parts} />
+          : route.mode === "help" ? <HelpPage onTour={() => setTouring(true)} />
+          : route.mode === "tasks" ? <TasksPage parts={route.parts} />
           : route.mode === "logs" ? <LogsPage />
           : !lead ? <NoAccess />
           : route.mode === "inbounds" ? <InboundsPage parts={route.parts} />
           : <OutboundsPage parts={route.parts} />}
         </Suspense>
-        {rail ? (
-          <aside className="rail" aria-label="Messages and activity">
-            {messagesCard && <HomeMessages placement="rail" />}
-            {settings.showTicker && <Ticker />}
-          </aside>
-        ) : showTicker && <Ticker />}
+        {rail && <aside className="rail" aria-label="Messages"><HomeMessages placement="rail" /></aside>}
         <div className="topbar">
           <StatusPill />
           {account.admin && <RoleSwitch compact />}
@@ -172,9 +172,11 @@ function Shell({ reset, viewingAs }: { reset: () => void; viewingAs: boolean }) 
             {(account.mustChange || (kind === "device" && canManageAccounts(identityUser(account)) && pendingCount() > 0)) && <span className="badge nav-badge mention" aria-hidden="true">!</span>}
           </a>
           {route.mode !== "home" && <a className="iconbtn glass" href="#/" aria-label="Home"><HomeIcon /></a>}
+          <a className="iconbtn glass" href="#/help" aria-label="Help" title="Help, guides and the tour"><HelpIcon /></a>
           <button className="iconbtn glass" onClick={() => setSettingsOpen(true)} aria-label="Settings"><SettingsIcon /></button>
         </div>
       </div>
+      {touring && <Tour onClose={endTour} />}
       {settingsOpen && <SettingsPanel settings={settings} update={update} reset={reset} onResetData={() => dispatch({ type: "reset" })} onClose={() => setSettingsOpen(false)} />}
     </>
   );

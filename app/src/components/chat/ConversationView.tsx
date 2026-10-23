@@ -18,7 +18,7 @@ export function ConversationView({ conversationId, focusId, onBack, onDetails, d
   const conv = state.chat.conversations.find(c => c.id === conversationId);
   if (!conv || !conv.members.includes(me.id)) return <div className="conv-missing"><p className="muted">This conversation isn't available to you.</p>{onBack && <button className="btn" onClick={onBack}>Back</button>}</div>;
   const other = conv.kind === "dm" ? conv.members.find(id => id !== me.id) : undefined;
-  const sub = other ? null : `${conv.members.length} members`;
+  const sub = other ? null : conv.kind === "dm" ? "" : `${conv.members.length} members`;
 
   return (
     <section className="conv-view" aria-label={conversationTitle(conv, me, state.chat.users)}>
@@ -39,7 +39,9 @@ export function ConversationView({ conversationId, focusId, onBack, onDetails, d
         </div>
       )}
       <MessageList key={conversationId} conversationId={conversationId} search={q} focusId={focusId} />
-      <Composer conversationId={conversationId} />
+      {conv.kind === "dm" && conv.members.length < 2
+        ? <p className="note conv-left">The other person took this conversation off their list. <a className="link" href="#/messages/new">Start a new one</a></p>
+        : <Composer conversationId={conversationId} />}
     </section>
   );
 }

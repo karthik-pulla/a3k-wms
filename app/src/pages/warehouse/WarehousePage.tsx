@@ -1,19 +1,15 @@
-// Warehouse settings for owners (signed in with the server): everyone who works here, their roles and what each role
-// may do, account requests, support access for the WMS team, and the security log. All of it lives in the
-// warehouse's own database, so every device sees the same.
+// People and access for owners signed in with the server, shown in Manage warehouse (pages/manage/ManagePage.tsx):
+// everyone who works here, their roles and what each role may do, account requests, support access for the WMS team,
+// and the security log. All of it lives in the warehouse's own database, so every device sees the same.
 import { useMemo, useState } from "react";
-import { SubTabs } from "../../components/SubTabs";
-import { useSession } from "../../session";
 import { useIdentity } from "../../auth/identity";
-import { can } from "../../auth/permissions";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import { initials } from "../../auth/accountUser";
 import { tenant } from "../../tenant";
 import { BASE_ROLES, SWITCHES, effective, type Action, type BaseRole, type Permissions } from "../../../../server/src/shared/permissions.ts";
 import type { GrantView, LinkResult, LogView, PersonView, RequestView, RoleView } from "../../../../server/src/shared/api.ts";
-import { ConfirmProvider, LinkPanel, useAction, useApiData } from "./useApi";
-import { DataTab } from "./DataTab";
+import { LinkPanel, useAction, useApiData } from "./useApi";
 
 const when = (iso: string | null) => {
   if (!iso) return "never";
@@ -22,36 +18,8 @@ const when = (iso: string | null) => {
 };
 const BASE_NAME: Record<BaseRole, string> = { owner: "Owner", coordinator: "Coordinator", worker: "Worker" };
 
-export function WarehousePage({ parts }: { parts: string[] }) {
-  const { me } = useSession();
-  const { kind, me: serverMe } = useIdentity();
-  const [tab = "people"] = parts;
-  const requests = useApiData<RequestView[]>("requests.list");
-  const support = useApiData<GrantView[]>("support.list");
-  if (kind !== "server") return <main className="section"><div className="panel glass"><p>People and roles are managed on the server. On this device, use Account.</p><a className="link" href="#/account">Account ›</a></div></main>;
-  if (!can(me, "manage-people") || !serverMe?.can["manage-people"]) return <main className="section"><div className="panel glass"><p>Only owners manage people, roles and access.</p></div></main>;
-  const waiting = (support.data ?? []).filter(g => g.status === "requested" || g.status === "active").length;
-  return (
-    <ConfirmProvider>
-      <main className="section warehouse">
-        <header className="section-head">
-          <h1>Team</h1>
-          <p className="crumb">{tenant().config.branding.appTitle} · {{ people: "People", roles: "Roles and switches", requests: "Account requests", support: "Support access", log: "Security log", setup: "Setup" }[tab] ?? "People"}</p>
-        </header>
-        <div className="team-body">
-          {tab === "setup" ? <DataTab /> : tab === "roles" ? <RolesTab /> : tab === "requests" ? <RequestsTab reload={requests.reload} /> : tab === "support" ? <SupportTab data={support} /> : tab === "log" ? <LogTab /> : <PeopleTab />}
-        </div>
-        <SubTabs base="warehouse" current={tab} tabs={[
-          { id: "people", label: "People" }, { id: "roles", label: "Roles" },
-          { id: "requests", label: "Requests", badge: requests.data?.length ?? 0 }, { id: "support", label: "Support", badge: waiting }, { id: "log", label: "Security log" }, { id: "setup", label: "Setup" },
-        ]} />
-      </main>
-    </ConfirmProvider>
-  );
-}
-
 // ---------- People ----------
-function PeopleTab() {
+export function PeopleTab() {
   const people = useApiData<PersonView[]>("people.list");
   const roles = useApiData<RoleView[]>("roles.list");
   const [q, setQ] = useState("");
@@ -262,7 +230,7 @@ function PersonDrawer({ p, roles, onClose, onChange }: { p: PersonView; roles: R
 // ---------- Roles and switches ----------
 const GROUPS = [...new Set(SWITCHES.map(s => s.group))];
 
-function RolesTab() {
+export function RolesTab() {
   const roles = useApiData<RoleView[]>("roles.list");
   const act = useAction();
   const toast = useToast();
@@ -352,7 +320,7 @@ function RolesTab() {
 }
 
 // ---------- Account requests ----------
-function RequestsTab({ reload }: { reload: () => Promise<void> }) {
+export function RequestsTab({ reload }: { reload: () => Promise<void> }) {
   const reqs = useApiData<RequestView[]>("requests.list");
   const roles = useApiData<RoleView[]>("roles.list");
   const act = useAction();
@@ -396,7 +364,7 @@ function RequestsTab({ reload }: { reload: () => Promise<void> }) {
 }
 
 // ---------- Support access ----------
-function SupportTab({ data }: { data: ReturnType<typeof useApiData<GrantView[]>> }) {
+export function SupportTab({ data }: { data: ReturnType<typeof useApiData<GrantView[]>> }) {
   const act = useAction();
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
@@ -445,7 +413,7 @@ function SupportTab({ data }: { data: ReturnType<typeof useApiData<GrantView[]>>
 }
 
 // ---------- Security log ----------
-function LogTab() {
+export function LogTab() {
   const [before, setBefore] = useState<number | undefined>(undefined);
   const log = useApiData<{ entries: (LogView & { id: number })[]; more: boolean }>("security.list", before ? { before } : {});
   const [older, setOlder] = useState<(LogView & { id: number })[]>([]);

@@ -30,6 +30,9 @@ const memory = (): SyncStorage & { map: Map<string, string> } => {
 };
 /** Lets the engine finish what it started (sending, catching up) */
 const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(r => setImmediate(r)); };
+/** Waits (up to 10 s) for something the engine does in the background, e.g. sending what was waiting: the whole test
+ * suite runs at once, so a fixed number of turns isn't always enough */
+const until = async (ok: () => boolean) => { const end = Date.now() + 10_000; while (!ok() && Date.now() < end) await new Promise(r => setTimeout(r, 20)); };
 
 async function two() {
   const w = await ownerSignedIn();
@@ -100,6 +103,7 @@ test("changes made offline survive a reload and are saved once the connection is
   const again = t.make(t.omarB, "omar", storage);
   await again.e.open();
   await settle();
+  await until(() => again.e.getStatus().waiting === 0 && cases(again.e, "02A-01-L1-B1") === 7);
   assert.equal(again.e.getStatus().waiting, 0);
   assert.equal(cases(again.e, "02A-01-L1-B1"), 7);
   const owner = t.make(t.owner, "owner");

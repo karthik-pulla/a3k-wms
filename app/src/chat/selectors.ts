@@ -57,7 +57,18 @@ export const isPartial = (line: StockLine) => { const p = productById(line.produ
 export const locationKind = (code: string) => locKind(code);
 
 // ---------- Conversations, unread and mentions ----------
-export const conversationsFor = (state: State, me: User) => state.chat.conversations.filter(c => c.members.includes(me.id));
+/** The conversations someone is in (deleted group chats drop out) */
+export const conversationsFor = (state: State, me: User) => state.chat.conversations.filter(c => c.members.includes(me.id) && !c.deletedAt);
+
+/** The direct conversation between two people that both are still in */
+export const dmBetween = (state: State, a: string, b: string) => state.chat.conversations.find(c => c.kind === "dm" && c.members.includes(a) && c.members.includes(b));
+
+/** The people directory: everyone in the warehouse, matching every word typed (name, role, groups) */
+export function searchPeople(users: User[], q: string): User[] {
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return users.filter(u => words.every(w => `${u.name} ${u.roleName ?? ""} ${u.role} ${u.groups.join(" ")}`.toLowerCase().includes(w)))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function lastMessage(state: State, convId: string): Message | undefined {
   for (let i = state.chat.messages.length - 1; i >= 0; i--) if (state.chat.messages[i].conversationId === convId) return state.chat.messages[i];

@@ -8,12 +8,14 @@ type Call = typeof api;
 const ApiCtx = createContext<Call>(api);
 export const ApiProvider = ApiCtx.Provider;
 
-export function useApiData<T>(method: string, input?: Record<string, unknown>) {
+/** method null: nothing to load (e.g. on this device, with no server) */
+export function useApiData<T>(method: string | null, input?: Record<string, unknown>) {
   const call = useContext(ApiCtx);
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const key = JSON.stringify(input ?? {});
   const reload = useCallback(async () => {
+    if (!method) return;
     try { setData(await call<T>(method, JSON.parse(key))); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Couldn't load"); }
   }, [method, key, call]);
   useEffect(() => { void reload(); }, [reload]);

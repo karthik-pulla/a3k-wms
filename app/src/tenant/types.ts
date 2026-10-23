@@ -164,4 +164,13 @@ export interface Seed {
   presence: Record<string, { state: "online" | "away" | "syncing" | "offline"; minutesAgo: number; manual?: { kind: "forklift" } | { kind: "off" } | { kind: "receiving"; door: number } }>;
   /** Sample pallet tasks: who made them and who gets the first one */
   tasks?: { createdBy: string; assignee?: string };
+  /** The warehouse's own settings to start with (Manage warehouse): email routing rules, contacts */
+  settings?: {
+    routes?: { match: string; client: Client; kind: "order" | "inbound"; note?: string }[];
+    contacts?: { kind: "client" | "carrier"; name: string; client?: Client; email?: string; phone?: string; notes?: string }[];
+  };
+  /** Announcements on the home screens: by, hours ago */
+  notices?: { text: string; by: string; hoursAgo: number; urgent?: boolean }[];
+  /** Work teams: name and people (ids) */
+  teams?: { name: string; members: string[]; by: string }[];
 }

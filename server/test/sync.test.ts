@@ -132,6 +132,50 @@ test("direct messages reach only their members; channels reach everyone", async 
   await fails(w.leo.b.call("sync.push", change("chat/conversation", [{ key: "conv:night", data: { id: "night", kind: "channel", title: "night", members: [], createdAt: "x" } }])), "forbidden");
 });
 
+test("group chats: anyone starts one; its creator renames it, adds and removes people and deletes it", async () => {
+  const w = await team();
+  const msg = (id: string, conv: string, author: string) => ({ key: `msg:${id}`, data: { id, conversationId: conv, authorId: author, text: id, refs: [], photos: [], createdAt: "2026-10-16T12:00:00.000Z", status: "sent" } });
+  const g = { id: "g-1", kind: "group", title: "Night crew", members: [w.omar.id, w.leo.id], createdBy: w.omar.id, createdAt: "2026-10-16T12:00:00.000Z" };
+  // Started by someone else in their name, or by someone not in it: refused
+  await fails(w.leo.b.call("sync.push", change("chat/conversation", [{ key: "conv:g-1", data: g }])), "forbidden");
+  assert.equal((await w.omar.b.call("sync.push", change("chat/conversation", [{ key: "conv:g-1", data: g }]))).ok, true);
+  await w.leo.b.call("sync.push", change("chat/add", [msg("gm1", "g-1", w.leo.id)]));
+  const keys = async (b: any) => (await pullAll(b)).rows.map((x: any) => x.key).sort();
+  assert.deepEqual(await keys(w.owner), ["conv:team"], "the owner isn't in it");
+  // Only the creator renames it or adds people; anyone in it may leave
+  await fails(w.leo.b.call("sync.push", change("chat/conversation", [{ key: "conv:g-1", base: 1, data: { ...g, title: "Leo's" } }])), "forbidden");
+  await fails(w.owner.call("sync.push", change("chat/conversation", [{ key: "conv:g-1", base: 1, data: { ...g, members: [...g.members, w.ownerId] } }])), "forbidden");
+  const g2 = { ...g, title: "Night shift", members: [w.omar.id, w.ownerId] };
+  assert.equal((await w.omar.b.call("sync.push", change("chat/conversation", [{ key: "conv:g-1", base: 1, data: g2 }]))).ok, true);
+  // Leo was taken out: his device still gets that change (so it learns), then nothing more
+  const leoRows = (await pullAll(w.leo.b)).rows;
+  assert.deepEqual(leoRows.find((x: any) => x.key === "conv:g-1").data.members, [w.omar.id, w.ownerId]);
+  await fails(w.leo.b.call("sync.push", change("chat/add", [msg("gm2", "g-1", w.leo.id)])), "forbidden");
+  assert.deepEqual(await keys(w.owner), ["conv:g-1", "conv:team"]);
+  await fails(w.omar.b.call("sync.push", change("chat/conversation", [{ key: "conv:g-1", base: 2, data: { ...g2, createdBy: w.ownerId } }])), "forbidden");
+  // Deleted: nobody writes in it any more
+  assert.equal((await w.omar.b.call("sync.push", change("chat/conversation", [{ key: "conv:g-1", base: 2, data: { ...g2, deletedAt: "2026-10-16T13:00:00.000Z" } }]))).ok, true);
+  await fails(w.owner.call("sync.push", change("chat/add", [msg("gm3", "g-1", w.ownerId)])), "forbidden");
+});
+
+test("warehouse settings and announcements are the owners'; work teams also the coordinators'", async () => {
+  const w = await team();
+  const settings = { key: "setting:warehouse", data: { pickRule: "fefo", openFirst: true } };
+  await fails(w.leo.b.call("sync.push", change("warehouse/settings", [settings])), "forbidden");
+  assert.equal((await w.owner.call("sync.push", change("warehouse/settings", [settings]))).ok, true);
+  const notice = { key: "notice:N1", data: { id: "N1", text: "Dock 2 closed Friday", by: "Owner", at: "2026-10-16T12:00:00.000Z" } };
+  await fails(w.leo.b.call("sync.push", change("notice/post", [notice])), "forbidden");
+  assert.equal((await w.owner.call("sync.push", change("notice/post", [notice]))).ok, true);
+  const t = { key: "team:T1", data: { id: "T1", name: "Reach trucks", members: [w.omar.id], createdBy: "Leo", createdAt: "2026-10-16T12:00:00.000Z" } };
+  await fails(w.omar.b.call("sync.push", change("team/save", [t])), "forbidden");
+  assert.equal((await w.leo.b.call("sync.push", change("team/save", [t]))).ok, true);
+  // Each change touches only its own kinds
+  await fails(w.owner.call("sync.push", change("notice/post", [{ key: "stock:01A-01-L1-B1", data: line(1) }])), "forbidden");
+  await fails(w.leo.b.call("sync.push", change("team/save", [{ key: "setting:warehouse", base: 1, data: {} }])), "forbidden");
+  const got = (await pullAll(w.omar.b)).rows.map((x: any) => x.key).sort();
+  assert.deepEqual(got, ["conv:team", "notice:N1", "setting:warehouse", "team:T1"], "everyone in the warehouse gets them");
+});
+
 test("catching up comes in pages that never split a change, and every piece arrives once", async () => {
   const w = await team();
   const many = Array.from({ length: 4500 }, (_, i) => ({ key: `stock:S-${String(i).padStart(5, "0")}`, data: line(i + 1) }));

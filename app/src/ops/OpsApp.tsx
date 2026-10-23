@@ -269,6 +269,8 @@ function WarehouseDrawer({ t, onChange }: { t: TenantSummary; onChange: () => vo
           {restoreFor && <RestoreForm tenantId={t.id} owner={restoreFor === "new" ? null : restoreFor} onCancel={() => setRestoreFor(null)} onDone={(l, who, kind) => { setRestoreFor(null); setLink({ ...l, who, kind }); void owners.reload(); onChange(); }} />}
         </section>
 
+        <CodeFormatSection tenantId={t.id} />
+
         <section className="ops-sec">
           <h3>Support access</h3>
           <p className="muted small">To look inside, ask the warehouse's owners; they approve it in their Team page. Emergency access is for outages: it opens at once and emails every owner.</p>
@@ -287,6 +289,52 @@ function WarehouseDrawer({ t, onChange }: { t: TenantSummary; onChange: () => vo
         </section>
       </div>
     </aside>
+  );
+}
+
+type CodeFormat = { slot: string; floor: string; areaSpot: string; rackDigits: number; colDigits: number; spotDigits: number; acceptUnpadded: boolean };
+
+/** The warehouse's slot code format: only the WMS team changes it, and only before any stock is saved under it */
+function CodeFormatSection({ tenantId }: { tenantId: string }) {
+  const act = useAction();
+  const toast = useToast();
+  const cur = useApiData<{ codeFormat: CodeFormat | null; stockLocations: number }>("tenants.codeFormat", { id: tenantId });
+  const [f, setF] = useState<CodeFormat | null>(null);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  if (!cur.data) return <section className="ops-sec"><h3>Slot codes</h3><p className="muted small">{cur.error ?? "Loading…"}</p></section>;
+  const fmt = cur.data.codeFormat;
+  const example = (x: CodeFormat) => x.slot.replace("{face}", `${"6".padStart(x.rackDigits, "0")}B`).replace("{col}", "8".padStart(x.colDigits, "0")).replace("{level}", "3").replace("{bay}", "1");
+  const save = async () => {
+    if (!f) return;
+    const r = await act("tenants.setCodeFormat", { id: tenantId, codeFormat: f, reason });
+    if (!r.ok) { setError(r.error); return; }
+    toast("Slot codes changed. The warehouse's devices use them after reloading.");
+    setF(null); setReason(""); setError(null); void cur.reload();
+  };
+  const field = (k: keyof CodeFormat, label: string) => (
+    <label className="field small">{label}{typeof f![k] === "boolean"
+      ? <input type="checkbox" checked={f![k] as boolean} onChange={e => setF({ ...f!, [k]: e.target.checked })} />
+      : <input className="input mono" value={String(f![k])} onChange={e => setF({ ...f!, [k]: typeof f![k] === "number" ? Number(e.target.value) || 0 : e.target.value })} />}</label>
+  );
+  return (
+    <section className="ops-sec">
+      <h3>Slot codes</h3>
+      {fmt ? <p className="small"><code>{fmt.slot}</code> → <b className="mono">{example(fmt)}</b> · floor <code>{fmt.floor}</code> · area <code>{fmt.areaSpot}</code></p> : <p className="muted small">No settings loaded yet.</p>}
+      <p className="muted small">{cur.data.stockLocations ? `Locked: stock is saved on ${cur.data.stockLocations} locations under these codes. Changing them is a data move; plan it with engineering.` : "No stock yet, so the format can still change. Tokens: {face} {col} {level} {bay} for slots, {face} {n} for floor spots, {area} {n} for areas."}</p>
+      {fmt && !cur.data.stockLocations && !f && <button className="btn small" onClick={() => setF({ ...fmt })}>Change the format</button>}
+      {f && (
+        <div className="stack">
+          {field("slot", "Slot")}{field("floor", "Floor spot")}{field("areaSpot", "Area spot")}
+          <div className="field-row">{field("rackDigits", "Rack digits")}{field("colDigits", "Column digits")}{field("spotDigits", "Spot digits")}</div>
+          {field("acceptUnpadded", "Also read codes typed without padding")}
+          <p className="small">Example slot: <b className="mono">{example(f)}</b></p>
+          <label className="field small">Reason (kept in the log)<input className="input" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. owner asked for 03A-07-2-1 style" /></label>
+          {error && <p className="note warn" role="alert">{error}</p>}
+          <div className="btns"><button className="btn small primary" disabled={reason.trim().length < 3} onClick={() => void save()}>Save codes</button><button className="btn small" onClick={() => { setF(null); setError(null); }}>Cancel</button></div>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -28,5 +28,13 @@ export function nextSlot(state: State, near: string, avoid: string[] = [], excep
 }
 
 export const taskLabel = (t: Task) => (t.kind === "putaway" ? "Put away" : "Move");
+
+/** The work teams someone is in */
+export const teamsOf = (state: Pick<State, "teams">, userId: string) => (state.teams ?? []).filter(t => t.members.includes(userId));
+/** Tasks a person may take without being given them: not given to anyone, and not kept for a team they aren't in */
+export const inPool = (state: Pick<State, "teams">, userId: string, t: Task) => !t.assignee && (!t.team || teamsOf(state, userId).some(x => x.id === t.team));
+/** "Give to" as one value: a person's id, "team:<id>", or "" for anyone */
+export const assignValue = (t: Pick<Task, "assignee" | "team">) => (t.assignee ? t.assignee : t.team ? `team:${t.team}` : "");
+export const fromAssignValue = (v: string): { assignee?: string; team?: string } => (v.startsWith("team:") ? { team: v.slice(5) } : v ? { assignee: v } : {});
 let seq = 0;
 export const taskId = () => `T${Date.now().toString(36)}${(++seq).toString(36)}`;

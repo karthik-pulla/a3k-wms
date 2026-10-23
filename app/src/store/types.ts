@@ -86,8 +86,13 @@ export interface Movement {
 
 export type OrderStatus = "draft" | "approved" | "picking" | "picked" | "shipped" | "cancelled";
 export type OrderSource = "app" | "pdf" | "email" | "portal";
-/** How pallets are chosen: oldest stock first, finishing pallets already opened before opening a new one (default) */
-export type PickStrategy = "fifo-open-first" | "fifo";
+/**
+ * Which stock goes out first: FIFO (first in, first out: oldest arrival), FEFO (first expired, first out: earliest
+ * best-before) or LIFO (last in, first out: newest arrival). "-open-first": pallets already opened (partial) are
+ * finished before a full one is opened. The warehouse picks its rule (Manage warehouse → Picking); an order may differ.
+ */
+export type PickRule = "fifo" | "fefo" | "lifo";
+export type PickStrategy = PickRule | `${PickRule}-open-first`;
 
 /** One pallet to take cases from, chosen by the picking plan */
 export interface PickLine {
@@ -152,6 +157,8 @@ export interface InboxMail {
   attachments: { name: string; text: string; pdf?: string }[];
   status: "new" | "drafted" | "ignored";
   orderId?: string;
+  /** A delivery notice that became an expected delivery (In-bounds) */
+  shipmentId?: string;
   sample?: boolean;
 }
 
@@ -186,7 +193,8 @@ export interface Presence {
   manual?: ManualStatus;
 }
 
-export type ConversationKind = "channel" | "dm" | "order" | "shipment";
+/** group = a group chat anyone can start; its creator names it, adds and removes people, and may delete it */
+export type ConversationKind = "channel" | "dm" | "group" | "order" | "shipment";
 export interface Conversation {
   id: string;
   kind: ConversationKind;
@@ -195,6 +203,10 @@ export interface Conversation {
   shift?: "am" | "pm";
   link?: { type: "order" | "shipment"; id: string };
   createdAt: string;
+  /** Group chats: who started it (only they rename it, change its members or delete it) */
+  createdBy?: string;
+  /** Group chats: deleted by their creator (hidden from everyone; the messages are kept) */
+  deletedAt?: string;
 }
 
 /** A structured reference saved next to the message text, with a small snapshot taken when sent. */
@@ -241,8 +253,12 @@ export interface Task {
   id: string;
   kind: "putaway" | "move";
   status: "open" | "doing" | "done" | "cancelled";
-  /** Worker it's given to; empty = any worker may take it */
+  /** Worker it's given to; empty = any worker (of `team`, if set) may take it */
   assignee?: string;
+  /** A work team (Tasks → Teams): only its members see and take the task */
+  team?: string;
+  /** Which pallet, in people's words: its number, what's on it, or how to recognise it ("pallet 2", "the shrink-wrapped one at the back") */
+  palletNote?: string;
   from: string;
   to: string;
   /** What's on the pallet */
@@ -265,7 +281,7 @@ export interface AuditEntry {
   at: string;
   byId: string;
   by: string;
-  area: "stock" | "inbound" | "outbound" | "count" | "task" | "messages" | "data" | "products";
+  area: "stock" | "inbound" | "outbound" | "count" | "task" | "messages" | "data" | "products" | "settings";
   action: string;
   /** Moves of pallets (put-away, moves, picks): the workers' pallet log */
   pallet?: boolean;
@@ -296,6 +312,27 @@ export interface CountSession {
   closedBy?: string;
 }
 
+// ---------- The warehouse's own settings (Manage warehouse) ----------
+/** Where an email to the order inbox belongs: a sender address or "@domain", a client, and whether it's an order or a delivery notice */
+export interface MailRoute { id: string; match: string; client: string; kind: "order" | "inbound"; note?: string }
+/** Someone the warehouse deals with: a client's buyer or office, or a trucking company */
+export interface Contact { id: string; kind: "client" | "carrier"; name: string; client?: string; email?: string; phone?: string; notes?: string }
+export interface WarehouseSettings {
+  /** The warehouse's name on this device's screens (on the server it's part of the warehouse's settings) */
+  name?: string;
+  pickRule?: PickRule;
+  /** Finish pallets already opened before opening a full one (default yes) */
+  openFirst?: boolean;
+  routes?: MailRoute[];
+  contacts?: Contact[];
+  updatedBy?: string;
+  updatedAt?: string;
+}
+/** A notice from an owner, shown at the top of everyone's home and Work screens */
+export interface Announcement { id: string; text: string; by: string; at: string; urgent?: boolean; /** YYYY-MM-DD: shown until the end of that day */ until?: string }
+/** A group of workers tasks can be given to (set up by owners and coordinators) */
+export interface WorkTeam { id: string; name: string; members: string[]; createdBy: string; createdAt: string }
+
 export interface State {
   version: 1;
   shipments: Shipment[];
@@ -311,4 +348,7 @@ export interface State {
   audit: AuditEntry[];
   /** Products whose code, name or full description was changed, by product id (applied over the tenant's list) */
   productEdits?: Record<string, ProductText>;
+  settings?: WarehouseSettings;
+  notices?: Announcement[];
+  teams?: WorkTeam[];
 }

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { UPDATE_KINDS, changesToApprove, type UpdateGroup } from "../home/updates";
 import { useStore, shipmentTitle, palletCount, totalCases } from "../store/store";
 import { UpdateCard } from "../components/UpdateCard";
@@ -11,11 +11,17 @@ import { go } from "../router";
 import { orderCases, statusOf } from "../outbound/plan";
 import { SOURCE_LABEL, STATUS_LABEL, dueText, dueTone, isActive } from "../outbound/labels";
 import { useLang } from "../i18n";
+import { Announcements } from "../components/home/Announcements";
+import { WidgetPicker } from "../components/home/WidgetPicker";
 
-/** messagesInRail: on wide screens Messages lives in the right rail, so the card grid leaves it out. */
+/**
+ * Home: the greeting, the owners' announcements, and only the widgets this person chose (none at first: they pick
+ * them in the tour, or with "Widgets"). messagesInRail: on wide screens Messages lives in the right rail instead.
+ */
 export function Home({ messagesInRail }: { messagesInRail: boolean }) {
   const { state } = useStore();
-  const { me, settings } = useSession();
+  const { me, settings, update } = useSession();
+  const [picking, setPicking] = useState(false);
   const phone = useMediaQuery("(max-width: 760px)");
   // Every card comes from the live store
   const groups: UpdateGroup[] = useMemo(() => {
@@ -57,6 +63,7 @@ export function Home({ messagesInRail }: { messagesInRail: boolean }) {
   const count = (k: string) => byKind.get(k as never)?.count ?? 0;
   const name = me.name.trim();
   const lang = useLang();
+  const any = settings.cards.some(c => c.visible);
 
   return (
     <main className="home">
@@ -70,21 +77,28 @@ export function Home({ messagesInRail }: { messagesInRail: boolean }) {
           <b>{count("incoming")} deliveries</b> are on the way.
         </p>
       )}
-      <BrandTotals />
-      <section aria-labelledby="updates-h" style={{ display: "grid", gap: 16 }}>
-        <div className="updates-head">
-          <h2 id="updates-h">Updates</h2>
-        </div>
-        {shown.length ? (
-          <div className="cards">{shown.map(c => {
+      <Announcements />
+      {picking ? (
+        <section className="panel glass widget-panel" aria-labelledby="widgets-h">
+          <div className="panel-foot"><h2 id="widgets-h" className="plain-h">Widgets on your home</h2><button className="btn small primary" onClick={() => setPicking(false)}>Done</button></div>
+          <WidgetPicker cards={settings.cards} onChange={cards => update({ cards })} />
+        </section>
+      ) : !any ? (
+        <section className="home-empty">
+          <p className="muted">Your home is clear. Add the widgets you want to see here, or go straight to a section on the left.</p>
+          <div className="btns"><button className="btn primary" onClick={() => setPicking(true)}>Choose widgets</button><a className="btn" href="#/help">Help and tour</a></div>
+        </section>
+      ) : (
+        <section aria-label="Widgets" style={{ display: "grid", gap: 16 }}>
+          {shown.length > 0 && <div className="cards">{shown.map(c => {
             if (c.kind === "messages") return phone ? <HomeMessagesCompact key="messages" /> : <HomeMessages key="messages" placement="grid" />;
+            if (c.kind === "stockByBrand") return <BrandTotals key="stockByBrand" />;
             const g = byKind.get(c.kind);
             return g ? <UpdateCard key={g.kind} group={g} /> : null;
-          })}</div>
-        ) : (
-          <p className="no-cards glass">All update cards are hidden. Turn some back on in Settings.</p>
-        )}
-      </section>
+          })}</div>}
+          <div className="home-foot"><button className="link small" onClick={() => setPicking(true)}>Widgets</button></div>
+        </section>
+      )}
     </main>
   );
 }
@@ -109,7 +123,7 @@ function BrandTotals() {
   if (!can(me, "use-inbounds")) return null;
   const total = rows.reduce((a, r) => a + r.cases, 0);
   return (
-    <section className="panel glass brand-totals" aria-labelledby="bt-h">
+    <section className="panel glass brand-totals wide-widget" aria-labelledby="bt-h">
       <div className="panel-foot"><h2 id="bt-h" className="plain-h">Stock by brand <span className="live-dot" aria-hidden="true" /> live</h2><span className="muted small">{total.toLocaleString()} cases · <a className="link" href="#/inventory/products">Inventory ›</a></span></div>
       <div className="table-wrap">
         <table className="lines bt-table">

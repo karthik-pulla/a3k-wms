@@ -71,6 +71,7 @@ function checkChat(who: SyncWho, c: Change, cur: Row | undefined, convOf: (id: s
     const conv = convOf(String(data.conversationId));
     if (!conv) throw bad("That conversation doesn't exist");
     if (conv.kind !== "channel" && !(conv.members ?? []).includes(me)) throw forbidden("You're not in that conversation");
+    if (conv.deletedAt) throw forbidden("That group chat was deleted");
     return;
   }
   if (kind === "conv") {
@@ -78,6 +79,14 @@ function checkChat(who: SyncWho, c: Change, cur: Row | undefined, convOf: (id: s
     const members: string[] = Array.isArray(data.members) ? data.members.map(String) : [];
     if (!cur?.data) {
       if (data.kind === "channel" ? who.base !== "owner" : !members.includes(me)) throw forbidden(data.kind === "channel" ? "Only owners add channels" : "You can only start conversations you're in");
+      if (data.kind === "group" && data.createdBy !== me) throw forbidden("A group chat is started by the person creating it");
+      if (data.kind === "group" && data.deletedAt) throw bad("A new group chat can't be deleted already");
+      return;
+    }
+    // A group chat's creator names it, adds and removes people, and deletes it; what it is and who made it never change
+    if (cur.data.kind === "group" && cur.data.createdBy === me) {
+      for (const k of ["kind", "createdBy", "createdAt", "link"]) if (JSON.stringify(cur.data[k]) !== JSON.stringify(data[k])) throw forbidden("Only the group's name, members and deletion can change");
+      if (cur.data.deletedAt && JSON.stringify(cur.data) !== JSON.stringify(data)) throw forbidden("That group chat was deleted");
       return;
     }
     // An existing conversation: only one's own membership may change
@@ -88,7 +97,7 @@ function checkChat(who: SyncWho, c: Change, cur: Row | undefined, convOf: (id: s
     for (const m of new Set([...before, ...after])) if (before.has(m) !== after.has(m) && m !== me) throw forbidden("You can only add or remove yourself");
     if (!before.has(me) && after.has(me)) {
       // Joining: channels are open to everyone; direct conversations never; a thread only if you may see its client
-      if (data.kind === "dm") throw forbidden("You can't join someone else's direct conversation");
+      if (data.kind === "dm" || data.kind === "group") throw forbidden(data.kind === "dm" ? "You can't join someone else's direct conversation" : "Only the group's creator adds people");
       if (data.kind !== "channel") {
         const rec = data.link ? linked.get(`${data.link.type}:${data.link.id}`) : undefined;
         if (who.clients && (!rec || !who.clients.includes(rec.client))) throw forbidden("That thread is about a client you don't see");
@@ -151,7 +160,9 @@ export async function push(db: Db, who: SyncWho, raw: Record<string, unknown>): 
       // The log says who made the change as the server knows them, not as the device claims
       if (data && kind === "audit") data = { ...data, by: who.name, byId: who.personId ?? "support" };
       if (data && kind === "movement") data = { ...data, by: who.name };
-      const audience = kind === "read" ? audienceOf("msg", { conversationId: readConv(c.key) }, convOf) : audienceOf(kind, data, convOf);
+      let audience = kind === "read" ? audienceOf("msg", { conversationId: readConv(c.key) }, convOf) : audienceOf(kind, data, convOf);
+      // Someone taken out of (or leaving) a conversation still gets this one change, so their device learns it
+      if (kind === "conv" && audience && Array.isArray(before?.data?.members)) audience = [...new Set([...audience, ...before.data.members.map(String)])];
       return { key: c.key, kind, data, audience };
     });
 

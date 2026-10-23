@@ -7,7 +7,7 @@ import { buildXlsx, download } from "../../utils/xlsx";
 import type { AuditEntry } from "../../store/types";
 
 type Area = AuditEntry["area"] | "accounts";
-const AREAS: [Area | "all" | "pallets", string][] = [["all", "Everything"], ["pallets", "Pallet moves"], ["stock", "Stock"], ["inbound", "In-bounds"], ["outbound", "Out-bounds"], ["count", "Counts"], ["task", "Tasks"], ["products", "Products"], ["accounts", "Accounts and sign-in"], ["data", "Data"]];
+const AREAS: [Area | "all" | "pallets", string][] = [["all", "Everything"], ["pallets", "Pallet moves"], ["stock", "Stock"], ["inbound", "In-bounds"], ["outbound", "Out-bounds"], ["count", "Counts"], ["task", "Tasks"], ["products", "Products"], ["settings", "Warehouse settings"], ["accounts", "Accounts and sign-in"], ["data", "Data"]];
 interface Row { id: string; at: string; by: string; area: Area; action: string; pallet?: boolean }
 const PAGE = 200;
 
@@ -15,7 +15,7 @@ const PAGE = 200;
  * Logs: every change, with the action, who did it and when. Read-only: nothing here can be edited or deleted.
  * Owners see everything (and sign-ins); coordinators see the workers' pallet log (put-away, moves, picks).
  */
-export function LogsPage() {
+export function LogsPage({ embedded = false }: { embedded?: boolean }) {
   const { state } = useStore();
   const { me } = useSession();
   const { securityLog } = useIdentity();
@@ -42,9 +42,10 @@ export function LogsPage() {
   const stamp = (iso: string) => new Date(iso).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
 
   if (!can(me, "view-logs")) return <main className="section"><div className="panel glass"><p>Logs are for owners and coordinators.</p></div></main>;
+  const Wrap = embedded ? "div" : "main";
   return (
-    <main className="section logs">
-      <header className="section-head"><h1>Logs</h1><p className="crumb">{all ? "Every change: what was done, by whom, and when" : "The workers' pallet log: put-away, moves and picks"}</p></header>
+    <Wrap className={embedded ? "logs stack" : "section logs"}>
+      {!embedded && <header className="section-head"><h1>Logs</h1><p className="crumb">{all ? "Every change: what was done, by whom, and when" : "The workers' pallet log: put-away, moves and picks"}</p></header>}
       <div className="toolbar">
         <input className="input search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search actions, slots, products, orders" aria-label="Search the log" />
         <select className="input log-sel" value={who} onChange={e => setWho(e.target.value)} aria-label="Person"><option value="">Everyone</option>{people.map(p => <option key={p}>{p}</option>)}</select>
@@ -70,6 +71,6 @@ export function LogsPage() {
         </div>
         {shown.length > limit && <button className="btn" onClick={() => setLimit(l => l + PAGE * 2)}>Show more</button>}
       </div>
-    </main>
+    </Wrap>
   );
 }

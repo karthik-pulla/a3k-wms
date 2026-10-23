@@ -10,7 +10,8 @@ import { go } from "../../router";
 import { useToast } from "../../components/Toast";
 import { TaskCard } from "../../components/tasks/TaskCard";
 import { OrderDetail } from "../outbounds/OrderDetail";
-import { isOpen, nextSlot, taskId } from "../../store/tasks";
+import { inPool, isOpen, nextSlot, taskId } from "../../store/tasks";
+import { Announcements } from "../../components/home/Announcements";
 import { orderCases, pickedCases, statusOf } from "../../outbound/plan";
 import { dueText, dueTone } from "../../outbound/labels";
 import type { State, Task, User } from "../../store/types";
@@ -24,7 +25,7 @@ function useClock() {
 /** My tasks first (in progress, then given to me), then ones anyone can take */
 function myQueue(state: State, me: User): { mine: Task[]; pool: Task[] } {
   const open = state.tasks.filter(isOpen).sort((a, b) => (a.status === "doing" ? 0 : 1) - (b.status === "doing" ? 0 : 1) || a.createdAt.localeCompare(b.createdAt));
-  return { mine: open.filter(t => t.assignee === me.id), pool: open.filter(t => !t.assignee) };
+  return { mine: open.filter(t => t.assignee === me.id), pool: open.filter(t => inPool(state, me.id, t)) };
 }
 
 /** Recent messages for me: mentions, direct messages and my channels (newest first) */
@@ -62,12 +63,13 @@ function WorkHome() {
         <div><h1>Hi {me.name.split(" ")[0]}</h1><p className="crumb">{mine.length} task{mine.length === 1 ? "" : "s"} for you · {orders.length} order{orders.length === 1 ? "" : "s"} to pack · {doneToday} done today</p></div>
         <div className="work-clock" aria-label="Time"><b>{now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</b><span>{now.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</span></div>
       </header>
+      <Announcements />
       <div className="btns"><a className="btn primary big" href="#/work/forklift">Forklift mode</a><MoveRequest /></div>
       <div className="work-layout">
         <section className="stack">
           <h2 className="plain-h">My tasks</h2>
           {mine.length ? mine.map(t => <TaskCard key={t.id} task={t} />) : <p className="muted panel glass">Nothing given to you right now.</p>}
-          {pool.length > 0 && <><h2 className="plain-h">Anyone can take</h2>{pool.map(t => <TaskCard key={t.id} task={t} />)}</>}
+          {pool.length > 0 && <><h2 className="plain-h">Anyone{pool.some(t => t.team) ? " (or your team)" : ""} can take</h2>{pool.map(t => <TaskCard key={t.id} task={t} />)}</>}
         </section>
         <aside className="stack">
           <section className="panel glass">

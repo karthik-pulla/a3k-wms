@@ -7,7 +7,7 @@ import { go } from "../../router";
 import { useToast } from "../../components/Toast";
 import { ProductInput } from "../../components/ProductInput";
 import { CloseIcon } from "../../components/icons";
-import { nextOrderId } from "../../outbound/plan";
+import { defaultStrategy, nextOrderId, strategyName } from "../../outbound/plan";
 import { pdfText, readOrder, type ReadOrder } from "../../outbound/reader";
 import { productSummaries } from "../../inventory/selectors";
 import type { OrderSource, StoreOrder } from "../../store/types";
@@ -71,8 +71,8 @@ export function OrderEditor({ order }: { order?: StoreOrder }) {
       createdBy: order?.createdBy ?? me.name, createdAt: order?.createdAt ?? new Date().toISOString(),
     };
     dispatch({ type: "order/save", order: next });
-    if (approve) dispatch({ type: "order/approve", id, by: me.name, strategy: next.strategy ?? "fifo-open-first" });
-    toast(approve ? `${id} saved and approved. Pallets planned, oldest stock first.` : `${id} saved as a draft for approval.`);
+    if (approve) dispatch({ type: "order/approve", id, by: me.name, strategy: next.strategy ?? defaultStrategy(state) });
+    toast(approve ? `${id} saved and approved. Pallets planned: ${strategyName(next.strategy ?? defaultStrategy(state)).toLowerCase()}.` : `${id} saved as a draft for approval.`);
     go(`#/outbounds/orders/${encodeURIComponent(id)}`);
   };
 

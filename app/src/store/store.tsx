@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type { SyncEngine } from "../sync/engine";
 import { sampleState, withOutbound, withSampleDates, withSampleWork } from "./sample";
-import type { AuditEntry, Conversation, CountEntry, CountSession, InboxMail, Message, Movement, PickStrategy, Presence, ReturnOutcome, ReturnRequest, Shipment, State, StockLine, StoreOrder, Task, User } from "./types";
+import type { Announcement, AuditEntry, Conversation, CountEntry, CountSession, InboxMail, Message, Movement, PickStrategy, Presence, ReturnOutcome, ReturnRequest, Shipment, State, StockLine, StoreOrder, Task, User, WarehouseSettings, WorkTeam } from "./types";
 import { RECEIVING, isOpen, taskId } from "./tasks";
 import { CLIENTS, applyProductEdits, productById } from "../data/catalog";
 import type { ProductText } from "../../../server/src/shared/products.ts";
@@ -41,13 +41,14 @@ type Action =
   | { type: "order/cancel"; id: string; by: string; reason: string }
   | { type: "order/delete"; id: string }
   | { type: "inbox/add"; mail: InboxMail }
-  | { type: "inbox/status"; id: string; status: InboxMail["status"]; orderId?: string }
+  | { type: "inbox/status"; id: string; status: InboxMail["status"]; orderId?: string; shipmentId?: string }
   /** The signed-in account as a person in the app (Messages, history): added or updated, and given the team channel and the threads of clients they may see */
   | { type: "account/user"; user: User }
   // Roles: guarded owner edits, pallet tasks, packing assignments
   | { type: "stock/adjust"; location: string; lines: StockLine[]; by: string; reason: string }
   | { type: "task/create"; task: Task }
-  | { type: "task/assign"; id: string; assignee?: string }
+  /** To a worker, to a team (any of its members may take it), or back to anyone */
+  | { type: "task/assign"; id: string; assignee?: string; team?: string }
   | { type: "task/start"; id: string; byId: string }
   | { type: "task/blocked"; id: string; to: string }
   | { type: "task/cancel"; id: string; by: string; reason: string }
@@ -55,6 +56,12 @@ type Action =
   | { type: "order/assign"; id: string; assignee?: string }
   /** Owner decision: apply the counted stock to these locations, or keep the system stock */
   | { type: "count/decide"; id: string; by: string; apply: string[]; keep: string[]; note: string }
+  // Manage warehouse: the warehouse's own settings, announcements on the home screens, and work teams
+  | { type: "warehouse/settings"; patch: Partial<WarehouseSettings>; by: string }
+  | { type: "notice/post"; notice: Announcement }
+  | { type: "notice/remove"; id: string }
+  | { type: "team/save"; team: WorkTeam }
+  | { type: "team/delete"; id: string }
   // Messages (only the chat data layer dispatches these)
   | { type: "chat/add"; message: Message }
   | { type: "chat/status"; ids: string[]; status: Message["status"] }
@@ -115,7 +122,7 @@ function reducer(state: State, a: Action): State {
     case "task/create":
       return { ...state, tasks: [a.task, ...state.tasks] };
     case "task/assign":
-      return { ...state, tasks: state.tasks.map(t => (t.id === a.id ? { ...t, assignee: a.assignee } : t)) };
+      return { ...state, tasks: state.tasks.map(t => (t.id === a.id ? { ...t, assignee: a.assignee, team: a.team } : t)) };
     case "task/start":
       return { ...state, tasks: state.tasks.map(t => (t.id === a.id && t.status === "open" ? { ...t, status: "doing", startedAt: now(), assignee: t.assignee ?? a.byId } : t)) };
     case "task/blocked":
@@ -142,6 +149,21 @@ function reducer(state: State, a: Action): State {
     }
     case "order/assign":
       return { ...state, orders: state.orders.map(o => (o.id === a.id ? { ...o, assignee: a.assignee } : o)) };
+    case "warehouse/settings":
+      return { ...state, settings: { ...state.settings, ...a.patch, updatedBy: a.by, updatedAt: now() } };
+    case "notice/post": {
+      const list = state.notices ?? [];
+      return { ...state, notices: list.some(n => n.id === a.notice.id) ? list.map(n => (n.id === a.notice.id ? a.notice : n)) : [a.notice, ...list] };
+    }
+    case "notice/remove":
+      return { ...state, notices: (state.notices ?? []).filter(n => n.id !== a.id) };
+    case "team/save": {
+      const list = state.teams ?? [];
+      return { ...state, teams: list.some(t => t.id === a.team.id) ? list.map(t => (t.id === a.team.id ? a.team : t)) : [a.team, ...list] };
+    }
+    case "team/delete":
+      // Open tasks given to the team go back to everyone
+      return { ...state, teams: (state.teams ?? []).filter(t => t.id !== a.id), tasks: state.tasks.map(t => (t.team === a.id && isOpen(t) ? { ...t, team: undefined } : t)) };
     case "submitReturn":
       return { ...state, returns: [a.request, ...state.returns], seq: state.seq + 1 };
     case "decideReturn": {
@@ -164,7 +186,7 @@ function reducer(state: State, a: Action): State {
     }
     case "reset":
       // The change log survives a reset (it's never edited or cleared), and so do product edits (they're the warehouse's, not sample data)
-      return withSampleWork({ ...sampleState(), tasks: [], audit: state.audit ?? [], productEdits: state.productEdits });
+      return withSampleWork({ ...sampleState(), tasks: [], audit: state.audit ?? [], productEdits: state.productEdits, settings: state.settings });
     case "product/edit":
       if (!productById(a.id)) return state;
       return { ...state, productEdits: { ...(state.productEdits ?? {}), [a.id]: a.after } };
@@ -255,18 +277,18 @@ function reducer(state: State, a: Action): State {
       const users = state.chat.users.some(x => x.id === u.id) ? state.chat.users.map(x => (x.id === u.id ? { ...x, ...u } : x)) : [...state.chat.users, u];
       const sees = (c: Conversation) => {
         if (c.kind === "channel") return c.id === "team" || (c.shift === "am" && u.groups.includes("shift-am")) || (c.shift === "pm" && u.groups.includes("shift-pm"));
-        if (c.kind === "dm") return false;
+        if (c.kind === "dm" || c.kind === "group") return false;
         const rec = c.link?.type === "order" ? state.orders.find(o => o.id === c.link!.id) : state.shipments.find(x => x.id === c.link?.id);
         return !!rec && canSeeClient(u, rec.client);
       };
-      const conversations = state.chat.conversations.map(c => (sees(c) && !c.members.includes(u.id) ? { ...c, members: [...c.members, u.id] } : !sees(c) && c.kind !== "dm" && c.members.includes(u.id) ? { ...c, members: c.members.filter(m => m !== u.id) } : c));
+      const conversations = state.chat.conversations.map(c => (sees(c) && !c.members.includes(u.id) ? { ...c, members: [...c.members, u.id] } : !sees(c) && c.kind !== "dm" && c.kind !== "group" && c.members.includes(u.id) ? { ...c, members: c.members.filter(m => m !== u.id) } : c));
       const presence = state.chat.presence[u.id] ? state.chat.presence : { ...state.chat.presence, [u.id]: { userId: u.id, state: "online" as const, lastSeenAt: now() } };
       return { ...state, chat: { ...state.chat, users, conversations, presence } };
     }
     case "inbox/add":
       return { ...state, inbox: [a.mail, ...state.inbox] };
     case "inbox/status":
-      return { ...state, inbox: state.inbox.map(m => (m.id === a.id ? { ...m, status: a.status, orderId: a.orderId ?? m.orderId } : m)) };
+      return { ...state, inbox: state.inbox.map(m => (m.id === a.id ? { ...m, status: a.status, orderId: a.orderId ?? m.orderId, shipmentId: a.shipmentId ?? m.shipmentId } : m)) };
     case "count/delete":
       return { ...state, counts: state.counts.filter(c => c.id !== a.id) };
     case "count/status":

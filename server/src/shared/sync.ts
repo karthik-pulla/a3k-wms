@@ -10,9 +10,9 @@
 /** A key is "<kind>:<id>", e.g. "stock:06B-08-L3-B1", "order:PO-1042", "msg:m12-lq3x" */
 export type Kind =
   | "shipment" | "stock" | "return" | "movement" | "order" | "meta" | "count" | "countentry" | "inbox" | "task" | "audit"
-  | "conv" | "msg" | "read" | "presence" | "product";
+  | "conv" | "msg" | "read" | "presence" | "product" | "setting" | "notice" | "team";
 
-export const KINDS: readonly Kind[] = ["shipment", "stock", "return", "movement", "order", "meta", "count", "countentry", "inbox", "task", "audit", "conv", "msg", "read", "presence", "product"];
+export const KINDS: readonly Kind[] = ["shipment", "stock", "return", "movement", "order", "meta", "count", "countentry", "inbox", "task", "audit", "conv", "msg", "read", "presence", "product", "setting", "notice", "team"];
 export const kindOf = (key: string): Kind | null => { const k = key.slice(0, key.indexOf(":")) as Kind; return KINDS.includes(k) ? k : null; };
 export const idOf = (key: string) => key.slice(key.indexOf(":") + 1);
 
@@ -71,6 +71,12 @@ export const ACTION_RULES: Record<string, { can: string | null; kinds: Kind[] } 
   "task/blocked": { can: "move-stock", kinds: STOCK },
   "task/cancel": { can: "move-stock", kinds: STOCK },
   "task/done": { can: "move-stock", kinds: STOCK },
+  // Manage warehouse: the picking rule, email routing and contacts; announcements; work teams (owners and coordinators)
+  "warehouse/settings": { can: "manage-settings", kinds: ["setting", "audit"] },
+  "notice/post": { can: "manage-settings", kinds: ["notice", "audit"] },
+  "notice/remove": { can: "manage-settings", kinds: ["notice", "audit"] },
+  "team/save": { can: "assign-work", kinds: ["team", "audit"] },
+  "team/delete": { can: "assign-work", kinds: ["team", "task", "audit"] },
   // Joining the channels and threads one may see (checked: only one's own membership changes)
   "account/user": { can: null, kinds: ["conv", "presence"] },
   "chat/add": { can: null, kinds: ["msg", "read"] },

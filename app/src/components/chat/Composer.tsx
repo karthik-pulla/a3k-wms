@@ -185,7 +185,7 @@ export function Composer({ conversationId, compact = false, autoFocus = false }:
           }} />
         </label>
         <textarea ref={ta} className="input compose-in" rows={1} value={draft.text} autoFocus={autoFocus}
-          placeholder={`Message ${conv?.kind === "dm" ? "" : "#"}${conv ? (conv.kind === "dm" ? state.chat.users.find(u => u.id === conv.members.find(m => m !== me.id))?.name ?? "" : conv.title) : ""}`}
+          placeholder={`Message ${conv?.kind === "dm" || conv?.kind === "group" ? "" : "#"}${conv ? (conv.kind === "dm" ? state.chat.users.find(u => u.id === conv.members.find(m => m !== me.id))?.name ?? "" : conv.title) : ""}`}
           aria-label="Message" onKeyDown={onKey}
           onChange={e => onChange(e.target.value, e.target.selectionStart)}
           onSelect={e => detect(e.currentTarget.value, e.currentTarget.selectionStart, draft.refs)}

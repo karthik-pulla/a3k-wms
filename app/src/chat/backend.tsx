@@ -21,6 +21,14 @@ export interface ChatBackend {
   /** The thread for an order or delivery, created if it doesn't exist yet */
   ensureThread(link: { type: "order" | "shipment"; id: string }): string;
   rename(name: string): void;
+  /** The direct conversation with someone, started if there isn't one */
+  startDm(userId: string): string;
+  /** A new group chat, with its creator in it */
+  createGroup(title: string, members: string[]): string;
+  /** The creator only: rename, change who's in it, or delete it */
+  updateGroup(id: string, patch: { title?: string; members?: string[]; deleted?: boolean }): void;
+  /** Leave a group chat, or take a direct conversation off your list */
+  leave(id: string): void;
 }
 
 const Ctx = createContext<ChatBackend | null>(null);
@@ -168,6 +176,29 @@ export function ChatBackendProvider({ me, settings, notifier = stubNotifier, chi
       return conversation.id;
     },
     rename: name => dispatch({ type: "chat/rename", userId: me.id, name }),
+    startDm: userId => {
+      const s = stateRef.current;
+      const existing = s.chat.conversations.find(c => c.kind === "dm" && c.members.includes(me.id) && c.members.includes(userId));
+      if (existing) return existing.id;
+      const conversation: Conversation = { id: `dm-${me.id}-${userId}-${Date.now().toString(36)}`.replace(/[^A-Za-z0-9_-]/g, ""), kind: "dm", title: "", members: [me.id, userId], createdAt: now() };
+      dispatch({ type: "chat/conversation", conversation });
+      return conversation.id;
+    },
+    createGroup: (title, members) => {
+      const conversation: Conversation = { id: `g-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind: "group", title: title.trim(), members: [...new Set([me.id, ...members])], createdBy: me.id, createdAt: now() };
+      dispatch({ type: "chat/conversation", conversation });
+      return conversation.id;
+    },
+    updateGroup: (id, patch) => {
+      const c = stateRef.current.chat.conversations.find(x => x.id === id);
+      if (!c || c.kind !== "group" || c.createdBy !== me.id) return;
+      dispatch({ type: "chat/conversation", conversation: { ...c, ...(patch.title !== undefined ? { title: patch.title.trim() || c.title } : {}),
+        ...(patch.members ? { members: [...new Set([me.id, ...patch.members])] } : {}), ...(patch.deleted ? { deletedAt: now() } : {}) } });
+    },
+    leave: id => {
+      const c = stateRef.current.chat.conversations.find(x => x.id === id);
+      if (c && c.members.includes(me.id)) dispatch({ type: "chat/conversation", conversation: { ...c, members: c.members.filter(m => m !== me.id) } });
+    },
   }), [send, dispatch, me.id]);
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;

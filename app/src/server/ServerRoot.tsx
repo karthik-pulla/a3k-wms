@@ -268,7 +268,7 @@ function ServerNotes({ me }: { me: Me }) {
     <div className="server-notes" role="status">
       {me.support && <p className="server-note support"><b>Support session</b> · {me.support.canChange ? "may change things" : "look only"} · until {new Date(me.support.endsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}
       {!me.support && owner && me.supportActive.map(s => (
-        <p key={s.endsAt + s.operator} className="server-note support"><b translate="no">{s.operator}</b> from the WMS team has {s.emergency ? "emergency " : ""}access until {new Date(s.endsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · <a className="link" href="#/warehouse/support">Manage</a></p>
+        <p key={s.endsAt + s.operator} className="server-note support"><b translate="no">{s.operator}</b> from the WMS team has {s.emergency ? "emergency " : ""}access until {new Date(s.endsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · <a className="link" href="#/manage/support">Manage</a></p>
       ))}
     </div>
   );

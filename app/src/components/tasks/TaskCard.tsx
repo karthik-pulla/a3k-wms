@@ -4,7 +4,7 @@ import { can } from "../../auth/permissions";
 import { useStore, shipmentTitle } from "../../store/store";
 import { useSession } from "../../session";
 import { useToast } from "../Toast";
-import { nextSlot, taskLabel } from "../../store/tasks";
+import { assignValue, fromAssignValue, inPool, nextSlot, taskLabel } from "../../store/tasks";
 import { roughAgo } from "../../chat/presence";
 import type { Task } from "../../store/types";
 import { t as t_ } from "../../i18n";
@@ -22,7 +22,8 @@ export function TaskCard({ task: t, big = false, workers }: { task: Task; big?: 
   const [confirming, setConfirming] = useState(false);
   const mine = t.assignee === me.id;
   const lead = can(me, "assign-work");
-  const canAct = mine || !t.assignee || lead;
+  const canAct = mine || inPool(state, me.id, t) || lead;
+  const team = t.team ? (state.teams ?? []).find(x => x.id === t.team) : undefined;
   const ship = t.shipmentId ? state.shipments.find(s => s.id === t.shipmentId) : undefined;
   const who = (id?: string) => (id ? state.chat.users.find(u => u.id === id)?.name ?? id : "Anyone");
   const open = t.status === "open" || t.status === "doing";
@@ -40,21 +41,23 @@ export function TaskCard({ task: t, big = false, workers }: { task: Task; big?: 
       <header className="task-head">
         <span className={`task-kind ${t.kind}`}>{taskLabel(t)}</span>
         <span className="muted small">{ship ? `${shipmentTitle(ship)} · pallet ${t.pallet}` : t.reason ?? ""}</span>
-        <span className="task-who small">{t.status === "done" ? `Done by ${t.doneBy} ${roughAgo(t.doneAt!)}` : t.status === "cancelled" ? "Cancelled" : t.status === "doing" ? `${who(t.assignee)} is on it` : t.assignee ? `For ${who(t.assignee)}` : "Anyone can take it"}</span>
+        <span className="task-who small">{t.status === "done" ? `Done by ${t.doneBy} ${roughAgo(t.doneAt!)}` : t.status === "cancelled" ? "Cancelled" : t.status === "doing" ? `${who(t.assignee)} is on it` : t.assignee ? `For ${who(t.assignee)}` : team ? `For the ${team.name} team` : "Anyone can take it"}</span>
       </header>
       <div className="task-route">
         <div><small>From</small><b className="mono">{t.from}</b><span className="muted small">{where(t.from)}</span></div>
         <span className="task-arrow" aria-hidden="true">→</span>
         <div><small>To</small><b className="mono task-to">{t.to}</b><span className="muted small">{where(t.to)}</span></div>
       </div>
+      {t.palletNote && <p className="task-pallet"><span className="muted small">Which pallet</span> <b translate="no">{t.palletNote}</b></p>}
       <p className="task-what">{t.lines.map((l, i) => { const p = productById(l.productId); return <span key={i}>{i ? " + " : ""}<b>{p?.code}</b> {p?.name} × {l.cases}</span>; })}</p>
       {t.blocked?.length ? <p className="small warn">Blocked before: {t.blocked.join(", ")}</p> : null}
       {open && (
         <div className="task-act">
           {lead && workers && !big && (
-            <select className="input task-assign" value={t.assignee ?? ""} onChange={e => dispatch({ type: "task/assign", id: t.id, assignee: e.target.value || undefined })} aria-label="Give to">
+            <select className="input task-assign" value={assignValue(t)} onChange={e => dispatch({ type: "task/assign", id: t.id, ...fromAssignValue(e.target.value) })} aria-label="Give to">
               <option value="">Any worker</option>
-              {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+              {(state.teams ?? []).length > 0 && <optgroup label="Teams">{(state.teams ?? []).map(x => <option key={x.id} value={`team:${x.id}`}>Team: {x.name}</option>)}</optgroup>}
+              <optgroup label="People">{workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</optgroup>
             </select>
           )}
           {canAct && t.status === "open" && <button className="btn primary" onClick={() => dispatch({ type: "task/start", id: t.id, byId: me.id })}>{big ? "Got the pallet, going" : "Start"}</button>}

@@ -1,25 +1,14 @@
 import { usesServer } from "../server/client";
 import { useEffect, useRef } from "react";
-import type { GlassStrength, HomeCardKind, HomeSettings, ThemeChoice } from "../settings";
+import type { GlassStrength, HomeSettings, ThemeChoice } from "../settings";
 import type { LastOnlineVisibility } from "../auth/permissions";
 import { useIdentity } from "../auth/identity";
 import { RoleSwitch } from "./RoleSwitch";
-import { CloseIcon, DownIcon, UpIcon } from "./icons";
+import { CloseIcon } from "./icons";
+import { WidgetPicker } from "./home/WidgetPicker";
 import { t } from "../i18n";
 import { LangSwitch } from "./LangSwitch";
 import { tenant } from "../tenant";
-
-const CARD_NAMES: Record<HomeCardKind, string> = {
-  messages: "Messages",
-  outgoing: "Going out today",
-  deadlines: "Due soon",
-  ordersToApprove: "Orders to approve",
-  incoming: "Arriving",
-  toConfirm: "Waiting for confirmation",
-  expiry: "Expiry alerts",
-  returns: "Returns pending",
-  changesToApprove: "Changes to approve",
-};
 
 interface Props {
   settings: HomeSettings;
@@ -57,13 +46,6 @@ export function SettingsPanel({ settings, update, reset, onResetData, onClose }:
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const move = (i: number, d: -1 | 1) => {
-    const cards = [...settings.cards];
-    [cards[i], cards[i + d]] = [cards[i + d], cards[i]];
-    update({ cards });
-  };
-  const setVisible = (i: number, visible: boolean) => update({ cards: settings.cards.map((c, j) => (j === i ? { ...c, visible } : c)) });
-
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -88,18 +70,9 @@ export function SettingsPanel({ settings, update, reset, onResetData, onClose }:
         <section>
           <h3>Home screen</h3>
           <Toggle id="set-summary" label="Summary line under your name" checked={settings.showSummary} onChange={showSummary => update({ showSummary })} />
-          <Toggle id="set-ticker" label="Activity ticker (bottom right)" checked={settings.showTicker} onChange={showTicker => update({ showTicker })} />
-          <p className="card-sub">Cards: tick to show, arrows to reorder. On wide screens Messages sits on the right instead.</p>
-          <ul className="cardlist">
-            {settings.cards.map((c, i) => (
-              <li key={c.kind}>
-                <input type="checkbox" id={`card-vis-${c.kind}`} checked={c.visible} onChange={e => setVisible(i, e.target.checked)} />
-                <label htmlFor={`card-vis-${c.kind}`}>{CARD_NAMES[c.kind]}</label>
-                <button className="mini" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${CARD_NAMES[c.kind]} up`}><UpIcon /></button>
-                <button className="mini" disabled={i === settings.cards.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${CARD_NAMES[c.kind]} down`}><DownIcon /></button>
-              </li>
-            ))}
-          </ul>
+          <p className="card-sub">Widgets: tick to show, arrows to reorder. On wide screens Messages sits on the right instead.</p>
+          <WidgetPicker cards={settings.cards} onChange={cards => update({ cards })} />
+          <a className="link small" href="#/help" onClick={onClose}>Help, and the tour again ›</a>
         </section>
 
         <section>

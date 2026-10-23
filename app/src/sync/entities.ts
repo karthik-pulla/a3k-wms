@@ -20,6 +20,8 @@ const LISTS: ListSpec[] = [
   { kind: "inbox", get: s => s.inbox, set: (s, v) => ({ ...s, inbox: v as State["inbox"] }), newestFirst: true },
   { kind: "task", get: s => s.tasks, set: (s, v) => ({ ...s, tasks: v as State["tasks"] }), newestFirst: true },
   { kind: "audit", get: s => s.audit ?? [], set: (s, v) => ({ ...s, audit: v as State["audit"] }), newestFirst: true },
+  { kind: "notice", get: s => s.notices ?? [], set: (s, v) => ({ ...s, notices: v as State["notices"] }), newestFirst: true },
+  { kind: "team", get: s => s.teams ?? [], set: (s, v) => ({ ...s, teams: v as State["teams"] }), newestFirst: true },
   { kind: "conv", get: s => s.chat.conversations, set: (s, v) => ({ ...s, chat: { ...s.chat, conversations: v as State["chat"]["conversations"] } }), newestFirst: false },
   { kind: "msg", get: s => s.chat.messages, set: (s, v) => ({ ...s, chat: { ...s.chat, messages: v as State["chat"]["messages"] } }), newestFirst: false },
 ];
@@ -27,7 +29,7 @@ const LIST_BY_KIND = new Map(LISTS.map(l => [l.kind, l]));
 
 /** The same State with every piece the server keeps taken out (what's left is this device's own: the people list) */
 export function blankState(s: State): State {
-  let out: State = { ...s, stock: {}, seq: 0, counts: [], productEdits: {}, chat: { ...s.chat, reads: {}, presence: {} } };
+  let out: State = { ...s, stock: {}, seq: 0, counts: [], productEdits: {}, settings: undefined, chat: { ...s.chat, reads: {}, presence: {} } };
   for (const l of LISTS) out = l.set(out, []);
   return out;
 }
@@ -57,6 +59,8 @@ export function diff(before: State, after: State): EntityChange[] {
     }
   }
   if (before.seq !== after.seq) out.push({ key: "meta:seq", data: { value: after.seq } });
+  // The warehouse's settings: one piece
+  if (before.settings !== after.settings) out.push({ key: "setting:warehouse", data: after.settings ?? null });
   // Counts: the count itself, and each counted slot on its own (so people counting at once don't collide)
   if (before.counts !== after.counts) {
     const old = new Map((before.counts ?? []).map(c => [c.id, c]));
@@ -97,6 +101,7 @@ export function applyRows(state: State, rows: EntityRow[], order: (key: string) 
       case "stock": s = { ...s, stock: mergeRecord(s.stock, list) as State["stock"] }; break;
       case "presence": s = { ...s, chat: { ...s.chat, presence: mergeRecord(s.chat.presence, list) as State["chat"]["presence"] } }; break;
       case "product": s = { ...s, productEdits: mergeRecord(s.productEdits ?? {}, list) as State["productEdits"] }; break;
+      case "setting": for (const r of list) if (idOf(r.key) === "warehouse") s = { ...s, settings: (r.data as State["settings"] | null) ?? undefined }; break;
       case "meta": for (const r of list) if (idOf(r.key) === "seq") s = { ...s, seq: (r.data as { value: number } | null)?.value ?? 0 }; break;
       case "read": {
         const reads = { ...s.chat.reads };

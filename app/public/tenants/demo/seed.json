@@ -196,6 +196,15 @@
   },
   "inbox": [
     {
+      "id": "mail-4",
+      "from": "Sunfield Foods Logistics <logistics@sunfield.example>",
+      "subject": "ASN: container MSKU 4829103 arriving Monday",
+      "hoursAgo": 2.5,
+      "body": "Hello,\n\nAdvance shipping notice for container MSKU 4829103, arriving Monday morning.\n\nSF101 Jasmine Rice - 120 cases\nSF110 Whole Wheat Flour - 60 cases\nSF120 Red Lentils - 48 cases\n\nBOL 88213\n\nThanks,\nSunfield Foods",
+      "attachments": [],
+      "status": "new"
+    },
+    {
       "id": "mail-1",
       "from": "Purchasing <purchasing@example.com>",
       "subject": "Order for Thursday – Fresh Basket Hillview",
@@ -262,5 +271,21 @@
     "omar": {"state": "syncing", "minutesAgo": 18, "manual": {"kind": "forklift"}},
     "tess": {"state": "offline", "minutesAgo": 1200, "manual": {"kind": "off"}}
   },
-  "tasks": {"createdBy": "Leo", "assignee": "omar"}
+  "tasks": {"createdBy": "Leo", "assignee": "omar"},
+  "settings": {
+    "routes": [
+      {"match": "@sunfield.example", "client": "Sunfield", "kind": "inbound", "note": "Sunfield's logistics team sends ASNs"},
+      {"match": "purchasing@example.com", "client": "Sunfield", "kind": "order", "note": "Fresh Basket's buyer"}
+    ],
+    "contacts": [
+      {"kind": "client", "name": "Priya (Sunfield logistics)", "client": "Sunfield", "email": "logistics@sunfield.example", "phone": "555-0142"},
+      {"kind": "carrier", "name": "Fastline Trucking", "email": "dispatch@fastline.example", "phone": "555-0199", "notes": "Pickups 7–11 am, Door 3"}
+    ]
+  },
+  "notices": [
+    {"text": "Door 2 is closed Friday for repairs; use Door 3 for deliveries.", "by": "Sam", "hoursAgo": 20}
+  ],
+  "teams": [
+    {"name": "Reach trucks", "members": ["omar", "tess"], "by": "Leo"}
+  ]
 }

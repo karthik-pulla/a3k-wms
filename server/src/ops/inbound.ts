@@ -62,7 +62,10 @@ export async function readMail(raw: Uint8Array, receivedAt: string): Promise<Inb
 export async function deliverMail(q: Sql, mail: InboxMailData, trustedSenders: string[] | undefined): Promise<"added" | "duplicate"> {
   const key = `inbox:${mail.id}`;
   if ((await q.query("SELECT 1 FROM entities WHERE key = $1", [key])).rows.length) return "duplicate";
-  const data = trusted(mail.from, trustedSenders) ? mail : { ...mail, status: "ignored" as const, body: `(Not on this warehouse's list of trusted senders, so it arrived as ignored.)\n\n${mail.body}` };
+  // Senders in the owners' email routing rules (Manage warehouse → Clients) are trusted too
+  const routes = (await q.query("SELECT data FROM entities WHERE key = 'setting:warehouse'")).rows[0]?.data?.routes;
+  const list = trustedSenders?.length && Array.isArray(routes) ? [...trustedSenders, ...routes.map((r: { match?: unknown }) => String(r.match ?? "")).filter(Boolean)] : trustedSenders;
+  const data = trusted(mail.from, list) ? mail : { ...mail, status: "ignored" as const, body: `(Not on this warehouse's list of trusted senders, so it arrived as ignored.)\n\n${mail.body}` };
   await writeSystem(q, [{ key, data }], "Order inbox", "inbound email");
   return "added";
 }

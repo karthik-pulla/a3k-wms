@@ -10,7 +10,7 @@ import { ApiError, bad, bool, email as emailOf, forbidden, int, notFound, obj, s
 import { inviteMail, type Mailer } from "./mail.ts";
 import { allows, cleanPermissions, effective, roleProblems, type Action, type BaseRole, type Permissions } from "../shared/permissions.ts";
 import { directory, pull, push, writeSystem, type SyncWho } from "./sync.ts";
-import { importProducts, importStock, saveSettings, setupStatus } from "./setup.ts";
+import { codeFormatStatus, importProducts, importStock, saveSettings, setCodeFormat, setupStatus } from "./setup.ts";
 import { cleanProductText, productChanges, productEditProblems, PRODUCT_LIMITS, type ProductText } from "../shared/products.ts";
 import type { GrantView, InviteInfo, LinkResult, LogView, Me, PersonView, RequestView, RoleView, TenantPublic } from "../shared/api.ts";
 
@@ -570,5 +570,11 @@ export const tenantOps = {
     return { people: { active: r.active, invited: r.invited, owners: r.owners }, lastSignInAt: isoOrNull(r.last_sign_in), supportActive: r.support };
   },
   async owners(ctx: TenantCtx): Promise<PersonView[]> { return personView(ctx.env.db, "WHERE r.base = 'owner'", [], iso(ctx.env.now())); },
+  codeFormat: (ctx: TenantCtx) => codeFormatStatus(ctx.env.db),
+  async setCodeFormat(ctx: TenantCtx, by: string, format: unknown) {
+    const r = await setCodeFormat(ctx.env.db, by, format);
+    await log(ctx, ctx.env.db, { actor: by, action: "changed the slot code format (WMS team)", detail: { codeFormat: format } });
+    return r;
+  },
 };
 

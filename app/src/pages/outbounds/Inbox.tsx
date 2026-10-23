@@ -10,6 +10,8 @@ import { nextOrderId } from "../../outbound/plan";
 import { readOrder } from "../../outbound/reader";
 import { fmtDay } from "../../inventory/selectors";
 import type { InboxMail, StoreOrder } from "../../store/types";
+import { mailRoute } from "../../outbound/routing";
+import { clientConfig } from "../../data/catalog";
 
 /** The warehouse's order email address (tenant config) */
 export const ORDER_INBOX = tenant().config.orders.inbox;
@@ -25,11 +27,14 @@ export function Inbox() {
   const { me } = useSession();
   const toast = useToast();
   const [show, setShow] = useState<"new" | "all">("new");
+  const [kind, setKind] = useState<"any" | "order" | "inbound">("any");
   const [pasting, setPasting] = useState(false);
   const [from, setFrom] = useState(""), [subject, setSubject] = useState(""), [body, setBody] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const stores = useMemo(() => [...new Set(state.orders.map(o => o.store))], [state.orders]);
-  const mails = state.inbox.filter(m => show === "all" || m.status === "new");
+  // Each email's client and kind from the warehouse's routing rules (Manage warehouse → Clients); other clients' mail stays out
+  const routed = useMemo(() => state.inbox.map(m => ({ m, r: mailRoute(state.settings, m) })).filter(x => !x.r.client || canSeeClient(me, x.r.client)), [state.inbox, state.settings, me]);
+  const mails = routed.filter(x => (show === "all" || x.m.status === "new") && (kind === "any" || x.r.kind === kind));
 
   const draft = async (m: InboxMail) => {
     // PDFs that came in by email are kept as they are (server: ops/inbound.ts); their text is read here, when needed
@@ -39,14 +44,15 @@ export function Inbox() {
       catch { return ""; }
     }));
     const text = [m.subject, m.body, ...texts].join("\n");
-    const r = readOrder(text, stores);
+    const route = mailRoute(state.settings, m);
+    const r = readOrder(text, stores, route.client);
     if (!r.lines.length) { toast("No product codes found in this email. Open a new order and type it in."); return; }
     if (r.client && !canSeeClient(me, r.client)) { toast(`This order is for ${r.client}, which you don't have access to.`); return; }
     const id = nextOrderId(state.orders);
     const merged = new Map<string, number>();
     for (const l of r.lines) merged.set(l.productId, (merged.get(l.productId) ?? 0) + l.cases);
     const order: StoreOrder = {
-      id, store: r.store ?? m.from.replace(/<.*>/, "").trim(), client: r.client ?? productById(r.lines[0].productId)!.client,
+      id, store: r.store ?? m.from.replace(/<.*>/, "").trim(), client: r.client ?? route.client ?? productById(r.lines[0].productId)!.client,
       date: new Date().toISOString().slice(0, 10), due: r.due, ref: r.ref, lines: [...merged].map(([productId, cases]) => ({ productId, cases })),
       status: "draft", source: "email", sourceName: `${m.subject} (from ${m.from})`, sourceText: text,
       notes: r.unread.length ? `Lines not read from the email:\n${r.unread.join("\n")}` : undefined,
@@ -71,7 +77,7 @@ export function Inbox() {
         <div className="panel-foot">
           <div>
             <h2 className="plain-h">Order inbox</h2>
-            <p className="muted small">Stores email their orders and packing lists to <b>{ORDER_INBOX}</b>; each email becomes a draft for approval. Not connected yet: it needs the server (receiving mail on AWS). Until then the sample emails and pasting stand in.</p>
+            <p className="muted small">Stores and clients email orders, packing lists and delivery notices to <b>{ORDER_INBOX}</b>. Orders become drafts for approval; delivery notices become expected deliveries. Owners set which sender is which client in Manage warehouse → Clients. Receiving mail needs the server; until then the sample emails and pasting stand in.</p>
           </div>
           <button className="btn small" onClick={() => setPasting(p => !p)} aria-expanded={pasting}>Paste an email…</button>
         </div>
@@ -85,25 +91,33 @@ export function Inbox() {
         )}
       </div>
       <div className="chip-wrap">
-        <button className={`chip-btn${show === "new" ? " on" : ""}`} onClick={() => setShow("new")}>New · {state.inbox.filter(m => m.status === "new").length}</button>
-        <button className={`chip-btn${show === "all" ? " on" : ""}`} onClick={() => setShow("all")}>All · {state.inbox.length}</button>
+        <button className={`chip-btn${show === "new" ? " on" : ""}`} onClick={() => setShow("new")}>New · {routed.filter(x => x.m.status === "new").length}</button>
+        <button className={`chip-btn${show === "all" ? " on" : ""}`} onClick={() => setShow("all")}>All · {routed.length}</button>
+        <span className="chip-gap" />
+        {(["any", "order", "inbound"] as const).map(k => <button key={k} className={`chip-btn${kind === k ? " on" : ""}`} onClick={() => setKind(k)}>{{ any: "Orders and notices", order: "Orders", inbound: "Delivery notices" }[k]}</button>)}
       </div>
       <div className="rows">
-        {mails.map(m => (
+        {mails.map(({ m, r }) => (
           <div key={m.id} className={`row glass mail-row${m.status === "new" ? " unread" : ""}`}>
             <button className="mail-main" onClick={() => setOpenId(o => (o === m.id ? null : m.id))} aria-expanded={openId === m.id}>
-              <span className="row-title">{m.subject}{m.sample && <span className="tag">sample</span>}</span>
+              <span className="row-title">{m.subject}<span className={`tag${r.kind === "inbound" ? " ok" : ""}`}>{r.kind === "inbound" ? "Delivery notice" : "Order"}{r.client ? ` · ${clientConfig(r.client)?.name ?? r.client}` : ""}</span>{m.sample && <span className="tag">sample</span>}</span>
               <span className="row-sub">{m.from} · {fmtDay(m.receivedAt)}{m.attachments.length ? ` · 📎 ${m.attachments.map(a => a.name).join(", ")}` : ""}</span>
             </button>
-            <span className="row-fig">{m.status === "new" ? "New" : m.status === "drafted" ? <a className="link" href={`#/outbounds/orders/${encodeURIComponent(m.orderId ?? "")}`}>{m.orderId} ›</a> : "Ignored"}</span>
+            <span className="row-fig">{m.status === "new" ? "New" : m.status === "drafted" ? (m.shipmentId ? <a className="link" href={`#/inbounds/incoming/${encodeURIComponent(m.shipmentId)}`}>Delivery ›</a> : <a className="link" href={`#/outbounds/orders/${encodeURIComponent(m.orderId ?? "")}`}>{m.orderId} ›</a>) : "Ignored"}</span>
             <span className="btns">
-              {m.status === "new" && <><button className="btn small primary" onClick={() => void draft(m)}>Draft order</button><button className="btn small" onClick={() => dispatch({ type: "inbox/status", id: m.id, status: "ignored" })}>Ignore</button></>}
+              {m.status === "new" && <>
+                {r.kind === "inbound"
+                  ? <a className="btn small primary" href={`#/inbounds/new/${encodeURIComponent(m.id)}`}>Add the delivery</a>
+                  : <button className="btn small primary" onClick={() => void draft(m)}>Draft order</button>}
+                <button className="btn small" onClick={() => void (r.kind === "inbound" ? draft(m) : go(`#/inbounds/new/${encodeURIComponent(m.id)}`))}>{r.kind === "inbound" ? "It's an order" : "It's a delivery"}</button>
+                <button className="btn small" onClick={() => dispatch({ type: "inbox/status", id: m.id, status: "ignored" })}>Ignore</button>
+              </>}
               {m.status === "ignored" && <button className="btn small" onClick={() => dispatch({ type: "inbox/status", id: m.id, status: "new" })}>Move back</button>}
             </span>
             {openId === m.id && <pre className="source-text mail-body">{[m.body, ...m.attachments.map(a => `── ${a.name} ──\n${a.text}`)].join("\n\n")}</pre>}
           </div>
         ))}
-        {!mails.length && <p className="muted panel glass">No new emails.</p>}
+        {!mails.length && <p className="muted panel glass">No {show === "new" ? "new " : ""}emails{kind !== "any" ? " of this kind" : ""}.</p>}
       </div>
     </div>
   );

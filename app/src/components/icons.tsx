@@ -45,3 +45,7 @@ export const TeamIcon = () => (<svg {...base}><circle cx="9" cy="8" r="3.2" /><p
 export const LogsIcon = () => (<svg {...base}><path d="M5 4h14v16H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>);
 /** Pallet with a clock: the worker's screen */
 export const WorkIcon = () => (<svg {...base}><path d="M3 18h18M5 18v-3h14v3" /><rect x="7" y="7" width="10" height="8" rx="1" /><path d="M12 9v3l2 1" /></svg>);
+/** Question mark in a circle: Help */
+export const HelpIcon = () => (<svg {...base}><circle cx="12" cy="12" r="9" /><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7M12 17h.01" /></svg>);
+/** Sliders: Manage warehouse */
+export const ManageIcon = () => (<svg {...base}><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>);

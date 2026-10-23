@@ -66,8 +66,15 @@ export function sampleState(): State {
     const picked = { cases: taken.reduce((a, l) => a + l.cases, 0), by: o.picking!.by, at: ago(o.picking!.hoursAgo), taken };
     next = { ...next, stock: stockNow, orders: next.orders.map(x => (x.id === o.id ? { ...x, status: "picking", picks: x.picks!.map(p => (p.key === first.key ? { ...p, picked } : p)) } : x)) };
   }
+  // The warehouse's own settings, announcements and work teams (Manage warehouse, Tasks → Teams)
+  const settings = seed.settings ? {
+    routes: (seed.settings.routes ?? []).map((r, i) => ({ id: `R${i + 1}`, ...r })),
+    contacts: (seed.settings.contacts ?? []).map((c, i) => ({ id: `C${i + 1}`, ...c })),
+  } : undefined;
+  const notices = (seed.notices ?? []).map((n, i) => ({ id: `N${i + 1}`, text: n.text, by: n.by, at: ago(n.hoursAgo), ...(n.urgent ? { urgent: true } : {}) }));
+  const teams = (seed.teams ?? []).map((t, i) => ({ id: `T${i + 1}`, name: t.name, members: t.members, createdBy: t.by, createdAt: ago(48) }));
   // Orders first, so every sample order (and delivery) gets its message thread
-  return { ...next, chat: sampleChat(next) };
+  return { ...next, settings, notices, teams, chat: sampleChat(next) };
 }
 
 /** A warehouse with nothing in it yet: the team channel and nothing else. (No tasks field: the store adds the sample tasks.) */

@@ -79,6 +79,10 @@ test("an email is delivered once into the inbox, and from someone untrusted it a
   const ignored = (await db.query("SELECT data FROM entities WHERE key = 'inbox:mail-other'")).rows[0].data;
   assert.equal(ignored.status, "ignored");
   assert.match(ignored.body, /^\(Not on this warehouse's list of trusted senders/);
+  // A sender the owners routed to a client (Manage warehouse → Clients) is trusted as well
+  await db.tx(q => q.query("INSERT INTO entities (key, kind, data, version, seq, created_seq, updated_by) VALUES ('setting:warehouse', 'setting', $1, 1, 1, 1, 'test')", [JSON.stringify({ routes: [{ id: "R1", match: "@patelbros.example", client: "Sunfield", kind: "order" }] })]));
+  await db.tx(q => deliverMail(q, { ...m, id: "mail-routed" }, ["@balaji.example"]));
+  assert.equal((await db.query("SELECT data FROM entities WHERE key = 'inbox:mail-routed'")).rows[0].data.status, "new");
 });
 
 test("the queue notice: where SES kept the email and who it was sent to, wrapped by SNS or not", () => {

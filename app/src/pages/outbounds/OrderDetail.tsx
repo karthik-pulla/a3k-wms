@@ -12,12 +12,12 @@ import { SlotDetail } from "../../components/inventory/SlotDetail";
 import { ThreadSection } from "../../components/chat/ThreadSection";
 import { buildXlsx, download } from "../../utils/xlsx";
 import { byLocation, fmtDay, fmtMonth, groupOf } from "../../inventory/selectors";
-import { orderCases, pickRoute, pickedCases, reservations, statusOf } from "../../outbound/plan";
+import { RULE_NAMES, defaultStrategy, orderCases, pickRoute, pickedCases, reservations, statusOf, strategyName } from "../../outbound/plan";
 import { STATUS_LABEL, SOURCE_LABEL, dueText, dueTone } from "../../outbound/labels";
 import type { PickLine, PickStrategy, StockLine, StoreOrder } from "../../store/types";
 import { t } from "../../i18n";
 
-const STRATEGIES: [PickStrategy, string][] = [["fifo-open-first", "Oldest stock first, finish open pallets first"], ["fifo", "Strictly oldest stock first"]];
+const STRATEGIES = (Object.keys(RULE_NAMES) as (keyof typeof RULE_NAMES)[]).flatMap(r => [`${r}-open-first`, r] as PickStrategy[]);
 
 /** One order: what was ordered, which pallets to pick (oldest stock first), where they are, and its status. */
 export function OrderDetail({ order: o }: { order: StoreOrder }) {
@@ -132,7 +132,7 @@ export function OrderDetail({ order: o }: { order: StoreOrder }) {
         </div>
         <div className="btns">
           {status === "draft" && <a className="btn small" href={`#/outbounds/orders/${encodeURIComponent(o.id)}/edit`}>Edit</a>}
-          {status === "draft" && can(me, "approve-order") && <button className="btn small primary" disabled={!o.lines.length} onClick={() => { dispatch({ type: "order/approve", id: o.id, by: me.name, strategy: o.strategy ?? "fifo-open-first" }); toast(`${o.id} approved. Pallets planned, oldest stock first.`); }}>Approve & plan picks</button>}
+          {status === "draft" && can(me, "approve-order") && <button className="btn small primary" disabled={!o.lines.length} onClick={() => { const strategy = o.strategy ?? defaultStrategy(state); dispatch({ type: "order/approve", id: o.id, by: me.name, strategy }); toast(`${o.id} approved. Pallets planned: ${strategyName(strategy).toLowerCase()}.`); }}>Approve & plan picks</button>}
           {status === "draft" && !can(me, "approve-order") && <span className="muted small">A coordinator or owner approves orders.</span>}
           {status === "draft" && <button className="btn small danger" onClick={() => { if (window.confirm(t(`Delete the draft ${o.id}?`))) { dispatch({ type: "order/delete", id: o.id }); go("#/outbounds/orders"); } }}>Delete draft</button>}
           {status !== "draft" && can(me, "print-labels") && <a className="btn small" href={`#/outbounds/labels/${encodeURIComponent(o.id)}`}>Case labels</a>}
@@ -153,7 +153,7 @@ export function OrderDetail({ order: o }: { order: StoreOrder }) {
         <p className="note warn">Recount: a picker found fewer cases than recorded at {o.avoid!.map(k => { const [loc, pid] = k.split("|"); return `${loc} (${productById(pid)?.code})`; }).join(", ")}. {o.avoid!.length > 1 ? "They're" : "It's"} skipped for this order; the stock record still shows the old cases until it's counted. <a className="link" href={`#/inventory/stock/${encodeURIComponent(o.avoid![0].split("|")[0])}`}>Open in Inventory ›</a></p>
       )}
       {stale.length > 0 && (
-        <p className="note warn">Stock changed since this plan ({stale.map(p => p.location).join(", ")}). <button className="link" onClick={() => { dispatch({ type: "order/plan", id: o.id, strategy: o.strategy ?? "fifo-open-first" }); toast("Re-planned the picks still to do."); }}>Re-plan picks</button></p>
+        <p className="note warn">Stock changed since this plan ({stale.map(p => p.location).join(", ")}). <button className="link" onClick={() => { dispatch({ type: "order/plan", id: o.id, strategy: o.strategy ?? defaultStrategy(state) }); toast("Re-planned the picks still to do."); }}>Re-plan picks</button></p>
       )}
 
       <div className="panel glass">
@@ -178,11 +178,11 @@ export function OrderDetail({ order: o }: { order: StoreOrder }) {
         <div className="pick-layout">
           <div className="panel glass pick-panel">
             <div className="panel-foot">
-              <div><h2 className="plain-h">Pick list</h2><p className="muted small">In walking order. Pallets are chosen oldest stock first; open pallets are finished before a new one is opened.</p></div>
+              <div><h2 className="plain-h">Pick list</h2><p className="muted small">In walking order. Pallets chosen by {strategyName(o.strategy ?? defaultStrategy(state)).replace(/^./, c => c.toLowerCase())}.</p></div>
               {["approved", "picking"].includes(status) && (
                 <label className="field inline small-field"><span>Plan</span>
-                  <select className="input" value={o.strategy ?? "fifo-open-first"} onChange={e => { dispatch({ type: "order/plan", id: o.id, strategy: e.target.value as PickStrategy }); toast("Re-planned the picks still to do."); }}>
-                    {STRATEGIES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                  <select className="input" value={o.strategy ?? defaultStrategy(state)} onChange={e => { dispatch({ type: "order/plan", id: o.id, strategy: e.target.value as PickStrategy }); toast("Re-planned the picks still to do."); }}>
+                    {STRATEGIES.map(v => <option key={v} value={v}>{strategyName(v)}{v === defaultStrategy(state) ? " · warehouse rule" : ""}</option>)}
                   </select>
                 </label>
               )}
@@ -204,7 +204,7 @@ export function OrderDetail({ order: o }: { order: StoreOrder }) {
                         Take <b>{p.cases}</b> of {p.onPallet} cs
                         {whole ? <em className="tag">whole pallet · slot empties</em> : <em className="tag warn">leaves {left} · open pallet, used first next time</em>}
                         {p.openPallet && <em className="tag">open pallet</em>}
-                        <em className="tag" title="1 = oldest stock of this product on the list">FIFO {fifoRank.get(p.key)}</em>
+                        <em className="tag" title="1 = oldest stock of this product on the list">Age {fifoRank.get(p.key)}</em>
                       </div>
                       <small className="muted">arrived {fmtDay(p.arrival)} · lot {p.lot || "—"} · best before <span className={`bb ${tone}`}>{fmtMonth(p.bestBefore)}</span></small>
                       {p.picked && <small className="muted">Picked {p.picked.cases} cs by {p.picked.by}, {fmtDay(p.picked.at)}{p.picked.note ? ` · ${p.picked.note}` : ""}</small>}

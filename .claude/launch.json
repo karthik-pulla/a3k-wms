@@ -97,6 +97,25 @@
         "--strictPort"
       ],
       "port": 4190
+    },
+    {
+      "name": "wms-demo-dev",
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": [
+        "VITE_WMS_BACKEND=preview",
+        "VITE_WMS_DEMO=1",
+        "VITE_TENANT=demo",
+        "npm",
+        "--prefix",
+        "app",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5176",
+        "--strictPort"
+      ],
+      "port": 5176
     }
   ]
 }

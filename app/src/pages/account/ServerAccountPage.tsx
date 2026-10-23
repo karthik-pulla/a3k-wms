@@ -23,7 +23,7 @@ export function ServerAccountPage() {
             <div><dt>Email</dt><dd>{p.email ?? "—"}</dd></div>
             <div><dt>Sign-in</dt><dd>Password + authenticator app</dd></div>
           </dl>
-          {me!.can["manage-people"] && <a className="link" href="#/warehouse">People, roles and access ›</a>}
+          {me!.can["manage-people"] && <a className="link" href="#/manage/people">People, roles and access ›</a>}
         </section>
         <section className="panel glass">
           <h2 className="plain-h">Signing out</h2>
