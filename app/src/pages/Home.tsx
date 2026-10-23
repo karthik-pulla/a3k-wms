@@ -13,6 +13,7 @@ import { SOURCE_LABEL, STATUS_LABEL, dueText, dueTone, isActive } from "../outbo
 import { useLang } from "../i18n";
 import { Announcements } from "../components/home/Announcements";
 import { WidgetPicker } from "../components/home/WidgetPicker";
+import { HideWidget } from "../components/home/HideWidget";
 
 /**
  * Home: the greeting, the owners' announcements, and only the widgets this person chose (none at first: they pick
@@ -90,13 +91,14 @@ export function Home({ messagesInRail }: { messagesInRail: boolean }) {
         </section>
       ) : (
         <section aria-label="Widgets" style={{ display: "grid", gap: 16 }}>
+          <div className="home-foot"><button className="btn small" onClick={() => setPicking(true)}>Widgets</button></div>
           {shown.length > 0 && <div className="cards">{shown.map(c => {
             if (c.kind === "messages") return phone ? <HomeMessagesCompact key="messages" /> : <HomeMessages key="messages" placement="grid" />;
             if (c.kind === "stockByBrand") return <BrandTotals key="stockByBrand" />;
             const g = byKind.get(c.kind);
             return g ? <UpdateCard key={g.kind} group={g} /> : null;
           })}</div>}
-          <div className="home-foot"><button className="link small" onClick={() => setPicking(true)}>Widgets</button></div>
+          {!shown.length && <p className="muted small">Messages is on the right. Choose more with "Widgets".</p>}
         </section>
       )}
     </main>
@@ -124,7 +126,7 @@ function BrandTotals() {
   const total = rows.reduce((a, r) => a + r.cases, 0);
   return (
     <section className="panel glass brand-totals wide-widget" aria-labelledby="bt-h">
-      <div className="panel-foot"><h2 id="bt-h" className="plain-h">Stock by brand <span className="live-dot" aria-hidden="true" /> live</h2><span className="muted small">{total.toLocaleString()} cases · <a className="link" href="#/inventory/products">Inventory ›</a></span></div>
+      <div className="panel-foot"><h2 id="bt-h" className="plain-h">Stock by brand <span className="live-dot" aria-hidden="true" /> live</h2><span className="muted small card-acts">{total.toLocaleString()} cases · <a className="link" href="#/inventory/products">Inventory ›</a><HideWidget kind="stockByBrand" /></span></div>
       <div className="table-wrap">
         <table className="lines bt-table">
           <thead><tr><th>Brand</th><th>Client</th><th className="num">Cases</th><th className="num">Pallets</th><th className="num">Products</th><th className="num">Expiring</th><th className="num">Expired</th></tr></thead>

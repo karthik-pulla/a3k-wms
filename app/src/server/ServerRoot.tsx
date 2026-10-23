@@ -50,11 +50,13 @@ export default function ServerRoot() {
       await (await import("./preview")).previewSeed(() => diff(blankState(emptyState()), sampleState()));
     }
     const tid = me.tenant.id || tenantId();
+    // Signing out on purpose: the server answering "not signed in" meanwhile isn't news to show
+    let leaving = false;
     const engine = new SyncEngine({
       call: (method, input) => api(method, input), reduce: (st, a) => syncReduce(st, a as Parameters<typeof syncReduce>[1]), base: emptyState(), storage: idbStorage(),
       storageKey: `${tid}:${me.person.id}`, cacheKey: me.cacheKey, deviceId: deviceId(),
       visible: () => !document.hidden,
-      onSignedOut: () => setPhase({ kind: "signin", note: "You were signed out. Sign in again to carry on." }),
+      onSignedOut: () => { if (!leaving) setPhase({ kind: "signin", note: "You were signed out. Sign in again to carry on." }); },
     });
     // Everyone in the warehouse, for Messages and names (the preview adds its sample people)
     const people = async () => {
@@ -72,7 +74,7 @@ export default function ServerRoot() {
     document.addEventListener("visibilitychange", () => { if (document.hidden) void engine.flush(); else void engine.pullNow(); });
     const identity: Identity = {
       kind: "server", account: serverAccount(me), me, securityLog: [],
-      signOut: async (why?: string) => { engine.stop(); await api("auth.signOut").catch(() => {}); setPhase({ kind: "signin", note: why }); },
+      signOut: async (why?: string) => { leaving = true; engine.stop(); setPhase({ kind: "signin", note: why }); await api("auth.signOut").catch(() => {}); },
     };
     setPhase({ kind: "open", me, start: { identity, engine } });
   }, []);
@@ -103,7 +105,7 @@ export default function ServerRoot() {
     // Also keeps the support banner current
     const t = window.setInterval(() => {
       api<Me>("auth.me").then(me => setPhase(p => (p.kind === "open" ? { ...p, me } : p)))
-        .catch(e => { if (e instanceof ApiCallError && e.code === "not-signed-in") setPhase({ kind: "signin", note: "You were signed out. Sign in again to carry on." }); });
+        .catch(e => { if (e instanceof ApiCallError && e.code === "not-signed-in") setPhase(p => (p.kind === "open" ? { kind: "signin", note: "You were signed out. Sign in again to carry on." } : p)); });
     }, 30_000);
     return () => window.clearInterval(t);
   }, [phase.kind]);

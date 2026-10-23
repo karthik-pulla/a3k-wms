@@ -622,6 +622,7 @@ export const ES: Record<string, string> = {
   "Clients sign in at": "Los clientes entran en",
   "with their own login (a password and a code from their phone) to place orders and announce deliveries. Their orders arrive as drafts in Out-bounds → Orders for approval; delivery notices as expected deliveries in In-bounds → Incoming. A login sees only its own client's products and what its client sent, never stock or anything else here.": "con su propio acceso (una contraseña y un código de su teléfono) para hacer pedidos y avisar de entregas. Sus pedidos llegan como borradores a Salidas → Pedidos para aprobarlos; los avisos de entrega, como entregas esperadas en Entradas → Por llegar. Un acceso ve solo los productos de su cliente y lo que su cliente envió, nunca el inventario ni nada más de aquí.",
   "Clients can also send orders themselves from the client portal; they arrive here as drafts.": "Los clientes también pueden enviar pedidos ellos mismos desde el portal de clientes; llegan aquí como borradores.",
+  "Hide from home": "Ocultar del inicio", "Hide Messages from this screen": "Ocultar Mensajes de esta pantalla", "Hide from this screen": "Ocultar de esta pantalla", "Show Messages here": "Mostrar Mensajes aquí", "Messages is on the right. Choose more with \"Widgets\".": "Mensajes está a la derecha. Elige más con \"Widgets\".",
 };
 
 /** Text with names or numbers in it. "{1?s:}" means "s" when the English had a plural there. */
@@ -803,4 +804,5 @@ export const ES_PATTERNS: [string, string][] = [
   ["At most {0} pallets in one delivery: send the rest as another.", "Máximo {0} tarimas por entrega: manda el resto en otra."],
   ["Reset {0}'s sign-in? Their password and phone stop working at once, and they get a new link.", "¿Restablecer el acceso de {0}? Su contraseña y su teléfono dejan de funcionar de inmediato, y recibe un enlace nuevo."],
   ["Turn off {0}'s login? They're signed out at once.", "¿Apagar el acceso de {0}? Su sesión se cierra de inmediato."],
+  ["Hide {0} from home", "Ocultar {0} del inicio"], ["{0} hidden. Bring it back with \"Widgets\".", "{0} oculto. Vuelve a mostrarlo con \"Widgets\"."],
 ];

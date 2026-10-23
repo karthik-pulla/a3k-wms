@@ -1861,3 +1861,7 @@ table.lines.log-table tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--w
   .portal-product { min-width: 160px; }
   .portal-login-form { grid-template-columns: 1fr; }
 }
+.card-acts { display: inline-flex; align-items: center; gap: 6px; }
+.widget-hide { position: relative; z-index: 2; width: 26px; height: 26px; border-color: transparent; background: none; color: var(--faint); font-size: 18px; }
+.widget-hide:hover { color: var(--ink); }
+.home-foot { justify-content: flex-end; }
