@@ -625,6 +625,8 @@ export const ES: Record<string, string> = {
   "Messages is on the right. Choose more with \"Widgets\".": "Mensajes está a la derecha. Elige más con \"Widgets\".",
   "Getting the code…": "Obteniendo el código…", "Checking the code…": "Revisando el código…", "Couldn't get the code. Try again.": "No se pudo obtener el código. Intenta de nuevo.", "Couldn't find this account's code. Go back and sign in again.": "No se encontró el código de esta cuenta. Regresa e inicia sesión de nuevo.",
   "Tuck away to the side": "Guardar a un lado", "Tuck Messages away to the side": "Guardar Mensajes a un lado", "Show Messages": "Mostrar Mensajes", "Messages is tucked away on the right.": "Mensajes está guardado a la derecha.",
+  // Rack and column QR codes, the slot page
+  "Pick a column": "Elige una columna", "All columns ›": "Todas las columnas ›", "Not found here": "No se encontró aquí", "On this slot": "En este espacio", "Why is it different?": "¿Por qué es diferente?", "Review the change": "Revisar el cambio", "Check before saving": "Revisa antes de guardar", "Save the change": "Guardar el cambio", "It's saved with your name and the time in the owners' log.": "Se guarda con tu nombre y la hora en el registro de los dueños.", "Recent changes here": "Cambios recientes aquí", "Open in Inventory ›": "Abrir en Inventario ›", "Cases are whole numbers.": "Las cajas son números enteros.", "Change a count above if it's different from what's on the slot.": "Cambia una cantidad arriba si es diferente de lo que hay en el espacio.", "Say why (at least 4 letters).": "Di por qué (al menos 4 letras).", "Counts look wrong? Tell a coordinator or owner; your role can't change them here.": "¿Las cantidades se ven mal? Avísale a un coordinador o dueño; tu rol no puede cambiarlas aquí.", "Nothing is recorded here. If there's a pallet, an owner adds it with \"Adjust stock here\" in Inventory.": "No hay nada registrado aquí. Si hay una tarima, un dueño la agrega con \"Ajustar inventario aquí\" en Inventario.", "e.g. counted 38, two cases damaged and removed": "p. ej. conté 38, dos cajas dañadas y retiradas", "QR labels for the racks": "Etiquetas QR para los racks", "All racks": "Todos los racks", "A rack's label opens its columns as big numbers; a column's label opens that column level by level. Tap a slot there to see what's on it and, for people allowed, correct the case counts with a reason (it goes in the owners' log). The labels hold only an address; people still sign in.": "La etiqueta de un rack abre sus columnas como números grandes; la de una columna abre esa columna nivel por nivel. Toca un espacio para ver qué tiene y, si tienes permiso, corregir las cajas con un motivo (queda en el registro de los dueños). Las etiquetas solo guardan una dirección; igual hay que iniciar sesión.", "Print at Actual size (100%). Scan one to test before printing them all.": "Imprime a Tamaño real (100%). Escanea una para probar antes de imprimirlas todas.", "All its columns": "Todas sus columnas", "Correct a slot after scanning it": "Corregir un espacio después de escanearlo", "Scan a slot's QR code and change how many cases are there, with a reason (in the owners' log)": "Escanear el código QR y cambiar cuántas cajas hay en un espacio, con un motivo (en el registro de los dueños)",
 };
 
 /** Text with names or numbers in it. "{1?s:}" means "s" when the English had a plural there. */
@@ -807,4 +809,20 @@ export const ES_PATTERNS: [string, string][] = [
   ["Reset {0}'s sign-in? Their password and phone stop working at once, and they get a new link.", "¿Restablecer el acceso de {0}? Su contraseña y su teléfono dejan de funcionar de inmediato, y recibe un enlace nuevo."],
   ["Turn off {0}'s login? They're signed out at once.", "¿Apagar el acceso de {0}? Su sesión se cierra de inmediato."],
   ["Show Messages, {0} unread", "Mostrar Mensajes, {0} sin leer"],
+  ["Side {0}", "Lado {0}"],
+  ["Level {0}", "Nivel {0}"],
+  ["Column {0}, {1} of {2} slots in use", "Columna {0}, {1} de {2} espacios en uso"],
+  ["Column labels ({0})", "Etiquetas de columna ({0})"],
+  ["Rack labels ({0})", "Etiquetas de rack ({0})"],
+  ["Back to column {0} ›", "Volver a la columna {0} ›"],
+  ["‹ Column {0}", "‹ Columna {0}"],
+  ["Column {0} ›", "Columna {0} ›"],
+  ["{0} corrected. It's in the owners' log.", "{0} corregido. Está en el registro de los dueños."],
+  ["One case fewer of {0}", "Una caja menos de {0}"],
+  ["One case more of {0}", "Una caja más de {0}"],
+  ["Cases of {0}", "Cajas de {0}"],
+  ["{0} line{1} to change.", "{0} línea{1} por cambiar."],
+  ["(was {0})", "(antes {0})"],
+  ["{0}, side {1} · column {2} · ", "{0}, lado {1} · columna {2} · "],
+  ["{0} hidden", "{0} ocultos"],
 ];

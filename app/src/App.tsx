@@ -41,6 +41,7 @@ const screens = {
   inventory: () => import("./pages/inventory/InventoryPage").then(m => ({ default: m.InventoryPage })),
   manage: () => import("./pages/manage/ManagePage").then(m => ({ default: m.ManagePage })),
   help: () => import("./pages/help/HelpPage").then(m => ({ default: m.HelpPage })),
+  slot: () => import("./pages/slot/SlotPage").then(m => ({ default: m.SlotPage })),
   serverAccount: () => import("./pages/account/ServerAccountPage").then(m => ({ default: m.ServerAccountPage })),
 };
 const OutboundsPage = lazy(screens.outbounds);
@@ -53,6 +54,7 @@ const LogsPage = lazy(screens.logs);
 const InventoryPage = lazy(screens.inventory);
 const ManagePage = lazy(screens.manage);
 const HelpPage = lazy(screens.help);
+const SlotPage = lazy(screens.slot);
 const ServerAccountPage = lazy(screens.serverAccount);
 
 /** Signed in with the server (server/ServerRoot.tsx): who it is, and the data to start with */
@@ -158,6 +160,7 @@ function Shell({ reset, viewingAs }: { reset: () => void; viewingAs: boolean }) 
           : route.mode === "account" ? (kind === "server" ? <ServerAccountPage /> : <AccountPage />)
           : route.mode === "manage" ? <ManagePage parts={route.parts} />
           : route.mode === "help" ? <HelpPage onTour={() => setTouring(true)} />
+          : route.mode === "slot" ? <SlotPage parts={route.parts} />
           : route.mode === "tasks" ? <TasksPage parts={route.parts} />
           : route.mode === "logs" ? <LogsPage />
           : !lead ? <NoAccess />

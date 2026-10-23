@@ -140,6 +140,8 @@ const grantView = (r: any): GrantView => ({
 });
 
 // ---------- Checks on people and roles ----------
+/** A client portal login's id (a uuid); anything else is "not found", never a database error */
+const loginId = (v: unknown) => { const id = str(v, "Login", { max: 40 }); if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw notFound(); return id; };
 const clientsOf = (ctx: TenantCtx, v: unknown): string[] | null => {
   if (v === null || v === undefined) return null;
   const list = strList(v, "Clients");
@@ -450,7 +452,7 @@ export const TENANT_METHODS: Record<string, Method> = {
 
   "clientLogins.disable": async (i, ctx) => {
     const a = await actor(ctx); must(a, "manage-people"); needConfirmed(ctx.env, a.session); mayChange(a);
-    const id = str(i.id, "Login", { max: 40 });
+    const id = loginId(i.id);
     return ok(await ctx.env.db.tx(async q => {
       const cur = (await q.query("SELECT username FROM client_accounts WHERE id = $1 FOR UPDATE", [id])).rows[0];
       if (!cur) throw notFound();
@@ -464,7 +466,7 @@ export const TENANT_METHODS: Record<string, Method> = {
 
   "clientLogins.enable": async (i, ctx) => {
     const a = await actor(ctx); must(a, "manage-people"); needConfirmed(ctx.env, a.session); mayChange(a);
-    const id = str(i.id, "Login", { max: 40 });
+    const id = loginId(i.id);
     return ok(await ctx.env.db.tx(async q => {
       const cur = (await q.query("SELECT username, password_hash IS NOT NULL AND totp_secret IS NOT NULL AS ready FROM client_accounts WHERE id = $1 AND status = 'disabled' FOR UPDATE", [id])).rows[0];
       if (!cur) throw notFound();
@@ -478,7 +480,7 @@ export const TENANT_METHODS: Record<string, Method> = {
   /** Lost phone or forgotten password: the old ones stop at once; a 24-hour link sets new ones */
   "clientLogins.resetAccess": async (i, ctx) => {
     const a = await actor(ctx); must(a, "manage-people"); needConfirmed(ctx.env, a.session); mayChange(a);
-    const id = str(i.id, "Login", { max: 40 });
+    const id = loginId(i.id);
     return ok(await ctx.env.db.tx(async q => {
       const cur = (await q.query("SELECT username, status FROM client_accounts WHERE id = $1 FOR UPDATE", [id])).rows[0];
       if (!cur || cur.status === "disabled") throw notFound();

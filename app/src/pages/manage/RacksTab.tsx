@@ -9,11 +9,12 @@ import { isOpen } from "../../store/tasks";
 import { useAction } from "../warehouse/useApi";
 import { DEMO_CONTACT } from "../../server/demo";
 import { warehouseName } from "../../store/warehouse";
+import { QrLabels } from "./QrLabels";
 
 /** The racks (owners change them with the server), and the slot code format (the Lattice team's to change) */
 export function RacksTab() {
   const { kind } = useIdentity();
-  return <div className="stack"><CodeFormat />{kind === "server" ? <RackEditor /> : <RackList />}</div>;
+  return <div className="stack"><CodeFormat /><QrLabels />{kind === "server" ? <RackEditor /> : <RackList />}</div>;
 }
 
 function CodeFormat() {

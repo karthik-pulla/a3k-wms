@@ -46,6 +46,8 @@ type Action =
   | { type: "account/user"; user: User }
   // Roles: guarded owner edits, pallet tasks, packing assignments
   | { type: "stock/adjust"; location: string; lines: StockLine[]; by: string; reason: string }
+  /** Scanned a slot's QR code and counted it: new case counts for lines already there (0 removes one). Products can't be added here. */
+  | { type: "stock/scan-adjust"; location: string; changes: { line: StockLine; cases: number }[]; by: string; reason: string }
   | { type: "task/create"; task: Task }
   /** To a worker, to a team (any of its members may take it), or back to anyone */
   | { type: "task/assign"; id: string; assignee?: string; team?: string }
@@ -119,6 +121,26 @@ function reducer(state: State, a: Action): State {
         .filter(x => x.d !== 0).map(x => ({ by: a.by, type: "adjustment" as const, location: a.location, productId: x.id, cases: x.d, reason: a.reason }));
       return { ...state, stock, movements: log(moves) };
     }
+    case "stock/scan-adjust": {
+      // Lines are matched by what they are (product, lot, best-before, delivery), so a change made offline still finds them
+      const same = (x: StockLine, y: StockLine) => x.productId === y.productId && (x.lot ?? "") === (y.lot ?? "") && (x.bestBefore ?? "") === (y.bestBefore ?? "") && (x.shipmentId ?? "") === (y.shipmentId ?? "");
+      const before = state.stock[a.location] ?? [];
+      const moves: Omit<Movement, "id" | "at">[] = [];
+      // Each change applies to one line: two identical lines (same product, lot, date) take one change each
+      const used = new Set<number>();
+      const next = before.flatMap(l => {
+        const ci = a.changes.findIndex((ch, i) => !used.has(i) && same(ch.line, l));
+        if (ci >= 0) used.add(ci);
+        const c = ci >= 0 ? a.changes[ci] : undefined;
+        if (!c || c.cases === l.cases || c.cases < 0 || !Number.isInteger(c.cases)) return [l];
+        moves.push({ by: a.by, type: "adjustment", location: a.location, productId: l.productId, cases: c.cases - l.cases, reason: `Slot QR: ${a.reason}` });
+        return c.cases ? [{ ...l, cases: c.cases }] : [];
+      });
+      if (!moves.length) return state;
+      const stock = { ...state.stock };
+      if (next.length) stock[a.location] = next; else delete stock[a.location];
+      return { ...state, stock, movements: log(moves) };
+    }
     case "task/create":
       return { ...state, tasks: [a.task, ...state.tasks] };
     case "task/assign":
@@ -134,7 +156,14 @@ function reducer(state: State, a: Action): State {
       if (!t || !isOpen(t)) return state;
       const stock = { ...state.stock };
       if (t.kind === "move") {
-        const left = (stock[t.from] ?? []).filter(l => !t.lines.some(m => m.productId === l.productId && m.lot === l.lot));
+        // Take away one line per line moved: a floor spot may hold two identical pallets, and only one of them went
+        const taken = new Set<number>();
+        const left = (stock[t.from] ?? []).filter(l => {
+          const i = t.lines.findIndex((m, n) => !taken.has(n) && m.productId === l.productId && m.lot === l.lot && (m.bestBefore ?? "") === (l.bestBefore ?? ""));
+          if (i < 0) return true;
+          taken.add(i);
+          return false;
+        });
         if (left.length) stock[t.from] = left; else delete stock[t.from];
       }
       stock[t.to] = [...(stock[t.to] ?? []), ...t.lines];

@@ -13,7 +13,8 @@ export function routeFor(settings: WarehouseSettings | undefined, from: string):
     ?? rules.filter(r => r.match.trim().startsWith("@") && a.endsWith(r.match.trim().toLowerCase())).sort((x, y) => y.match.length - x.match.length)[0];
 }
 
-const NOTICE = /\b(asn|advance ship|delivery notice|shipping notice|container|bill of lading|bol|arriving|eta|inbound)\b/i;
+// Words that only come up in a delivery notice ("container" or "inbound" appear in orders too, so they don't count alone)
+const NOTICE = /\b(asn|advance ship(ping)? notice|delivery notice|shipping notice|bill of lading|bol\s*(no|#|number)?\s*[:#]?\s*\w*\d|container\s*(no|#|number)?\s*[:#]?\s*[A-Z]{4}\s?\d{6,7}|(arriving|arrives|eta)\b.{0,40}\b(container|truck|delivery|shipment))/i;
 
 /** Order or delivery notice, and the client if a rule says */
 export function mailRoute(settings: WarehouseSettings | undefined, m: Pick<InboxMail, "from" | "subject" | "body">): { kind: "order" | "inbound"; client?: string; rule?: MailRoute } {

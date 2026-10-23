@@ -77,6 +77,10 @@ export const spotCode = L.spotCode;
 /** The rack side or area of a floor or area spot, and its number */
 export const parseSpot = L.parseSpot;
 export const isFloor = (code: string) => !L.slotMeta(code);
+/** A column's address on the rack's QR code ("06B-02"), and reading one back; a rack's id ("6" → "06") */
+export const columnCode = L.columnCode;
+export const parseColumn = L.parseColumn;
+export const parseRack = L.parseRack;
 /** "slot", "floor" (a rack side's floor) or "area" */
 export const locKind = L.kind;
 /** The rack side a slot or floor spot belongs to (an area's spots: the area) */

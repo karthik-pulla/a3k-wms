@@ -17,7 +17,7 @@ interface Slot { i: number; code: string; brand?: (typeof BRANDS)[number]; produ
 function slots(): Slot[] {
   return Array.from({ length: SIDES.length * COLS }, (_, i) => {
     const side = SIDES[Math.floor(i / COLS)], col = (i % COLS) + 1;
-    const code = `${side}-${String(col).padStart(2, "0")}-1-1`;
+    const code = `${side}-${String(col).padStart(2, "0")}-L1-B1`;
     const h = (i * 2654435761) >>> 0;
     if (h % 7 < 2) return { i, code };
     // Brands cluster along a rack, as put-away keeps them together

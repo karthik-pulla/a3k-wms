@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-export type Mode = "home" | "inbounds" | "inventory" | "outbounds" | "messages" | "account" | "tasks" | "logs" | "work" | "manage" | "help";
-const MODES: Mode[] = ["home", "inbounds", "inventory", "outbounds", "messages", "account", "tasks", "logs", "work", "manage", "help"];
+export type Mode = "home" | "inbounds" | "inventory" | "outbounds" | "messages" | "account" | "tasks" | "logs" | "work" | "manage" | "help" | "slot";
+const MODES: Mode[] = ["home", "inbounds", "inventory", "outbounds", "messages", "account", "tasks", "logs", "work", "manage", "help", "slot"];
 /** Older addresses: the Team page became Manage warehouse → People */
 const ALIASES: Record<string, Mode> = { warehouse: "manage", team: "manage", managewarehouse: "manage" };
 

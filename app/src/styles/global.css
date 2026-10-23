@@ -79,7 +79,8 @@ body {
 }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
-a { color: inherit; }
+/* No underlines anywhere: links show by their colour (accent) or their box; hover brightens them instead */
+a { color: inherit; text-decoration: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 [hidden] { display: none !important; }
 
@@ -181,7 +182,7 @@ a { color: inherit; }
 .item.expired .what small, .item.expired .meta { color: color-mix(in srgb, var(--expired-ink) 72%, transparent); }
 .card-foot { display: flex; justify-content: flex-end; }
 .link { border: 0; background: none; padding: 4px 2px; font-size: 13px; color: var(--accent); text-decoration: none; }
-.link:hover { text-decoration: underline; }
+.link:hover { color: color-mix(in srgb, var(--accent) 75%, var(--ink)); }
 .empty-card { color: var(--muted); font-size: 13.5px; }
 .no-cards { border-radius: 24px; padding: 22px; color: var(--muted); }
 
@@ -1876,3 +1877,43 @@ table.lines.log-table tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--w
 @keyframes rail-in { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .msg-tab, .rail { animation: none; } }
 @media (max-width: 760px) { .msg-tab { top: auto; bottom: calc(120px + env(safe-area-inset-bottom)); transform: none; animation: none; } }
+
+/* ---------- Slot page (opened by a slot's QR code) ---------- */
+.slot-code { font-size: clamp(30px, 6vw, 52px); letter-spacing: 0; }
+.slot-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.slot-lines li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-border); }
+.slot-lines li.changed { border-color: var(--accent); }
+.slot-line-what { display: grid; gap: 2px; min-width: 0; }
+.qty-edit { display: grid; grid-template-columns: 44px 76px 44px; gap: 6px; align-items: center; }
+.qty-btn { height: 44px; font-size: 22px; padding: 0; }
+.qty-input { height: 44px; text-align: center; font-size: 20px; font-variant-numeric: tabular-nums; }
+.slot-review { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (max-width: 520px) { .slot-lines li { grid-template-columns: 1fr; } }
+
+/* ---------- QR labels for slots ---------- */
+.qr-sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.qr-label { margin: 0; display: grid; gap: 6px; justify-items: center; padding: 10px; border-radius: 12px; background: var(--paper); color: #000; border: 1px solid #ddd; break-inside: avoid; }
+.qr-img svg { width: 120px; height: 120px; display: block; }
+.qr-label figcaption { display: grid; text-align: center; gap: 2px; }
+.qr-label b { font-size: 15px; }
+.qr-label small { font-size: 10px; color: #444; }
+@media print {
+  body:has(.qr-sheet) .section-head, body:has(.qr-sheet) .team-body > .stack > :not(:has(.qr-sheet)), body:has(.qr-sheet) .qr-sheet ~ *, body:has(.qr-sheet) .panel > :not(.qr-sheet) { display: none !important; }
+  .qr-sheet { grid-template-columns: repeat(4, 1fr); gap: 4mm; }
+  .qr-label { border: 1px dashed #999; border-radius: 0; }
+}
+
+/* ---------- Rack panel and column map (what the rack and column QR codes open) ---------- */
+.col-pad { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; }
+.col-btn { display: grid; justify-items: center; gap: 2px; padding: 14px 6px; border-radius: 18px; color: var(--ink); }
+.col-btn b { font-size: 28px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.col-btn small { color: var(--muted); font-size: 11.5px; }
+.col-btn:hover, .col-slot:hover { background: var(--glass-hover); }
+.col-map { display: grid; gap: 8px; align-items: stretch; }
+.col-level { align-self: center; font-size: 12px; color: var(--muted); white-space: nowrap; padding-right: 4px; }
+.col-slot { display: grid; gap: 3px; align-content: start; padding: 10px 12px; border-radius: 14px; color: var(--ink); min-height: 72px; min-width: 0; }
+.col-slot.empty { opacity: .7; }
+.col-slot.none { visibility: hidden; }
+.col-slot-code { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.col-slot-line { font-size: 13px; overflow-wrap: anywhere; }
+.col-slot-line em { font-style: normal; color: var(--muted); }

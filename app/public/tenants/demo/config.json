@@ -5,7 +5,7 @@
   "languages": {"default": "en", "enabled": ["en", "es"]},
   "layout": {
     "codeFormat": {
-      "slot": "{face}-{col}-{level}-{bay}",
+      "slot": "{face}-{col}-L{level}-B{bay}",
       "floor": "{face}-F{n}",
       "areaSpot": "{area}-{n}",
       "rackDigits": 2,

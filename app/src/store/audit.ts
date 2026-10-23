@@ -27,6 +27,10 @@ export function describe(before: State, a: any, after: State): Described | null 
     case "reset": return { area: "data", action: "Reset the sample data" };
     case "product/edit": { const c = productChanges(a.before, a.after); return c ? { area: "products", action: `Edited product ${a.before.code || "(no code)"} ${a.before.name}: ${c}. Reason: ${a.reason}` } : null; }
     case "move": return { area: "stock", pallet: true, action: `Moved the pallet on ${a.from} to ${a.to} (${lines(before.stock[a.from] ?? [])}). Reason: ${a.reason}` };
+    case "stock/scan-adjust": {
+      const was = before.stock[a.location] ?? [], now = after.stock[a.location] ?? [];
+      return { area: "stock", action: `Corrected ${a.location} after scanning its QR code: ${lines(was)} → ${lines(now)}. Reason: ${a.reason}` };
+    }
     case "stock/adjust": return { area: "stock", action: `Changed ${a.location} from ${lines(before.stock[a.location] ?? [])} to ${lines(a.lines)}. Reason: ${a.reason}` };
     case "count/start": return { area: "count", action: `Started count "${a.session.name}"${a.session.blind ? " (blind)" : ""}` };
     case "count/set": return { area: "count", action: a.changes.map((c: { code: string; entry: { lines: { productId: string; cases: number }[]; empty?: boolean } | null }) => `${c.code}: ${c.entry ? (c.entry.empty ? "empty" : lines(c.entry.lines)) : "cleared"}`).join("; ").replace(/^/, `Counted (${before.counts.find(x => x.id === a.id)?.name ?? "count"}) `) };

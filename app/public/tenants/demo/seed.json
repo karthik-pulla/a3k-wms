@@ -238,7 +238,7 @@
     ["dm-sam-tess", "tess", 500, ["I'm off tomorrow, swapped with Omar."]],
     ["dm-sam-maya", "maya", 400, ["Lotus called: ", {"shipment": "lotus-1029"}, " might arrive a day late."]],
     ["dm-sam-maya", "sam", 390, ["OK, noted."]],
-    ["shift-pm", "nina", 300, ["Tonight please count ", {"slot": "05A-03-1-1"}, " up to ", {"slot": "05A-03-4-1"}, "."]],
+    ["shift-pm", "nina", 300, ["Tonight please count ", {"slot": "05A-03-L1-B1"}, " up to ", {"slot": "05A-03-L4-B1"}, "."]],
     ["shift-pm", "tess", 280, ["On it."]],
     ["order-order-5", "nina", 260, ["Picked. Labels printed."]],
     ["order-order-9", "leo", 200, ["Green Grocer asked to swap 10 cs of ", {"product": "SF120"}, " for ", {"product": "SF121"}, "."]],
@@ -248,9 +248,9 @@
       "team",
       "maya",
       150,
-      [{"user": "leo"}, " thanks. ", {"slot": "2A-01-4-1"}, " and ", {"slot": "2A-01-4-2"}, " are free for the jasmine rice."]
+      [{"user": "leo"}, " thanks. ", {"slot": "2A-01-L4-B1"}, " and ", {"slot": "2A-01-L4-B2"}, " are free for the jasmine rice."]
     ],
-    ["shift-am", "leo", 120, ["Forklift 2 is charging until 10. Use forklift 1 for ", {"slot": "07A-01-5-1"}, "."]],
+    ["shift-am", "leo", 120, ["Forklift 2 is charging until 10. Use forklift 1 for ", {"slot": "07A-01-L5-B1"}, "."]],
     ["team", "omar", 95, ["Pallet on ", {"slot": "03B-F01"}, " is leaning. Can someone check it?"]],
     ["dm-sam-leo", "leo", 70, ["Can you look at the return from ", {"order": "Order 9"}, "? Photos are in."]],
     ["dm-sam-leo", "sam", 65, ["Will look after lunch."]],

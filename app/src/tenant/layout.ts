@@ -127,6 +127,24 @@ export function buildLayout(cfg: LayoutConfig) {
     return g.n !== undefined ? spotCode(area, Number(g.n)) : area;
   }
 
+  // ---------- Columns and racks (what the QR codes on the racks hold) ----------
+  // A column's address is the slot format up to the column: "{face}-{col}" → "06B-02"
+  const colTpl = f.slot.startsWith("{face}") && f.slot.includes("{col}") ? f.slot.slice(0, f.slot.indexOf("{col}") + "{col}".length) : "{face}-{col}";
+  const columnCode = (face: string, col: number) => fill(colTpl, { face, col: pad(col, f.colDigits) });
+  const colT = compile(colTpl, { face: facePat, col: `\\d{1,${f.colDigits}}` });
+  const oneCol = new RegExp(`^${colT.source}$`, "i");
+  /** The rack side and column of a column address ("06B-02", "6b-2"), or null if that column doesn't exist */
+  function parseColumn(raw: string): { face: string; col: number } | null {
+    const m = oneCol.exec(raw.trim());
+    if (!m) return null;
+    const g = groups(m, colT.names, 1);
+    const face = faces.find(x => x.id === aliases.get(g.face.toUpperCase()));
+    const col = Number(g.col);
+    return face && face.cols.some(([c]) => c === col) ? { face: face.id, col } : null;
+  }
+  /** A rack's id as saved ("6" → "06", "d6" → "D6"), or null if there's no such rack */
+  const parseRack = (raw: string) => { const id = rackId(raw.trim().toUpperCase()); return rackNames.has(id) ? id : null; };
+
   /** Every valid location code in a text, with its position and saved form. */
   function find(text: string): { start: number; end: number; code: string }[] {
     const out: { start: number; end: number; code: string }[] = [];
@@ -144,7 +162,7 @@ export function buildLayout(cfg: LayoutConfig) {
   const levels = [...new Set(slots.map(s => s.level))].sort((a, b) => b - a);
 
   return {
-    faces, areas, slots, levels, slotCode, spotCode, parseFloor, parseSpot, floorFace, groupOf, kind, normalize, find, levelsOf,
+    faces, areas, slots, levels, slotCode, spotCode, parseFloor, parseSpot, floorFace, groupOf, kind, normalize, find, levelsOf, columnCode, parseColumn, parseRack,
     colLabel: (col: number) => pad(col, f.colDigits),
     slotMeta: (code: string) => slotByCode.get(code),
     rackName: (rack: string) => rackNames.get(rack) ?? `Rack ${rack}`,

@@ -49,6 +49,8 @@ export const ACTION_RULES: Record<string, { can: string | null; kinds: Kind[] } 
   decideReturn: { can: "decide-return", kinds: STOCK },
   move: { can: "move-stock", kinds: STOCK },
   "stock/adjust": { can: "adjust-stock", kinds: STOCK },
+  // A slot's quantities corrected after scanning its QR code (the products on it stay; any role, by switch)
+  "stock/scan-adjust": { can: "scan-adjust", kinds: STOCK },
   "count/start": { can: "start-count", kinds: STOCK },
   "count/set": { can: "view-stock", kinds: STOCK },
   "count/status": { can: "start-count", kinds: STOCK },

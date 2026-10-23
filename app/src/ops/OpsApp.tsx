@@ -329,7 +329,7 @@ function CodeFormatSection({ tenantId }: { tenantId: string }) {
           <div className="field-row">{field("rackDigits", "Rack digits")}{field("colDigits", "Column digits")}{field("spotDigits", "Spot digits")}</div>
           {field("acceptUnpadded", "Also read codes typed without padding")}
           <p className="small">Example slot: <b className="mono">{example(f)}</b></p>
-          <label className="field small">Reason (kept in the log)<input className="input" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. owner asked for 03A-07-2-1 style" /></label>
+          <label className="field small">Reason (kept in the log)<input className="input" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. owner asked for 03A-07-L2-B1 style" /></label>
           {error && <p className="note warn" role="alert">{error}</p>}
           <div className="btns"><button className="btn small primary" disabled={reason.trim().length < 3} onClick={() => void save()}>Save codes</button><button className="btn small" onClick={() => { setF(null); setError(null); }}>Cancel</button></div>
         </div>

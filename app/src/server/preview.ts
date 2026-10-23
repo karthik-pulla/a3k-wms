@@ -97,6 +97,18 @@ async function openTenantDb(id: string, fresh: boolean, config?: unknown, produc
 function start(): Engine {
   const e: Engine = { platform: null as unknown as Db, tenants: new Map(), ready: Promise.resolve() };
   e.ready = (async () => {
+    // The public demo's made-up data changed shape (slot codes became 01A-01-L1-B2, Oct 2026): a copy saved in this
+    // browser before then starts over once, so its stock matches the racks
+    if (import.meta.env.VITE_WMS_DEMO === "1") {
+      const KEY = "wms.preview.demoData", VERSION = "2";
+      let saved: string | null = null;
+      try { saved = localStorage.getItem(KEY); } catch { /* storage blocked: nothing saved either */ }
+      if (saved !== VERSION) {
+        const old = (await indexedDB.databases?.() ?? []).some(d => d.name?.includes("wms-preview"));
+        if (old) { await previewReset(); await new Promise(() => {}); }
+        try { localStorage.setItem(KEY, VERSION); } catch { /* fine */ }
+      }
+    }
     const pg = open("platform");
     const c = conn(pg);
     await alone("setup", async () => {

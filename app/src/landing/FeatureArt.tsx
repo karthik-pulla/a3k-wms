@@ -49,7 +49,7 @@ const ART: Record<ArtKind, () => React.ReactNode> = {
   // A slot typed in a message lights up on the map
   chat: () => (
     <div className="lp-chat" aria-hidden="true">
-      <div className="lp-bubble"><span className="lp-who">Omar</span>Pallet on <span className="lp-chip">03A-07-2-1</span> is leaning</div>
+      <div className="lp-bubble"><span className="lp-who">Omar</span>Pallet on <span className="lp-chip">03A-07-L2-B1</span> is leaning</div>
       <div className="lp-grid lp-mini">{range(20).map(i => <i key={i} className={i === 7 ? "hot" : full(i) ? "on" : ""} />)}</div>
     </div>
   ),

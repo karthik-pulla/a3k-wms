@@ -9,7 +9,7 @@
 export type BaseRole = "owner" | "coordinator" | "worker";
 
 export type Action =
-  | "view-stock" | "confirm-inbound" | "decide-return" | "view-history" | "move-stock" | "start-count" | "approve-count"
+  | "view-stock" | "scan-adjust" | "confirm-inbound" | "decide-return" | "view-history" | "move-stock" | "start-count" | "approve-count"
   | "delete-count" | "approve-order" | "cancel-order" | "ship-order" | "create-order" | "assign-work" | "choose-slot"
   | "adjust-stock" | "edit-products" | "print-labels" | "export" | "view-logs" | "view-all-logs" | "use-inbounds" | "pack-orders"
   | "manage-people" | "manage-settings" | "manage-support" | "view-security-log";
@@ -33,6 +33,7 @@ const OWNER: BaseRole[] = ["owner"];
 
 export const SWITCHES: Switch[] = [
   { id: "view-stock", group: "Inventory", label: "See stock", help: "What's in each slot, product totals and locations", defaultFor: ALL },
+  { id: "scan-adjust", group: "Inventory", label: "Correct a slot after scanning it", help: "Scan a slot's QR code and change how many cases are there, with a reason (in the owners' log)", defaultFor: ALL },
   { id: "move-stock", group: "Inventory", label: "Move pallets", help: "Move a pallet to another location, always with a reason", defaultFor: ALL },
   { id: "choose-slot", group: "Inventory", label: "Choose the slot", help: "Pick any empty slot instead of the one the WMS gives", defaultFor: OFFICE },
   { id: "adjust-stock", group: "Inventory", label: "Change stock directly", help: "Edit what's in a slot (reviewed, with a reason, logged)", defaultFor: OWNER, ownerOnly: true },
