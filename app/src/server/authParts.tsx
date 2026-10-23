@@ -14,8 +14,12 @@ export const message = (e: unknown) => (e instanceof ApiCallError ? e.message : 
 /** Six boxes' worth of digits in one field (works with phone autofill and pasting); sends itself at 6 digits */
 export function CodeInput({ busy, onCode, previewUser, previewScope = "tenant", secret }: { busy: boolean; onCode: (code: string) => void; previewUser?: string; previewScope?: "tenant" | "ops" | "portal"; secret?: string }) {
   const [code, setCode] = useState("");
+  const [filling, setFilling] = useState(false);
+  const [fillError, setFillError] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (!busy) ref.current?.focus(); }, [busy]);
+  const showFill = preview && !!(previewUser || secret);
+  // The preview's button does the typing, so don't open the keyboard or the browser's autofill list over it
+  useEffect(() => { if (!busy && !showFill) ref.current?.focus(); }, [busy, showFill]);
   const change = (v: string) => {
     const digits = v.replace(/\D/g, "").slice(0, 6);
     setCode(digits);
@@ -24,16 +28,23 @@ export function CodeInput({ busy, onCode, previewUser, previewScope = "tenant", 
   const fillPreview = async () => {
     // Written as one block so a real build drops it (and the preview) entirely
     if (import.meta.env.VITE_WMS_BACKEND === "preview") {
-      if (secret) { const { totpAt, totpCounter } = await import("../../../server/src/core/crypto.ts"); change(await totpAt(secret, totpCounter(Date.now()))); return; }
-      const c = await (await import("./preview")).previewCode(previewScope, previewUser ?? "");
-      if (c) change(c);
+      setFilling(true); setFillError(null);
+      try {
+        if (secret) { const { totpAt, totpCounter } = await import("../../../server/src/core/crypto.ts"); change(await totpAt(secret, totpCounter(Date.now()))); return; }
+        const c = await (await import("./preview")).previewCode(previewScope, previewUser ?? "");
+        if (c) change(c); else setFillError("Couldn't find this account's code. Go back and sign in again.");
+      } catch { setFillError("Couldn't get the code. Try again."); }
+      finally { setFilling(false); }
     }
   };
   return (
     <div className="code-entry">
-      <input ref={ref} className="input code-input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={7} aria-label="6-digit code"
+      {showFill && <button type="button" className="btn primary" disabled={busy || filling} onClick={() => void fillPreview()} title="Preview only: the code the phone would show">{filling ? "Getting the code…" : "Preview: fill in the code"}</button>}
+      {/* one-time-code lets phones offer the code from the authenticator; the preview's button stands in for that */}
+      <input ref={ref} className="input code-input" inputMode="numeric" autoComplete={showFill ? "off" : "one-time-code"} pattern="[0-9]*" maxLength={7} aria-label="6-digit code"
         placeholder="000000" value={code} disabled={busy} onChange={e => change(e.target.value)} translate="no" />
-      {preview && (previewUser || secret) && <button type="button" className="btn small" onClick={() => void fillPreview()} title="Preview only: the code the phone would show">Preview: fill in the code</button>}
+      {busy && <p className="muted small" role="status">Checking the code…</p>}
+      {fillError && <p className="note warn" role="alert">{fillError}</p>}
     </div>
   );
 }
