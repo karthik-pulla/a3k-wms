@@ -8,6 +8,9 @@
 //   so the change is always made on the newest data. A change the server refuses (no permission) is dropped and
 //   the person is told.
 // - catching up: every 2 s while the app is in front (15 s behind), and right after a refused or conflicting change.
+// - starting over: when a backup was swapped in on the server (its number is below this device's, or its database
+//   is a new copy), what's kept here is forgotten and everything is caught up from the start; waiting changes stay
+//   and are sent again on the restored data (the server refuses any that no longer make sense).
 // - on the device: the confirmed pieces and the waiting changes, encrypted with the person's key from the server.
 //
 // Everything outside (the server, storage, the app's own logic) is passed in, so this file runs in tests too.
@@ -55,7 +58,7 @@ export interface SyncDeps {
 /** A change waiting to be saved. clientId + clientSeq name it for the server, so sending it again saves it once. */
 interface Waiting { clientId: string; clientSeq: number; action: SyncAction; tries: number }
 interface Piece { v: number; c: number; data: unknown }
-interface Saved { cursor: number; pieces: [string, Piece][] }
+interface Saved { cursor: number; pieces: [string, Piece][]; copy?: string }
 
 /** An answer from the server about one change, or no answer at all */
 interface CallError { status: number; code: string; message: string }
@@ -68,6 +71,12 @@ export class SyncEngine {
   private confirmed: State;
   private pieces = new Map<string, Piece>();
   private cursor = 0;
+  /** Which copy of the server's database the kept pieces came from (PullResult.copy) */
+  private copy: string | null = null;
+  /** The server's numbers went back (seen on a save): the next catch-up starts over */
+  private stale = false;
+  /** Started over and not told the person yet (once the catch-up is done) */
+  private restarted = false;
   private waiting: Waiting[] = [];
   private nextSeq = 1;
   /** This page's own id for its changes (a new one each time the page opens; changes kept from before keep theirs) */
@@ -175,15 +184,27 @@ export class SyncEngine {
     if (this.offline()) return;
     try {
       for (;;) {
-        const r = await this.call<PullResult>("sync.pull", { since: this.cursor });
+        if (this.stale) this.startOver();
+        const since = this.cursor;
+        const r = await this.call<PullResult>("sync.pull", { since });
+        this.answered();
+        // A save showed the server went back while this was on its way: start over before taking it
+        if (this.stale) continue;
+        // At 0 there's nothing kept to forget, so this can't go round forever
+        if (since > 0 && (r.reset || (this.copy !== null && r.copy !== this.copy))) { this.stale = true; continue; }
+        this.copy = r.copy;
         this.take(r.rows);
         this.cursor = r.seq;
-        this.answered();
         if (!r.more) break;
       }
       this.status = { ...this.status, loading: false };
       this.refresh();
       this.saveSoon();
+      if (this.restarted) {
+        this.restarted = false;
+        for (const f of this.noticeListeners) f("This warehouse's data was restored from a backup, so this device loaded it again.");
+        void this.push();
+      }
     } catch (e) { this.failed(asCallError(e)); }
   }
 
@@ -199,6 +220,14 @@ export class SyncEngine {
     if (fresh.length) this.confirmed = applyRows(this.confirmed, fresh, this.orderOf, this.pieces);
   }
   private orderOf = (key: string) => this.pieces.get(key)?.c ?? Number.MAX_SAFE_INTEGER;
+
+  /** The server's data went back (a backup was swapped in): forget its pieces, keep this device's own (the people list)
+   * and the waiting changes. The screens keep showing the old data until the catch-up from 0 is done. */
+  private startOver() {
+    this.stale = false; this.restarted = true;
+    this.pieces = new Map(); this.cursor = 0; this.copy = null;
+    this.confirmed = blankState(this.confirmed);
+  }
 
   // ---------- Sending ----------
   private async push() {
@@ -218,6 +247,7 @@ export class SyncEngine {
         this.status = { ...this.status, state: "saving" };
         this.emit();
         let r: PushResult;
+        const since = this.cursor;
         try { r = await this.call<PushResult>("sync.push", input as unknown as Record<string, unknown>); }
         catch (e) {
           const err = asCallError(e);
@@ -237,6 +267,8 @@ export class SyncEngine {
           this.waiting.shift();
           await this.saveWaiting();
           this.saveSoon();
+          // A new save is numbered above every number the server had given out, unless a backup was swapped in
+          if (!r.again && r.seq <= since) { this.stale = true; await this.pullNow(); }
         } else if (++w.tries > 8) {
           this.waiting.shift();
           this.notice("Someone else kept changing the same thing, so this change wasn't saved. Check it and try again.", w.action);
@@ -297,6 +329,7 @@ export class SyncEngine {
         const saved = JSON.parse(await decrypt(this.key, data)) as Saved;
         this.pieces = new Map(saved.pieces);
         this.cursor = saved.cursor;
+        this.copy = saved.copy ?? null;
         this.confirmed = applyRows(this.confirmed, saved.pieces.map(([key, p]) => ({ key, data: p.data, c: p.c })), this.orderOf, this.pieces);
       }
       const waiting = await this.d.storage.get(`${this.d.storageKey}:waiting`);
@@ -307,7 +340,7 @@ export class SyncEngine {
       this.status = { ...this.status, loading: !this.pieces.size };
     } catch {
       // Made with an older key (signed out everywhere, or reset): start again from the server
-      this.pieces = new Map(); this.cursor = 0; this.waiting = [];
+      this.pieces = new Map(); this.cursor = 0; this.copy = null; this.waiting = [];
       this.confirmed = blankState(this.d.base);
     }
     this.refresh();
@@ -330,7 +363,7 @@ export class SyncEngine {
     if (!this.key || !this.d.storage || !this.dirty) return;
     if (this.saveTimer) { this.t.clearTimeout(this.saveTimer); this.saveTimer = null; }
     this.dirty = false;
-    const saved: Saved = { cursor: this.cursor, pieces: [...this.pieces] };
+    const saved: Saved = { cursor: this.cursor, pieces: [...this.pieces], copy: this.copy ?? undefined };
     try { await this.d.storage.set(`${this.d.storageKey}:data`, await encrypt(this.key, JSON.stringify(saved))); } catch { this.dirty = true; /* storage full: tried again next time */ }
   }
 }

@@ -166,3 +166,81 @@ test("support sessions keep nothing on the device", async () => {
   await settle();
   assert.equal(storage.map.size, 0);
 });
+
+/** What swapping in the backup made at change `n` does to the server (pieces made later gone, the number back at n) */
+const rollBack = (t: { db: any }, n: number) => t.db.tx(async (q: any) => {
+  await q.query("DELETE FROM entities WHERE created_seq > $1", [n]);
+  await q.query("DELETE FROM sync_log WHERE seq > $1", [n]);
+  await q.query("UPDATE sync_state SET seq = $1 WHERE id = 1", [n]);
+});
+const B2 = "02A-01-L1-B1", B3 = "03A-01-L1-B1";
+
+test("after a backup is swapped in, a device ahead of the server starts over and sends its waiting change again", async () => {
+  const t = await two();
+  const backup = await t.db.tx(q => writeSystem(q, [{ key: "stock:01A-01-L1-B1", data: [{ productId: "S1", cases: 5 }] }], "Import", "test stock"));
+  const owner = t.make(t.owner, "owner"), omar = t.make(t.omarB, "omar");
+  const told: string[] = [];
+  omar.e.onNotice(m => told.push(m));
+  await owner.e.open(); await omar.e.open();
+  owner.e.dispatch({ type: "stock/adjust", code: B2, cases: 7 });
+  owner.e.dispatch({ type: "stock/adjust", code: B3, cases: 1 });
+  await settle();
+  await omar.e.pullNow(); await owner.e.pullNow();
+  assert.equal(cases(omar.e, B2), 7);
+  // Omar adds 3 while offline; meanwhile the warehouse goes back to the night before the owner's change
+  omar.e.setOnline(false);
+  omar.e.dispatch({ type: "stock/scan-adjust", code: "01A-01-L1-B1", add: 3 });
+  await rollBack(t, backup);
+  omar.e.setOnline(true);
+  await until(() => omar.e.getStatus().waiting === 0 && cases(omar.e, B2) === 0);
+  assert.equal(cases(omar.e, B2), 0, "the owner's change is gone with the restore");
+  assert.equal(cases(omar.e), 8, "his waiting change was saved on the restored data");
+  assert.match(told.join(" "), /restored from a backup/);
+  await owner.e.pullNow();
+  assert.equal(cases(owner.e, B2), 0, "the owner's device, two changes ahead, starts over too");
+  assert.equal(cases(owner.e, B3), 0);
+  assert.equal(cases(owner.e), 8);
+});
+
+test("a save numbered at or below this device's number means the server went back", async () => {
+  const t = await two();
+  const backup = await t.db.tx(q => writeSystem(q, [{ key: "stock:01A-01-L1-B1", data: [{ productId: "S1", cases: 5 }] }], "Import", "test stock"));
+  const owner = t.make(t.owner, "owner");
+  await owner.e.open();
+  owner.e.dispatch({ type: "stock/adjust", code: B2, cases: 7 });
+  await settle();
+  await owner.e.pullNow();
+  await rollBack(t, backup);
+  // Saved at the number the device already had: nothing in a catch-up would look new
+  owner.e.dispatch({ type: "stock/adjust", code: B3, cases: 2 });
+  await until(() => cases(owner.e, B2) === 0);
+  assert.equal(cases(owner.e, B2), 0);
+  assert.equal(cases(owner.e, B3), 2);
+  assert.equal(cases(owner.e), 5);
+});
+
+test("a device notices a new copy of the database even once the server's number has passed its own", async () => {
+  const t = await two();
+  const backup = await t.db.tx(q => writeSystem(q, [{ key: "stock:01A-01-L1-B1", data: [{ productId: "S1", cases: 5 }] }], "Import", "test stock"));
+  // The server's copy of the database, as the answers name it (one PGlite database here, so the test changes it)
+  let copy = "night-before";
+  const storage = memory();
+  const viaCopy = { call: async (m: string, i: Record<string, unknown>) => { const r: any = await t.omarB.call(m, i); return m === "sync.pull" ? { ...r, copy } : r; } };
+  const omar = t.make(viaCopy as any, "omar", storage);
+  await omar.e.open();
+  await t.db.tx(q => writeSystem(q, [{ key: `stock:${B2}`, data: [{ productId: "S1", cases: 7 }] }], "Import", "after the backup"));
+  await omar.e.pullNow();
+  await omar.e.flush();
+  omar.e.stop();
+  assert.equal(cases(omar.e, B2), 7);
+  // Swapped in, then busy again before this device came back: the server's number is past the device's
+  await rollBack(t, backup);
+  copy = "restored";
+  for (const n of [1, 2]) await t.db.tx(q => writeSystem(q, [{ key: `stock:${B3}`, data: [{ productId: "S1", cases: n }] }], "Import", "after the restore"));
+  const again = t.make(viaCopy as any, "omar", storage);
+  await again.e.open();
+  await until(() => cases(again.e, B2) === 0);
+  assert.equal(cases(again.e, B2), 0, "the change lost with the restore is gone from this device");
+  assert.equal(cases(again.e, B3), 2);
+  assert.equal(cases(again.e), 5);
+});

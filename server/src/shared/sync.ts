@@ -25,12 +25,18 @@ export const SERVER_ONLY: readonly Kind[] = ["product"];
 export interface Change { key: string; base: number; data: unknown }
 export interface PushInput { clientId: string; clientSeq: number; type: string; at: string; changes: Change[] }
 export type PushResult =
-  | { ok: true; seq: number; versions: Record<string, number> }
+  /** again: this change was saved before (sent twice), at seq. A new save's seq is above every device's number, unless a backup was swapped in. */
+  | { ok: true; seq: number; versions: Record<string, number>; again?: true }
   | { ok: false; reason: "conflict"; keys: string[] };
 
 /** A piece as the server sends it: v = version, s = number of its last change, c = number of the change that made it */
 export interface SyncRow { key: string; v: number; s: number; c: number; data: unknown }
-export interface PullResult { rows: SyncRow[]; seq: number; more: boolean }
+/**
+ * copy: which copy of the warehouse's database answered (its own id; a backup swapped in is a new one).
+ * reset: the device's number is ahead of the server's (a backup was swapped in). Either way the device forgets
+ * what it kept and catches up from 0; its waiting changes are sent again on the restored data.
+ */
+export interface PullResult { rows: SyncRow[]; seq: number; more: boolean; copy: string; reset?: true }
 
 /** A catch-up page (rowsPerPull) is always bigger than one change (changesPerPush), so a page never splits a change */
 export const SYNC_LIMITS = { changesPerPush: 2000, bytesPerChange: 1_500_000, rowsPerPull: 5000 } as const;

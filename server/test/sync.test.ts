@@ -43,7 +43,7 @@ test("a saved change reaches everyone's next catch-up, with versions and change 
   assert.deepEqual(got.rows.map((x: any) => [x.key, x.v, x.data]), [["stock:01A-01-L1-B1", 1, line(40)]]);
   assert.equal(got.seq, r.seq);
   // Nothing new: an empty answer at the same number
-  assert.deepEqual(await w.omar.b.call("sync.pull", { since: got.seq }), { rows: [], seq: got.seq, more: false });
+  assert.deepEqual(await w.omar.b.call("sync.pull", { since: got.seq }), { rows: [], seq: got.seq, more: false, copy: got.copy });
 });
 
 test("a change made from an old version is refused, so nobody overwrites someone else unseen", async () => {
@@ -66,7 +66,8 @@ test("a change sent twice (the answer got lost) is saved once", async () => {
   const c = change("stock/scan-adjust", [{ key: "stock:01A-01-L1-B1", base: 1, data: line(5) }]);
   const a = await w.omar.b.call("sync.push", c);
   const b = await w.omar.b.call("sync.push", c);
-  assert.deepEqual(b, a);
+  // Marked as saved before, so the device doesn't take its older number for a restore
+  assert.deepEqual(b, { ...a, again: true });
   const { rows } = await w.db.query("SELECT count(*)::int AS n FROM sync_log WHERE client_id = $1", [DEVICE]);
   assert.equal(rows[0].n, 1);
   // The same change number from another person is never taken for theirs
@@ -348,4 +349,25 @@ test("the people list names everyone active, without emails", async () => {
   const list = await w.omar.b.call("people.directory");
   assert.deepEqual(list.map((p: any) => [p.name, p.role]), [["Leo", "coordinator"], ["Maya", "owner"], ["Omar", "worker"]]);
   assert.equal("email" in list[0], false);
+});
+
+test("a device ahead of the server (a backup was swapped in) is told to start over", async () => {
+  const w = await team();
+  const before = await seed(w, { "01A-01-L1-B1": line(5) });
+  await w.owner.call("sync.push", change("stock/adjust", [{ key: "stock:02A-01-L1-B1", data: line(7) }]));
+  const ahead = await pullAll(w.omar.b);
+  const first = await w.omar.b.call("sync.pull", { since: 0 });
+  assert.ok(first.copy, "names the copy of the database that answered");
+  // The backup was made at `before`: what came later is gone and the number is back there
+  await w.db.tx(async (q: any) => {
+    await q.query("DELETE FROM entities WHERE created_seq > $1", [before]);
+    await q.query("DELETE FROM sync_log WHERE seq > $1", [before]);
+    await q.query("UPDATE sync_state SET seq = $1 WHERE id = 1", [before]);
+  });
+  assert.deepEqual(await w.omar.b.call("sync.pull", { since: ahead.seq }), { rows: [], seq: before, more: false, copy: first.copy, reset: true });
+  // From the start it catches up as usual
+  const again = await w.omar.b.call("sync.pull", { since: 0 });
+  assert.equal(again.reset, undefined);
+  assert.equal(again.seq, before);
+  assert.deepEqual(again.rows.map((r: any) => r.key).sort(), ["conv:team", "stock:01A-01-L1-B1"]);
 });

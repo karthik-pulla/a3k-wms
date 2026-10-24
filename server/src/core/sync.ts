@@ -141,7 +141,7 @@ export async function push(db: Db, who: SyncWho, raw: Record<string, unknown>): 
     if (dup) {
       // Sent again after the answer was lost: already saved
       const { rows } = await q.query("SELECT key, version FROM entities WHERE key = ANY($1)", [keys]);
-      return { ok: true, seq: Number(dup.seq), versions: Object.fromEntries(rows.map(r => [r.key, r.version]))};
+      return { ok: true, seq: Number(dup.seq), versions: Object.fromEntries(rows.map(r => [r.key, r.version])), again: true };
     }
     const cur = new Map<string, Row>(((await q.query("SELECT key, version, data, audience FROM entities WHERE key = ANY($1) FOR UPDATE", [keys])).rows as Row[]).map(r => [r.key, r]));
     const conflicts = input.changes.filter(c => (cur.get(c.key)?.version ?? 0) !== c.base).map(c => c.key);
@@ -230,19 +230,24 @@ export async function writeSystem(q: Sql, changes: { key: string; data: unknown 
 export async function pull(db: Sql, who: SyncWho, since: number): Promise<PullResult> {
   if (!Number.isInteger(since) || since < 0) throw bad("Since is missing");
   // Read the saved number first: every piece numbered up to it is already saved (numbers are given under a lock)
-  const cur = Number((await db.query("SELECT seq FROM sync_state WHERE id = 1")).rows[0].seq);
-  if (since >= cur) return { rows: [], seq: cur, more: false };
+  // With the database's own id: a backup swapped in (ops/restore.ts) is a new database, so devices notice even
+  // once its numbers have passed theirs again
+  const state = (await db.query("SELECT s.seq, d.oid::text AS copy FROM sync_state s JOIN pg_database d ON d.datname = current_database() WHERE s.id = 1")).rows[0];
+  const cur = Number(state.seq), copy = String(state.copy);
+  // Ahead of the server: the numbers went back with a restore, so this device starts over
+  if (since > cur) return { rows: [], seq: cur, more: false, copy, reset: true };
+  if (since === cur) return { rows: [], seq: cur, more: false, copy };
   const limit = SYNC_LIMITS.rowsPerPull;
   const { rows } = await db.query(
     `SELECT key, version AS v, seq AS s, created_seq AS c, data FROM entities
       WHERE seq > $1 AND seq <= $2 AND (audience IS NULL OR $3 = ANY(audience))
       ORDER BY seq, key LIMIT $4`, [since, cur, who.personId ?? "", limit + 1]);
   const out: SyncRow[] = rows.map(r => ({ key: r.key, v: r.v, s: Number(r.s), c: Number(r.c), data: r.data }));
-  if (out.length <= limit) return { rows: out, seq: cur, more: false };
+  if (out.length <= limit) return { rows: out, seq: cur, more: false, copy };
   // A page never splits one change: stop before the first change that didn't fit (a change is at most changesPerPush pieces)
   const cut = out[limit].s;
   const page = out.filter(r => r.s < cut);
-  return { rows: page, seq: cut - 1, more: true };
+  return { rows: page, seq: cut - 1, more: true, copy };
 }
 
 /** Everyone in the warehouse, for Messages and for naming people (no emails or sign-in details) */
