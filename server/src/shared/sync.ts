@@ -59,7 +59,8 @@ export const ACTION_RULES: Record<string, { can: string | null; kinds: Kind[] } 
   "stock/scan-adjust": { can: "scan-adjust", kinds: ["stock", "movement", "audit"] },
   "count/start": { can: "start-count", kinds: ["count", "countentry", "audit"] },
   "count/set": { can: "view-stock", kinds: ["countentry", "audit"] },
-  "count/status": { can: "start-count", kinds: ["count", "audit"] },
+  // Anyone counting sends a count for review; reopening and closing need "start-count" (checked on the server)
+  "count/status": { can: "view-stock", kinds: ["count", "audit"] },
   "count/delete": { can: "delete-count", kinds: ["count", "countentry", "audit"] },
   "count/decide": { can: "approve-count", kinds: ["count", "stock", "movement", "audit"] },
   "order/save": { can: "create-order", kinds: ["order", "audit"] },

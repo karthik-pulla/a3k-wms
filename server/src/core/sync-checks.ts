@@ -207,6 +207,14 @@ const pickedKeys = (picks: any[] | undefined) => new Map((picks ?? []).filter(x 
 
 /** What's still planned can't ask for more than the order still needs (planning moves no stock, but reserves it) */
 function planFits(o: any) {
+  planBound(o);
+  // As the app sets it: picked once every pick is done (picking just after an undo), approved again when none is
+  const done = o.picks.filter((p: any) => p.picked).length;
+  const ok = !done ? ["approved", "picking"] : done === o.picks.length ? ["picked", "picking"] : ["picking"];
+  if (!ok.includes(o.status)) throw no("The order's status doesn't match its picks");
+}
+function planBound(o: any) {
+  if (!Array.isArray(o.picks)) throw no("A planned order has its picks");
   const want = new Map<string, number>();
   for (const l of o.lines ?? []) want.set(l.productId, (want.get(l.productId) ?? 0) + l.cases);
   const planned = new Map<string, number>();
@@ -217,10 +225,6 @@ function planFits(o: any) {
     else planned.set(p.productId, (planned.get(p.productId) ?? 0) + p.cases);
   }
   for (const [id, n] of planned) if (n > Math.max(0, want.get(id)!)) throw no("The plan asks for more than the order needs");
-  // As the app sets it: picked once every pick is done (picking just after an undo), approved again when none is
-  const done = o.picks.filter((p: any) => p.picked).length;
-  const ok = !done ? ["approved", "picking"] : done === o.picks.length ? ["picked", "picking"] : ["picking"];
-  if (!ok.includes(o.status)) throw no("The order's status doesn't match its picks");
 }
 /** Every pick done before is still there, unchanged, except `except` */
 function keepsPicked(before: any[], after: any[], except: string) {
@@ -297,7 +301,166 @@ async function orderUnpick(c: Ctx) {
   movementsAre(c, ["pick-undo"], [loc]);
 }
 
-/** The actions checked piece by piece. The others rely on their switch and kinds (ACTION_RULES) for now. */
+
+// ---------- Deliveries ----------
+/** What happened on the dock and at confirmation stays as it was when a delivery's details are edited */
+const SHIPMENT_FIXED = ["status", "receivedAt", "receivedBy", "condition", "confirmedAt", "confirmedBy", "putaway", "returnId"];
+function shipment(c: Ctx): Piece {
+  const p = one(c, "shipment", "delivery");
+  if (!p.after || p.after.id !== p.id) throw no("A delivery needs its id");
+  return p;
+}
+
+function saveShipment(c: Ctx) {
+  onlyKinds(c, ["shipment", "audit"]);
+  const { before: b, after: a } = shipment(c);
+  if (!b) { if (a.status !== "incoming" || SHIPMENT_FIXED.some(k => k !== "status" && a[k] !== undefined)) throw no("A new delivery starts as incoming"); return; }
+  if (SHIPMENT_FIXED.some(k => !same(b[k], a[k]))) throw no("Editing a delivery changes only its details and lines");
+}
+
+function receive(c: Ctx) {
+  onlyKinds(c, ["shipment", "movement", "audit"]);
+  const { id, before: b, after: a } = shipment(c);
+  if (!b || b.status !== "incoming" || a.status !== "pending" || !onlyChanged(b, a, ["status", "receivedAt", "receivedBy", "condition"])) throw no("Marking a delivery arrived changes only its status");
+  for (const m of c.of("movement")) if (!m.after || m.after.type !== "receive" || m.after.shipmentId !== id) throw no("The movement log doesn't match this change");
+}
+
+/** Confirming: one open put-away task per planned pallet, holding no more than the delivery says is on that pallet */
+function putaway(c: Ctx) {
+  onlyKinds(c, ["shipment", "task", "audit"]);
+  const { id, before: s, after: a } = shipment(c);
+  if (!s || s.status !== "pending" || a.status !== "putaway" || !onlyChanged(s, a, ["status", "confirmedAt", "confirmedBy", "putaway"])) throw no("Confirming a delivery changes only its status and plan");
+  const plan: any[] = Array.isArray(a.putaway) ? a.putaway : [];
+  const tasks = c.of("task");
+  if (!tasks.length || tasks.length !== plan.length || new Set(plan.map(p => p.pallet)).size !== plan.length) throw no("Confirming a delivery makes one task per pallet");
+  const lines: any[] = Array.isArray(s.lines) ? s.lines : [];
+  for (const p of tasks) {
+    const t = p.after;
+    if (p.before || !t || t.id !== p.id) throw no("Confirming a delivery makes new tasks");
+    if (t.kind !== "putaway" || t.status !== "open" || t.shipmentId !== id || t.startedAt || t.doneBy || t.doneAt || t.blocked) throw no("Confirming a delivery makes open put-away tasks for it");
+    const planned = plan.find(x => x.pallet === t.pallet);
+    if (!planned || planned.slot !== t.to) throw no("Each put-away task goes where the plan says");
+    // As the app copies them: lot and best-before from the delivery's line for that product on that pallet
+    const onPallet = lines.filter(l => l.pallet === t.pallet && l.productId);
+    const room = new Map<string, number>();
+    for (const l of onPallet) room.set(l.productId, (room.get(l.productId) ?? 0) + Math.max(0, (l.cases || 0) - (l.damaged ?? 0)));
+    for (const l of linesOf(t.lines, t.to)) {
+      const meta = onPallet.find(x => x.productId === l.productId);
+      if (!meta || l.lot !== meta.lot || l.bestBefore !== meta.bestBefore || l.shipmentId !== id) throw no(`Pallet ${t.pallet}'s task holds products the delivery doesn't have on it`);
+      room.set(l.productId, room.get(l.productId)! - l.cases);
+      if (room.get(l.productId)! < 0) throw no(`Pallet ${t.pallet}'s task holds more cases than the delivery says`);
+    }
+  }
+}
+
+// ---------- Counts ----------
+const countOf = (key: string) => { const rest = idOf(key); return rest.slice(0, rest.indexOf(":")); };
+const isEntry = (e: any) => !!e && typeof e === "object" && Array.isArray(e.lines) && e.lines.every((l: any) => l && typeof l.productId === "string" && Number.isFinite(l.cases) && l.cases >= 0);
+
+async function countStart(c: Ctx) {
+  onlyKinds(c, ["count", "countentry", "audit"]);
+  const p = one(c, "count", "count");
+  if (p.before || !p.after || p.after.id !== p.id || p.after.status !== "open" || p.after.decided || p.after.closedAt) throw no("A new count starts open");
+  for (const e of c.of("countentry")) if (countOf(e.key) !== p.id || !isEntry(e.after)) throw no("A new count's entries are its own");
+}
+
+/** Counting: entries of one count that's still open (anyone who sees stock counts; owners decide what's applied) */
+async function countSet(c: Ctx) {
+  onlyKinds(c, ["countentry", "audit"]);
+  const ids = new Set(c.of("countentry").map(e => countOf(e.key)));
+  if (ids.size !== 1) throw no("Counting changes one count");
+  const [id] = ids;
+  const count = (await c.load([`count:${id}`])).get(`count:${id}`);
+  if (!count || count.status === "closed") throw no("That count is closed or doesn't exist");
+  for (const e of c.of("countentry")) if (e.after !== null && !isEntry(e.after)) throw no("A counted slot is a list of products and cases");
+}
+
+/** Sending a count for review is everyone's who counts; reopening and closing it are for those who start counts */
+function countStatus(c: Ctx) {
+  onlyKinds(c, ["count", "audit"]);
+  const p = one(c, "count", "count");
+  if (!p.before || !p.after || !onlyChanged(p.before, p.after, ["status", "closedAt", "closedBy"])) throw no("This changes only the count's status");
+  if (!allows(c.who.base, c.who.perms, "start-count") && !(p.before.status === "open" && p.after.status === "review")) throw no("Only people who start counts reopen or close them");
+}
+
+// ---------- Orders (office) ----------
+/** Picks already confirmed carry the cases taken off the shelf: only picking and undoing change them */
+function pickedUnchanged(b: any, a: any) {
+  if (!same(Object.fromEntries(pickedKeys(b?.picks)), Object.fromEntries(pickedKeys(a?.picks)))) throw no("Picks already confirmed can't change here");
+}
+function orderPiece(c: Ctx): Piece {
+  const p = one(c, "order", "order");
+  if (p.after && p.after.id !== p.id) throw no("An order needs its id");
+  if (c.who.clients) for (const o of [p.before, p.after]) if (o && !c.who.clients.includes(o.client)) throw no("That order is for a client you don't see");
+  return p;
+}
+
+function orderSave(c: Ctx) {
+  onlyKinds(c, ["order", "audit"]);
+  const { before: b, after: a } = orderPiece(c);
+  if (!a) throw no("Saving an order needs the order");
+  pickedUnchanged(b, a);
+}
+
+function orderPlan(c: Ctx) {
+  onlyKinds(c, ["order", "audit"]);
+  const { before: b, after: a } = orderPiece(c);
+  if (!b || !a || !onlyChanged(b, a, ["picks", "short", "strategy", "status", "approvedBy", "approvedAt"])) throw no("Planning changes only the order's picks");
+  if (["shipped", "cancelled"].includes(b.status)) throw no("That order is finished");
+  pickedUnchanged(b, a);
+  planBound(a);
+}
+
+function orderShip(c: Ctx) {
+  onlyKinds(c, ["order", "audit"]);
+  const { before: b, after: a } = orderPiece(c);
+  if (!b || !a || a.status !== "shipped" || ["shipped", "cancelled"].includes(b.status) || !onlyChanged(b, a, ["status", "shippedAt", "shippedBy"])) throw no("Shipping changes only the order's status");
+}
+
+function orderAssign(c: Ctx) {
+  onlyKinds(c, ["order", "audit"]);
+  const { before: b, after: a } = orderPiece(c);
+  if (!b || !a || !onlyChanged(b, a, ["assignee"])) throw no("Giving out an order changes only who packs it");
+}
+
+function orderDelete(c: Ctx) {
+  onlyKinds(c, ["order", "audit"]);
+  const { before: b, after: a } = orderPiece(c);
+  if (!b || a || (b.status ?? "draft") !== "draft") throw no("Only a draft order is deleted");
+}
+
+/** Cancelling: every picked case goes back on its pallet, exactly as taken (as the app does it) */
+async function orderCancel(c: Ctx) {
+  onlyKinds(c, ["order", "stock", "movement", "audit"]);
+  const { before: o, after: a } = orderPiece(c);
+  if (!o || !a || ["shipped", "cancelled"].includes(o.status) || a.status !== "cancelled") throw no("Only an open order is cancelled");
+  if (!onlyChanged(o, a, ["picks", "status", "cancelledAt", "cancelledBy", "notes"])) throw no("Cancelling changes only the order's status and picks");
+  const picks: any[] = o.picks ?? [];
+  if (!same(a.picks ?? [], picks.map(p => without(p, "picked")))) throw no("Cancelling puts back every pick");
+  const locs = [...new Set(picks.filter(p => p.picked).map(p => p.location as string))];
+  const sent = stockAt(c);
+  const missing = locs.filter(l => !sent.has(l));
+  const loaded = missing.length ? await c.load(missing.map(l => `stock:${l}`)) : new Map();
+  const saved = (loc: string) => savedLines(sent.has(loc) ? sent.get(loc)!.before : loaded.get(`stock:${loc}`));
+  const expected = new Map<string, any[]>();
+  for (const p of picks) if (p.picked) expected.set(p.location, putBack(expected.get(p.location) ?? saved(p.location), savedLines(p.picked.taken)));
+  expectStock(c, expected, saved);
+  movementsAre(c, ["pick-undo"], locs);
+}
+
+// ---------- Returns ----------
+function submitReturn(c: Ctx) {
+  onlyKinds(c, ["return", "meta", "audit"]);
+  const p = one(c, "return", "return");
+  const r = p.after;
+  if (p.before || !r || r.id !== p.id || r.status !== "pending" || r.outcome || r.decidedAt || r.decidedBy) throw no("A new return waits for an owner's decision");
+}
+
+/**
+ * The actions checked piece by piece. Not here: the owners' own powers, which may change stock directly anyway
+ * (stock/adjust, count/decide, count/delete, decideReturn), and actions that touch no stock (inbox, settings,
+ * announcements, work teams, messages), which rely on their switch and kinds (ACTION_RULES).
+ */
 const CHECKS: Record<string, (c: Ctx) => void | Promise<void>> = {
   move,
   "stock/scan-adjust": scanAdjust,
@@ -309,6 +472,20 @@ const CHECKS: Record<string, (c: Ctx) => void | Promise<void>> = {
   "task/done": taskDone,
   "order/pick": orderPick,
   "order/unpick": orderUnpick,
+  saveShipment,
+  receive,
+  putaway,
+  "count/start": countStart,
+  "count/set": countSet,
+  "count/status": countStatus,
+  "order/save": orderSave,
+  "order/approve": orderPlan,
+  "order/plan": orderPlan,
+  "order/ship": orderShip,
+  "order/assign": orderAssign,
+  "order/delete": orderDelete,
+  "order/cancel": orderCancel,
+  submitReturn,
 };
 export const CHECKED_ACTIONS = Object.keys(CHECKS);
 
