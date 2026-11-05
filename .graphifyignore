@@ -1,0 +1,25 @@
+# graphify indexes code only. Real business data and anything built stays out
+# (CLAUDE.md rule 1). .gitignore is also respected.
+data/
+outputs/
+Lattice_Branding/
+MilletBank_*
+*.pdf
+*.xlsx
+*.png
+*.jpg
+*.zip
+app/public/tenants/
+app/public/fonts/
+docs/images/
+tools/*/dist/
+tools/rack6-map/
+scripts/legacy-labels/
+package-lock.json
+**/package-lock.json
+node_modules/
+**/dist/
+**/dist-site/
+infra/cdk.out/
+infra/setup/*.yaml
+graphify-out/

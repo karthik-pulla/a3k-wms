@@ -26,3 +26,10 @@ app/public/tenants/*/stock.json
 /label-maker.html
 /rack6-map.html
 /warehouse-count.html
+
+# graphify's code graph (rebuilt on each machine) and per-machine Claude settings
+graphify-out/
+.claude/settings.local.json
+
+# Private business documents (not for the public repo)
+docs/a3k-founding-customer-proposal.md
