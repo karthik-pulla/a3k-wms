@@ -296,7 +296,7 @@ export class SyncEngine {
   }
 
   private answered() {
-    this.netDown = false;
+    if (this.netDown) { this.netDown = false; this.refresh(); }
     this.status = { ...this.status, lastSyncedAt: new Date().toISOString() };
   }
 
@@ -304,9 +304,10 @@ export class SyncEngine {
     if (err.code === "not-signed-in") { this.stop(); this.d.onSignedOut?.(); return; }
     this.netDown = true;
     this.refresh();
-    // Try again in a moment (the catch-up timer runs anyway)
+    // Try again in a moment (the catch-up timer runs anyway). Still "can't reach the server" until it answers: trying
+    // again isn't being connected, and the save pill mustn't say "All changes saved" while catch-ups keep failing
     if (this.retryTimer) this.t.clearTimeout(this.retryTimer);
-    if (!this.stopped) this.retryTimer = this.t.setTimeout(() => { this.netDown = false; void this.push(); }, 5000);
+    if (!this.stopped) this.retryTimer = this.t.setTimeout(() => { void this.push(); }, 5000);
   }
 
   // ---------- What the screens see ----------

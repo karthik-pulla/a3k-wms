@@ -219,11 +219,19 @@ test("a pick takes exactly what it says off its pallet, and workers pick only or
   const back = { key: "movement:M2", data: { id: "M2", at: AT, by: "Omar", type: "pick-undo", orderId: "PO-7", location: "01A-01-L1-B1", productId: "S1", cases: 10, reason: "Put back for PO-7" } };
   assert.equal((await push("order/unpick", [{ key: "order:PO-7", base: 2, data: undone }, { key: "stock:01A-01-L1-B1", base: 2, data: [L1] }, back])).ok, true);
   assert.deepEqual(await stockOf(w.owner, "01A-01-L1-B1"), [L1]);
-  // Taking more than planned (the app allows it) leaves the rest of the plan as it is
+  // Taking more than planned from a pallet (bug B1, 3 Nov 2026: 99 typed on a 4-case pick took the whole pallet) is
+  // refused: the rest of the pallet may be other orders', and the order would be over-filled
   const two = { ...undone, lines: [{ productId: "S1", cases: 20 }], picks: [undone.picks[0], { ...pick, key: "k4", location: "02A-01-L1-B1", cases: 10 }] };
   await seed(w, { "order:PO-9": { ...two, id: "PO-9" } });
   const over = { ...two, id: "PO-9", status: "picking", picks: [{ ...two.picks[0], picked: { cases: 12, by: "Omar", at: AT, taken: [{ ...L1, cases: 12 }] } }, two.picks[1]] };
-  assert.equal((await push("order/pick", [{ key: "order:PO-9", base: 1, data: over }, { key: "stock:01A-01-L1-B1", base: 3, data: [{ ...L1, cases: 28 }] }])).ok, true);
+  const mv9 = (cases: number) => ({ key: "movement:M3", data: { id: "M3", at: AT, by: "Omar", type: "pick", orderId: "PO-9", location: "01A-01-L1-B1", productId: "S1", cases, reason: "PO-9 · Patel Brothers" } });
+  await refused("order/pick", [{ key: "order:PO-9", base: 1, data: over }, { key: "stock:01A-01-L1-B1", base: 3, data: [{ ...L1, cases: 28 }] }]);
+  const whole = { ...over, picks: [{ ...two.picks[0], picked: { cases: 40, by: "Omar", at: AT, taken: [L1] } }, two.picks[1]] };
+  await refused("order/pick", [{ key: "order:PO-9", base: 1, data: whole }, { key: "stock:01A-01-L1-B1", base: 3, data: null }, mv9(40)]);
+  // The stock history says what really came off the pallet, not what was typed
+  const ten = { ...over, picks: [{ ...two.picks[0], picked: { cases: 10, by: "Omar", at: AT, taken: [{ ...L1, cases: 10 }] } }, two.picks[1]] };
+  await refused("order/pick", [{ key: "order:PO-9", base: 1, data: ten }, { key: "stock:01A-01-L1-B1", base: 3, data: [{ ...L1, cases: 30 }] }, mv9(99)]);
+  assert.equal((await push("order/pick", [{ key: "order:PO-9", base: 1, data: ten }, { key: "stock:01A-01-L1-B1", base: 3, data: [{ ...L1, cases: 30 }] }, mv9(10)])).ok, true);
 });
 
 test("direct messages reach only their members; channels reach everyone", async () => {

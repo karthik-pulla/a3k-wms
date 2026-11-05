@@ -244,3 +244,27 @@ test("a device notices a new copy of the database even once the server's number 
   assert.equal(cases(again.e, B3), 2);
   assert.equal(cases(again.e), 5);
 });
+
+test("while catch-ups keep failing the device says it can't reach the server, until the server answers again (bug B14)", async () => {
+  // A server that stops answering (the preview's database in another tab went away), then comes back
+  let down = true;
+  const call = async <T,>(method: string): Promise<T> => {
+    if (down) throw Object.assign(new Error("Something went wrong"), { status: 500, code: "server" });
+    return (method === "sync.pull" ? { rows: [], seq: 0, more: false, copy: "c1" } : { ok: true, seq: 1, versions: {} }) as T;
+  };
+  // Timers the test fires by hand
+  const timers: (() => void)[] = [];
+  /** Fires the waiting timers one by one, each time checking the device still says it can't reach the server */
+  const fire = async () => { for (const f of timers.splice(0)) { f(); await settle(); assert.equal(e.getStatus().state, "offline"); } };
+  const t = { setTimeout: ((f: () => void) => { timers.push(f); return timers.length; }) as unknown as typeof setTimeout, clearTimeout: (() => {}) as typeof clearTimeout };
+  const e = new SyncEngine({ call, reduce, base: BASE, storageKey: "bravo:b14", cacheKey: null, deviceId: "device-b14-0001", timers: t });
+  await e.open().catch(() => {});
+  await settle();
+  assert.equal(e.getStatus().state, "offline");
+  // Trying again (and failing again) is still not connected: this used to flip back to "saved" after 5 s
+  await fire(); await fire();
+  assert.equal(e.getStatus().state, "offline");
+  down = false;
+  await e.pullNow();
+  assert.equal(e.getStatus().state, "saved");
+});

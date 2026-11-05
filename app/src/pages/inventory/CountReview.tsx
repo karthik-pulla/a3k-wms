@@ -39,9 +39,12 @@ export function CountReview({ session }: { session: CountSession }) {
   const decide = (apply: boolean) => {
     const codes = [...picked].filter(c => pending.some(d => d.code === c));
     if (!codes.length) return;
+    // Every stock change needs a reason (kept with each correction in the history); keeping the system stock changes nothing
+    if (apply && !note.trim()) { toast("Give a reason for the corrections first (e.g. recount confirmed)."); return; }
     dispatch({ type: "count/decide", id: session.id, by: me.name, apply: apply ? codes : [], keep: apply ? [] : codes, note: note.trim() });
     setPicked(new Set());
     toast(apply ? `Applied ${codes.length} correction${codes.length > 1 ? "s" : ""}. Each is in the history with the reason.` : `Kept the system stock for ${codes.length} location${codes.length > 1 ? "s" : ""}.`);
+    setNote("");
   };
   const exportXlsx = () => {
     download(buildXlsx([{
@@ -89,8 +92,8 @@ export function CountReview({ session }: { session: CountSession }) {
           {owner && show === "pending" && pending.length > 0 && (
             <div className="review-actions">
               <label className="toggle-row"><input type="checkbox" checked={pending.every(d => picked.has(d.code))} onChange={e => setPicked(e.target.checked ? new Set(pending.map(d => d.code)) : new Set())} /> Select all</label>
-              <input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Note for the history (optional), e.g. recount confirmed" aria-label="Note" />
-              <button className="btn primary" disabled={!picked.size} onClick={() => decide(true)}>Apply {picked.size || ""} correction{picked.size === 1 ? "" : "s"}</button>
+              <input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason (needed to apply), e.g. recount confirmed" aria-label="Reason" />
+              <button className="btn primary" disabled={!picked.size || !note.trim()} title={note.trim() ? "" : "Give a reason first"} onClick={() => decide(true)}>Apply {picked.size || ""} correction{picked.size === 1 ? "" : "s"}</button>
               <button className="btn" disabled={!picked.size} onClick={() => decide(false)}>Keep system stock</button>
             </div>
           )}

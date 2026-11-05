@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useStore, shipmentTitle, palletCount } from "../../store/store";
 import type { Shipment } from "../../store/types";
-import { suggestPutaway, isEmptySlot, type PalletPlan } from "../../store/putaway";
+import { suggestPutaway, isEmptySlot, planMatches, type PalletPlan } from "../../store/putaway";
 import { describeLocation, faceOf, isFloor, productById } from "../../data/catalog";
 import { LinesEditor } from "../../components/LinesEditor";
 import { RackView, type SlotMark } from "../../components/RackView";
@@ -108,6 +108,8 @@ function PutawayPlan({ s, plan, setPlan, who, onBack }: { s: Shipment; plan: Pal
           <div className="btns">
             {missingReason && <span className="warn small">Give a reason for each slot you changed.</span>}
             <button className="btn primary big" disabled={missingReason} onClick={() => {
+              // Never confirm a plan that isn't this delivery's pallets as they are now (say so instead of doing nothing)
+              if (!planMatches(s, plan)) { toast("The delivery changed since this plan was made. Make the plan again."); onBack(); return; }
               dispatch({ type: "putaway", id: s.id, by: who, plan });
               toast(`${shipmentTitle(s)}: ${plan.length} put-away tasks for the workers. Stock is added as each pallet is confirmed in its slot.`);
               go(`/inbounds/pending/${s.id}`);

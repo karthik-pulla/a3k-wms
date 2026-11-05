@@ -60,6 +60,10 @@ test("a confirmed delivery's put-away tasks hold only what the delivery says is 
   await w.leo.refused("putaway", confirm([task(1, "05A-01-L1-B1", [p1]), task(2, "06A-01-L1-B1", [{ ...p2, cases: 10 }])]));
   await w.leo.refused("putaway", confirm([task(1, "05A-01-L1-B1", [p1]), task(2, "06A-01-L1-B1", [p2]), task(3, "07A-01-L1-B1", [p1])], { ...confirmed, putaway: [...plan, { pallet: 3, slot: "07A-01-L1-B1" }] }));
   await w.leo.refused("putaway", confirm([task(1, "09A-01-L1-B1", [p1]), task(2, "06A-01-L1-B1", [p2])]));
+  // Another delivery's plan (bug B3: a plan left on screen from one delivery confirmed under another's name): a pallet
+  // left out, or a pallet holding fewer cases than the delivery says
+  await w.leo.refused("putaway", confirm([task(1, "05A-01-L1-B1", [p1])], { ...confirmed, putaway: [plan[0]] }));
+  await w.leo.refused("putaway", confirm([task(1, "05A-01-L1-B1", [{ ...p1, cases: 20 }]), task(2, "06A-01-L1-B1", [p2])]));
   // What the app sends: one task per pallet, damaged cases left out; a worker then puts pallet 1 away
   assert.equal((await w.leo.push("putaway", [...confirm([task(1, "05A-01-L1-B1", [p1]), task(2, "06A-01-L1-B1", [p2])]), audit("A2")])).ok, true);
   await w.leo.refused("putaway", [{ key: "shipment:S-1", base: 4, data: confirmed }, task(3, "07A-01-L1-B1", [p1])]);
@@ -84,6 +88,25 @@ test("counts: anyone counting fills in and sends a count for review; only people
   await w.omar.refused("count/status", [{ key: "count:count-1", base: 2, data: { ...C, status: "open", scope: ["01A", "02A"] } }]);
   assert.equal((await w.own.push("count/status", [{ key: "count:count-1", base: 2, data: { ...C, status: "closed", closedAt: AT, closedBy: "Maya" } }])).ok, true);
   await w.omar.refused("count/set", [{ key: "countentry:count-1:01A-01-L1-B2", data: entry }]);
+});
+
+test("count corrections are applied only with the owner's reason (bug B4)", async () => {
+  const w = await team();
+  const C = { id: "count-2", name: "Rack 6", scope: ["06A"], blind: false, status: "review", startedBy: "Maya", startedAt: AT };
+  await w.seed({ "count:count-2": C, "countentry:count-2:01A-01-L1-B1": { lines: [{ ...L1, cases: 41 }], by: "Omar", at: AT }, "stock:01A-01-L1-B1": [L1] });
+  const decided = { ...C, decided: { "01A-01-L1-B1": "applied" } };
+  const fix = (reason: string) => [{ key: "count:count-2", base: 1, data: decided }, { key: "stock:01A-01-L1-B1", base: 1, data: [{ ...L1, cases: 41 }] },
+    { key: "movement:M9", data: { id: "M9", at: AT, by: "Maya", type: "count-correction", location: "01A-01-L1-B1", productId: "S1", cases: 1, reason } }];
+  // No reason (as the app used to send it), or only spaces
+  await w.own.refused("count/decide", fix('Count "Rack 6"'));
+  await w.own.refused("count/decide", fix('Count "Rack 6":   '));
+  // Deciding changes only what was decided
+  await w.own.refused("count/decide", [{ key: "count:count-2", base: 1, data: { ...decided, status: "closed" } }]);
+  // Keeping the system stock changes no stock and needs no reason
+  assert.equal((await w.own.push("count/decide", [{ key: "count:count-2", base: 1, data: { ...C, decided: { "01A-01-L1-B1": "kept" } } }])).ok, true);
+  assert.equal((await w.own.push("count/decide", [{ key: "count:count-2", base: 2, data: decided }, { key: "stock:01A-01-L1-B1", base: 1, data: [{ ...L1, cases: 41 }] },
+    { key: "movement:M9", data: { id: "M9", at: AT, by: "Maya", type: "count-correction", location: "01A-01-L1-B1", productId: "S1", cases: 1, reason: 'Count "Rack 6": recount confirmed' } }, audit("A9")])).ok, true);
+  assert.deepEqual(await w.stockOf("01A-01-L1-B1"), [{ ...L1, cases: 41 }]);
 });
 
 test("office order changes never invent picked cases; cancelling puts back exactly what was taken", async () => {

@@ -22,6 +22,14 @@ export function palletsOf(s: Shipment) {
   return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([pallet, lines]) => ({ pallet, lines }));
 }
 
+/** The plan is this delivery's, as it is now: every pallet once, with exactly its cases (left out of date when the
+ *  delivery was edited after planning, or when the plan was made for another delivery) */
+export function planMatches(s: Shipment, plan: Pick<PalletPlan, "pallet" | "lines">[]): boolean {
+  const key = (ps: Pick<PalletPlan, "pallet" | "lines">[]) => JSON.stringify([...ps].sort((a, b) => a.pallet - b.pallet)
+    .map(p => [p.pallet, [...p.lines].map(l => `${l.productId}:${l.cases}`).sort()]));
+  return key(palletsOf(s)) === key(plan);
+}
+
 export const isEmptySlot = (stock: Record<string, StockLine[]>, code: string) => !(stock[code]?.length);
 
 /**

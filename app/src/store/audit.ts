@@ -35,7 +35,18 @@ export function describe(before: State, a: any, after: State): Described | null 
     case "count/start": return { area: "count", action: `Started count "${a.session.name}"${a.session.blind ? " (blind)" : ""}` };
     case "count/set": return { area: "count", action: a.changes.map((c: { code: string; entry: { lines: { productId: string; cases: number }[]; empty?: boolean } | null }) => `${c.code}: ${c.entry ? (c.entry.empty ? "empty" : lines(c.entry.lines)) : "cleared"}`).join("; ").replace(/^/, `Counted (${before.counts.find(x => x.id === a.id)?.name ?? "count"}) `) };
     case "count/status": return { area: "count", action: `${a.status === "review" ? "Finished counting" : a.status === "closed" ? "Closed" : "Reopened"} "${before.counts.find(x => x.id === a.id)?.name}"` };
-    case "count/decide": return { area: "count", action: `${a.apply.length ? `Applied ${a.apply.length} count correction${a.apply.length > 1 ? "s" : ""} (${a.apply.join(", ")})` : ""}${a.apply.length && a.keep.length ? "; " : ""}${a.keep.length ? `kept system stock for ${a.keep.join(", ")}` : ""}${a.note ? `: ${a.note}` : ""}` };
+    case "count/decide": {
+      // Each corrected slot with what it held before and after, per product (e.g. 06A-01-L1-B2: SF101 Jasmine Rice 30 → 31)
+      const sum = (ls: { productId: string; cases: number }[] | undefined, id: string) => (ls ?? []).filter(l => l.productId === id).reduce((n, l) => n + l.cases, 0);
+      const slot = (code: string) => {
+        const was = before.stock[code], is = after.stock[code];
+        const ids = [...new Set([...(was ?? []), ...(is ?? [])].map(l => l.productId))];
+        const changed = ids.filter(id => sum(was, id) !== sum(is, id)).map(id => `${pn(id)} ${sum(was, id)} → ${sum(is, id)}`);
+        return `${code}: ${changed.join(", ") || "no change"}`;
+      };
+      const applied = a.apply.length ? `Applied ${a.apply.length} count correction${a.apply.length > 1 ? "s" : ""} (${a.apply.map(slot).join("; ")})` : "";
+      return { area: "count", action: `${applied}${a.apply.length && a.keep.length ? "; " : ""}${a.keep.length ? `kept system stock for ${a.keep.join(", ")}` : ""}${a.note ? `. Reason: ${a.note}` : ""}` };
+    }
     case "count/delete": return { area: "count", action: `Deleted count "${before.counts.find(x => x.id === a.id)?.name}"` };
     case "order/save": {
       // A new order that had to take another number (someone else took its first one) is logged under the number it got
@@ -48,7 +59,12 @@ export function describe(before: State, a: any, after: State): Described | null 
     }
     case "order/plan": return { area: "outbound", action: `Re-planned the picks for ${a.id} (${strategyName(a.strategy).replace(/^./, c => c.toLowerCase())})` };
     case "order/assign": return { area: "outbound", action: `Gave ${a.id} to ${person(a.assignee)} to pack` };
-    case "order/pick": { const p = before.orders.find(o => o.id === a.id)?.picks?.find(x => x.key === a.key); return { area: "outbound", pallet: true, action: `Picked ${cs(a.cases)} of ${pn(p?.productId)} from ${p?.location} for ${a.id}${a.note ? ` (${a.note})` : ""}` }; }
+    case "order/pick": {
+      const p = before.orders.find(o => o.id === a.id)?.picks?.find(x => x.key === a.key);
+      // The cases that really came off the pallet (as the stock history has them), not just what was typed
+      const got = after.orders.find(o => o.id === a.id)?.picks?.find(x => x.key === a.key)?.picked?.cases ?? a.cases;
+      return { area: "outbound", pallet: true, action: `Picked ${cs(got)}${got < (p?.cases ?? 0) ? ` (of ${p!.cases} planned)` : ""} of ${pn(p?.productId)} from ${p?.location} for ${a.id}${a.note ? ` (${a.note})` : ""}` };
+    }
     case "order/unpick": { const p = before.orders.find(o => o.id === a.id)?.picks?.find(x => x.key === a.key); return { area: "outbound", pallet: true, action: `Put ${cs(p?.picked?.cases ?? 0)} of ${pn(p?.productId)} back on ${p?.location} (${a.id})` }; }
     case "order/ship": return { area: "outbound", action: `Confirmed ${a.id} and marked it shipped` };
     case "order/cancel": return { area: "outbound", action: `Cancelled ${a.id}: ${a.reason}` };

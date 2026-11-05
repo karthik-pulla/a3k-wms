@@ -9,7 +9,7 @@ import { MessagesTab } from "./components/home/MessagesTab";
 import { ToastProvider, useToast } from "./components/Toast";
 import { HomeMessages } from "./components/chat/HomeMessages";
 import { Home } from "./pages/Home";
-import { initials } from "./auth/accountUser";
+import { initials, selfFrom } from "./auth/accountUser";
 import { AuthGate } from "./auth/AuthGate";
 import { identityUser, useIdentity, IdentityContext, type Identity } from "./auth/identity";
 import { canManageAccounts } from "./auth/permissions";
@@ -109,7 +109,10 @@ function Session({ settings, update, reset }: ReturnType<typeof useSettings>) {
   // The admin account only (testing and debugging): use the app as another person, or with another role as yourself
   const admin = !!account.admin;
   const viewAs = admin && settings.userId ? state.chat.users.find(u => u.id === settings.userId && u.id !== own.id) : undefined;
-  const self = state.chat.users.find(u => u.id === own.id) ?? own;
+  // The account (the server's, or this device's sign-in) decides the role, its switches and the clients seen; the
+  // people list only knows names and groups (it has no switches), so it never overrides them
+  const rec = state.chat.users.find(u => u.id === own.id);
+  const self = useMemo(() => (rec ? selfFrom(rec, own) : own), [rec, own]);
   const testRole = admin && !viewAs && settings.testRole && settings.testRole !== self.role ? settings.testRole : undefined;
   const me = useMemo(() => viewAs ?? (testRole ? { ...self, role: testRole, groups: groupsFor(testRole) } : self), [viewAs, testRole, self]);
   // Every change is logged under the signed-in account, naming the person or role being tested

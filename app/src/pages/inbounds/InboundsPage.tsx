@@ -35,9 +35,9 @@ export function InboundsPage({ parts }: { parts: string[] }) {
   let body;
   const thread = shipment && <ThreadSection target={{ shipment: shipment.id }} />;
   if (tab === "new") body = <NewShipment mailId={id} />;
-  else if (tab === "incoming" && id) body = shipment ? <div className="stack"><IncomingDetail shipment={shipment} who={who} canReceive={confirm} />{thread}</div> : <NotFound what="delivery" />;
+  else if (tab === "incoming" && id) body = shipment ? <div className="stack"><IncomingDetail key={shipment.id} shipment={shipment} who={who} canReceive={confirm} />{thread}</div> : <NotFound what="delivery" />;
   else if (tab === "incoming") body = <ShipmentList status="incoming" />;
-  else if (tab === "pending" && id) body = shipment ? <div className="stack"><PendingDetail shipment={shipment} who={who} owner={confirm} />{thread}</div> : <NotFound what="delivery" />;
+  else if (tab === "pending" && id) body = shipment ? <div className="stack"><PendingDetail key={shipment.id} shipment={shipment} who={who} owner={confirm} />{thread}</div> : <NotFound what="delivery" />;
   else if (tab === "pending") body = <ShipmentList status="pending" />;
   else if (tab === "returns" && id) body = ret ? <ReturnDetail request={ret} who={who} owner={owner} /> : <NotFound what="return request" />;
   else if (tab === "returns") body = <Returns who={who} owner={owner} />;

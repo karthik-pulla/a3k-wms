@@ -9,7 +9,8 @@ import { describe } from "./audit";
 import { canSeeClient } from "../auth/permissions";
 import { nextOrderId, planOrder, putBack, statusOf, takeFrom } from "../outbound/plan";
 import { sampleChat } from "../chat/sampleChat";
-import type { PalletPlan } from "./putaway";
+import { countReason } from "../../../server/src/shared/counts.ts";
+import { planMatches, type PalletPlan } from "./putaway";
 
 // Saved (encrypted) on this device until the server exists. "Reset sample data" in Settings starts over.
 
@@ -107,7 +108,8 @@ function reducer(state: State, a: Action): State {
     case "putaway": {
       // Confirming gives each pallet a task to its slot; stock is added when a worker confirms it's in the slot
       const s = state.shipments.find(x => x.id === a.id);
-      if (!s) return state;
+      // Only a pending delivery, and only a plan of its own pallets (every one, with exactly its cases)
+      if (!s || s.status !== "pending" || !planMatches(s, a.plan)) return state;
       const tasks: Task[] = a.plan.map((p, i) => {
         const meta = (productId: string) => s.lines.find(l => l.productId === productId && l.pallet === p.pallet);
         return {
@@ -265,7 +267,8 @@ function reducer(state: State, a: Action): State {
     case "order/pick": {
       const o = state.orders.find(x => x.id === a.id);
       const p = o?.picks?.find(x => x.key === a.key);
-      if (!o || !p || p.picked) return state;
+      // Never more than planned from that pallet (more would take other orders' cases, or over-fill this one)
+      if (!o || !p || p.picked || !Number.isInteger(a.cases) || a.cases < 0 || a.cases > p.cases) return state;
       const { lines, taken } = takeFrom(state.stock[p.location] ?? [], p.productId, a.cases, state, p.location);
       const got = taken.reduce((x, l) => x + l.cases, 0);
       const stock = { ...state.stock };
@@ -341,7 +344,10 @@ function reducer(state: State, a: Action): State {
       if (!c) return state;
       const stock = { ...state.stock };
       const moves: Omit<Movement, "id" | "at">[] = [];
-      const reason = `Count "${c.name}"${a.note ? `: ${a.note}` : ""}`;
+      // Every stock change needs a reason: corrections aren't applied without one (keeping the system stock changes nothing)
+      const note = a.note.trim();
+      if (a.apply.length && !note) return state;
+      const reason = a.apply.length ? countReason(c.name, note) : "";
       for (const code of a.apply) {
         const e = c.entries[code];
         if (!e) continue;

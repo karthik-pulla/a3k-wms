@@ -19,6 +19,12 @@ import { useAppearance, useSettings } from "../settings";
 const App = lazy(() => import("../App"));
 const preview = BACKEND === "preview";
 const route = () => window.location.hash.replace(/^#\/?/, "").split("/");
+/** The same start with the account as the server now has it; unchanged (same object) when nothing about the person changed */
+function withAccount(start: ServerStart, me: Me): ServerStart {
+  const account = serverAccount(me);
+  if (JSON.stringify(account) === JSON.stringify(start.identity.account)) return start;
+  return { ...start, identity: { ...start.identity, account, me } };
+}
 
 type Phase =
   | { kind: "loading" }
@@ -104,7 +110,8 @@ export default function ServerRoot() {
     if (phase.kind !== "open") return;
     // Also keeps the support banner current
     const t = window.setInterval(() => {
-      api<Me>("auth.me").then(me => setPhase(p => (p.kind === "open" ? { ...p, me } : p)))
+      // and the person's role, switches and clients: an owner's change reaches this screen without signing in again
+      api<Me>("auth.me").then(me => setPhase(p => (p.kind === "open" ? { ...p, me, start: withAccount(p.start, me) } : p)))
         .catch(e => { if (e instanceof ApiCallError && e.code === "not-signed-in") setPhase(p => (p.kind === "open" ? { kind: "signin", note: "You were signed out. Sign in again to carry on." } : p)); });
     }, 30_000);
     return () => window.clearInterval(t);
@@ -276,10 +283,24 @@ function ServerNotes({ me }: { me: Me }) {
   );
 }
 
-/** "Opening…"; in the preview, the first visit also builds the in-browser database, so say so after a moment */
+/** "Opening…"; in the preview, the first visit also builds the in-browser database, so say so after a moment; and after
+ *  45 seconds a way out instead of waiting forever */
 function Loading() {
   const [slow, setSlow] = useState(false);
-  useEffect(() => { const t = window.setTimeout(() => setSlow(true), 2500); return () => window.clearTimeout(t); }, []);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setSlow(true), 2500), u = window.setTimeout(() => setStuck(true), 45_000);
+    return () => { window.clearTimeout(t); window.clearTimeout(u); };
+  }, []);
+  if (stuck) return (
+    <main className="auth-loading">
+      <div className="glass crash-card">
+        <h2>This is taking too long</h2>
+        <p className="muted">The warehouse didn't open. Reloading usually fixes it.</p>
+        <button className="btn primary" onClick={() => location.reload()}>Reload</button>
+      </div>
+    </main>
+  );
   return (
     <div className="auth-loading" role="status">
       {slow && import.meta.env.VITE_WMS_BACKEND === "preview" ? "Setting up the preview in this browser (first visit only)…" : "Opening…"}

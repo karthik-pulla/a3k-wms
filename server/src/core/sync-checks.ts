@@ -6,6 +6,7 @@
 import { forbidden } from "./errors.ts";
 import { allows, type BaseRole, type Permissions } from "../shared/permissions.ts";
 import { idOf, kindOf, type Change, type Kind } from "../shared/sync.ts";
+import { countNote } from "../shared/counts.ts";
 
 export interface CheckWho { personId: string | null; base: BaseRole; perms: Permissions; clients: string[] | null }
 
@@ -248,6 +249,8 @@ function orderPick(c: Ctx) {
   if (!picked || !Number.isInteger(picked.cases) || picked.cases < 0 || !Array.isArray(picked.taken)) throw no("A pick says how many cases were taken");
   const taken = linesOf(picked.taken, bp.location);
   if (taken.some(l => l.productId !== bp.productId) || taken.reduce((n, l) => n + l.cases, 0) !== picked.cases) throw no("A pick takes only that product, as many cases as it says");
+  // Never more than planned from that pallet: the rest may be other orders' (reserved), and the order would be over-filled
+  if (picked.cases > bp.cases) throw no("A pick can't take more cases than were planned from that pallet");
   // The slot afterwards: its lines in order, those of the product reduced or gone, and what went is what was taken
   const loc = bp.location;
   const sent = stockAt(c).get(loc);
@@ -272,6 +275,8 @@ function orderPick(c: Ctx) {
   for (const l of taken) { const id = canon(without(l, "cases")); said.set(id, (said.get(id) ?? 0) + l.cases); }
   if (!same(Object.fromEntries(went), Object.fromEntries(said))) throw no(`The stock on ${loc} doesn't match this pick`);
   movementsAre(c, ["pick"], [loc]);
+  // The stock history says what really came off the pallet
+  for (const m of c.of("movement")) if (m.after.productId !== bp.productId || m.after.cases !== picked.cases || m.after.orderId !== o.id) throw no("The movement log doesn't match this pick");
 }
 
 /** Puts picked cases back (undo), merging with a matching line when there is one: as the app does (outbound/plan.ts) */
@@ -334,6 +339,9 @@ function putaway(c: Ctx) {
   const tasks = c.of("task");
   if (!tasks.length || tasks.length !== plan.length || new Set(plan.map(p => p.pallet)).size !== plan.length) throw no("Confirming a delivery makes one task per pallet");
   const lines: any[] = Array.isArray(s.lines) ? s.lines : [];
+  // Every pallet of this delivery (the cases that aren't damaged), and only those: never another delivery's plan
+  const pallets = new Set(lines.filter(l => l.productId && (l.cases || 0) - (l.damaged ?? 0) > 0).map(l => l.pallet));
+  if (plan.length !== pallets.size || plan.some(p => !pallets.has(p.pallet))) throw no("Confirming a delivery plans each of its pallets once");
   for (const p of tasks) {
     const t = p.after;
     if (p.before || !t || t.id !== p.id) throw no("Confirming a delivery makes new tasks");
@@ -350,6 +358,7 @@ function putaway(c: Ctx) {
       room.set(l.productId, room.get(l.productId)! - l.cases);
       if (room.get(l.productId)! < 0) throw no(`Pallet ${t.pallet}'s task holds more cases than the delivery says`);
     }
+    if ([...room.values()].some(n => n > 0)) throw no(`Pallet ${t.pallet}'s task holds fewer cases than the delivery says`);
   }
 }
 
@@ -381,6 +390,17 @@ function countStatus(c: Ctx) {
   const p = one(c, "count", "count");
   if (!p.before || !p.after || !onlyChanged(p.before, p.after, ["status", "closedAt", "closedBy"])) throw no("This changes only the count's status");
   if (!allows(c.who.base, c.who.perms, "start-count") && !(p.before.status === "open" && p.after.status === "review")) throw no("Only people who start counts reopen or close them");
+}
+
+/** An owner's decision on a count's differences: every correction applied carries the owner's reason (owner-only, so
+ *  the stock itself isn't checked here; the rule that every stock change has a reason is) */
+function countDecide(c: Ctx) {
+  const p = one(c, "count", "count");
+  if (!p.before || !p.after || !onlyChanged(p.before, p.after, ["decided"])) throw no("Deciding changes only which differences were decided");
+  for (const m of c.of("movement")) {
+    if (!m.after || m.after.type !== "count-correction") throw no("The movement log doesn't match this change");
+    if (!countNote(p.before.name, m.after.reason)) throw no("A count correction needs a reason");
+  }
 }
 
 // ---------- Orders (office) ----------
@@ -458,7 +478,7 @@ function submitReturn(c: Ctx) {
 
 /**
  * The actions checked piece by piece. Not here: the owners' own powers, which may change stock directly anyway
- * (stock/adjust, count/decide, count/delete, decideReturn), and actions that touch no stock (inbox, settings,
+ * (stock/adjust, count/delete, decideReturn; count/decide only for its reason), and actions that touch no stock (inbox, settings,
  * announcements, work teams, messages), which rely on their switch and kinds (ACTION_RULES).
  */
 const CHECKS: Record<string, (c: Ctx) => void | Promise<void>> = {
@@ -478,6 +498,7 @@ const CHECKS: Record<string, (c: Ctx) => void | Promise<void>> = {
   "count/start": countStart,
   "count/set": countSet,
   "count/status": countStatus,
+  "count/decide": countDecide,
   "order/save": orderSave,
   "order/approve": orderPlan,
   "order/plan": orderPlan,

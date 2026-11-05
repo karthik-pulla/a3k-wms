@@ -79,8 +79,45 @@ export const previewOutbox = { read: readOutbox, subscribe: (f: () => void) => {
 interface Engine { platform: Db; tenants: Map<string, Db>; ready: Promise<void> }
 let engine: Engine | null = null;
 const idb = (name: string) => `idb://wms-preview-${name}`;
-// Every tab of this browser shares each database (pgliteWorker.ts)
-const open = (name: string): Pg => new PGliteWorker(new Worker(new URL("./pgliteWorker.ts", import.meta.url), { type: "module" }), { dataDir: idb(name), id: `wms-preview-${name}` });
+// Every tab of this browser shares each database (pgliteWorker.ts), opened once per tab
+const opened = new Map<string, Pg>();
+const open = (name: string): Pg => {
+  let pg = opened.get(name);
+  if (!pg) { pg = shared(new PGliteWorker(new Worker(new URL("./pgliteWorker.ts", import.meta.url), { type: "module" }), { dataDir: idb(name), id: `wms-preview-${name}` })); opened.set(name, pg); }
+  return pg;
+};
+
+/** No answer in this long: give up on the call (the caller sees an error and tries again; nothing waits forever) */
+const PG_TIMEOUT_MS = 20_000;
+const leaderGone = (e: unknown) => e instanceof Error && /leader changed/i.test(e.message);
+/**
+ * One tab's worker holds the shared database; when that tab reloads or closes, another tab's worker takes over. PGlite
+ * then rejects what was on its way ("Leader changed") but can also hang for good: the lock it releases afterwards, or a
+ * query sent just then, goes out before the new holder listens to this tab and is never answered. A hung query in the
+ * first-time setup kept its lock, so every new tab stayed at "Setting up the preview…" and open tabs stopped syncing
+ * (bug B14, 3 Nov 2026). So each call here gives up when the holder changes (or after a while), waits until the new
+ * holder is connected, and a plain query is sent again. A transaction isn't: it fails and its caller tries again (the
+ * sync saves a change sent twice once).
+ */
+function shared(w: PGliteWorker): Pg {
+  const attempt = <T,>(f: () => Promise<T>): Promise<T> => new Promise<T>((resolve, reject) => {
+    const off = w.onLeaderChange(() => { done(); reject(new Error("Leader changed (the preview's database moved to another tab)")); });
+    const timer = window.setTimeout(() => { done(); reject(new Error("The preview's database didn't answer")); }, PG_TIMEOUT_MS);
+    const done = () => { off(); window.clearTimeout(timer); };
+    f().then(v => { done(); resolve(v); }, e => { done(); reject(e); });
+  });
+  const again = async <T,>(f: () => Promise<T>): Promise<T> => {
+    for (let tries = 1; ; tries++) {
+      await w.waitReady;
+      try { return await attempt(f); } catch (e) { if (!leaderGone(e) || tries >= 4) throw e; }
+    }
+  };
+  return {
+    query: ((text: string, values?: unknown[]) => again(() => w.query(text, values))) as Pg["query"],
+    exec: ((text: string) => again(() => w.exec(text))) as Pg["exec"],
+    transaction: (async (fn: Parameters<Pg["transaction"]>[0]) => { await w.waitReady; return attempt(() => w.transaction(fn)); }) as Pg["transaction"],
+  };
+}
 
 async function openTenantDb(id: string, fresh: boolean, config?: unknown, products?: unknown[]): Promise<Db> {
   const pg = open(`t-${id}`);
@@ -183,7 +220,12 @@ async function demoBuyer(e: Engine, id: string) {
   await finishInvite(env, token, await totpAt(secret, totpCounter(Date.now()) - 1), { ip: "preview" });
 }
 
-async function ready(): Promise<Engine> { engine ??= start(); await engine.ready; return engine; }
+async function ready(): Promise<Engine> {
+  const e = engine ??= start();
+  // A setup that failed (the database moved to another tab meanwhile) is tried again on the next call, not kept failing
+  try { await e.ready; } catch (err) { if (engine === e) engine = null; throw err; }
+  return e;
+}
 
 const opsEnv = (e: Engine): AuthEnv => ({ db: e.platform, tables: OPS_TABLES, appKey: KEY, now: Date.now, issuer: "WMS console (preview)", ownWords: ["wms"], log: opsLog() });
 

@@ -95,9 +95,13 @@ export function OrderDetail({ order: o }: { order: StoreOrder }) {
   const confirm = (p: PickLine) => {
     const n = parseInt(qty, 10);
     if (!Number.isFinite(n) || n < 0) { toast("Enter the cases taken."); return; }
+    // Never more than planned: the rest of the pallet may be reserved for other orders, and the order would be over-filled
+    if (n > p.cases) { toast(`Take at most ${p.cases} cs from ${p.location}: that's what this order needs from it.`); return; }
     if (n < p.cases && !note.trim()) { toast("Say why fewer cases were taken (e.g. pallet was short)."); return; }
     dispatch({ type: "order/pick", id: o.id, key: p.key, cases: n, by: me.name, note: note.trim() || undefined });
-    toast(n < p.cases ? `Took ${n} of ${p.cases} from ${p.location}. The rest is planned from the next oldest pallet.` : `Picked ${n} cs from ${p.location}.`);
+    // What really came off the pallet (it may hold fewer than the record says)
+    const got = Math.min(n, (state.stock[p.location] ?? []).filter(l => l.productId === p.productId).reduce((a, l) => a + l.cases, 0));
+    toast(got < p.cases ? `Took ${got} of ${p.cases} from ${p.location}. The rest is planned from the next oldest pallet.` : `Picked ${got} cs from ${p.location}.`);
     setConfirming(null); setNote("");
     const next = route.find(x => !x.picked && x.key !== p.key);
     if (next) choose(next);
@@ -210,9 +214,10 @@ export function OrderDetail({ order: o }: { order: StoreOrder }) {
                       {p.picked && <small className="muted">Picked {p.picked.cases} cs by {p.picked.by}, {fmtDay(p.picked.at)}{p.picked.note ? ` · ${p.picked.note}` : ""}</small>}
                       {confirming === p.key && (
                         <form className="pick-confirm" onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); confirm(p); }}>
-                          <label>Cases taken <input className="input num-in" autoFocus inputMode="numeric" value={qty} onChange={e => setQty(e.target.value.replace(/\D/g, ""))} /></label>
+                          <label>Cases taken <input className="input num-in" autoFocus inputMode="numeric" value={qty} onChange={e => setQty(e.target.value.replace(/\D/g, ""))} aria-invalid={Number(qty) > p.cases} /></label>
                           {Number(qty) < p.cases && <input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Why fewer? e.g. pallet was short" aria-label="Reason" />}
-                          <button className="btn small primary">Confirm</button>
+                          {Number(qty) > p.cases && <small className="warn" role="alert">At most {p.cases} cs: that's what this order needs from this pallet.</small>}
+                          <button className="btn small primary" disabled={!qty || Number(qty) > p.cases || (Number(qty) < p.cases && !note.trim())}>Confirm</button>
                           <button type="button" className="btn small" onClick={() => setConfirming(null)}>Cancel</button>
                         </form>
                       )}
