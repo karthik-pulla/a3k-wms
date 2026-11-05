@@ -8,6 +8,8 @@ import { RackView, type SlotMark } from "../../components/RackView";
 import { useToast } from "../../components/Toast";
 import { go } from "../../router";
 import { occupied, isOpen } from "../../store/tasks";
+import { ReceivedCheck, SplitPallets } from "./Receiving";
+import { receivingDifferences } from "../../../../server/src/shared/receiving.ts";
 
 const REASONS = ["Closer to the same product", "Suggested slot is blocked or damaged", "Heavy pallet, keep it low", "Fits the rack's product type better", "Other"];
 
@@ -15,11 +17,13 @@ const REASONS = ["Closer to the same product", "Suggested slot is blocked or dam
 export function PendingDetail({ shipment: s, who, owner }: { shipment: Shipment; who: string; owner: boolean }) {
   const { state, dispatch } = useStore();
   const [plan, setPlan] = useState<PalletPlan[] | null>(null);
+  const [difference, setDifference] = useState("");
   if (s.status === "stored" || s.status === "putaway") return <StoredSummary s={s} />;
   const damaged = s.lines.reduce((a, l) => a + (l.damaged ?? 0), 0);
-  const ready = s.lines.length > 0 && s.lines.every(l => l.productId && l.cases > 0);
+  const differs = receivingDifferences(s.announced, s.lines).length > 0;
+  const ready = s.lines.length > 0 && s.lines.every(l => l.productId && l.cases > 0) && (!differs || !!difference.trim());
 
-  if (plan) return <PutawayPlan s={s} plan={plan} setPlan={setPlan} who={who} onBack={() => setPlan(null)} />;
+  if (plan) return <PutawayPlan s={s} plan={plan} setPlan={setPlan} who={who} difference={differs ? difference.trim() : undefined} onBack={() => setPlan(null)} />;
   return (
     <div className="stack">
       <div className="facts glass">
@@ -33,10 +37,14 @@ export function PendingDetail({ shipment: s, who, owner }: { shipment: Shipment;
         <LinesEditor lines={s.lines} client={s.client} editable={owner} showDamaged
           onChange={lines => dispatch({ type: "saveShipment", shipment: { ...s, lines } })} />
         {damaged > 0 && <p className="note warn">{damaged} damaged case{damaged > 1 ? "s" : ""} will be left out of put-away and listed for the supplier's damage report.</p>}
+        {owner && <div className="btns"><SplitPallets lines={s.lines} onChange={lines => dispatch({ type: "saveShipment", shipment: { ...s, lines } })} /></div>}
+      </div>
+      <ReceivedCheck s={s} reason={difference} onReason={owner ? setDifference : undefined} />
+      <div className="panel glass">
         <div className="panel-foot">
           {owner ? (
             <>
-              <span className="muted small">Check the cases, lots and dates, then confirm. Each pallet gets an empty slot near similar stock.</span>
+              <span className="muted small">{differs && !difference.trim() ? "What arrived differs from what was announced: give the reason above, then confirm." : "Check the cases, lots and dates, then confirm. Each pallet gets an empty slot near similar stock."}</span>
               <button className="btn primary big" disabled={!ready} onClick={() => setPlan(suggestPutaway(occupied(state), s))}>Confirm</button>
             </>
           ) : (
@@ -48,7 +56,7 @@ export function PendingDetail({ shipment: s, who, owner }: { shipment: Shipment;
   );
 }
 
-function PutawayPlan({ s, plan, setPlan, who, onBack }: { s: Shipment; plan: PalletPlan[]; setPlan: (p: PalletPlan[]) => void; who: string; onBack: () => void }) {
+function PutawayPlan({ s, plan, setPlan, who, difference, onBack }: { s: Shipment; plan: PalletPlan[]; setPlan: (p: PalletPlan[]) => void; who: string; difference?: string; onBack: () => void }) {
   const { state, dispatch } = useStore();
   const toast = useToast();
   const [sel, setSel] = useState(plan[0]?.pallet ?? 0);
@@ -110,7 +118,7 @@ function PutawayPlan({ s, plan, setPlan, who, onBack }: { s: Shipment; plan: Pal
             <button className="btn primary big" disabled={missingReason} onClick={() => {
               // Never confirm a plan that isn't this delivery's pallets as they are now (say so instead of doing nothing)
               if (!planMatches(s, plan)) { toast("The delivery changed since this plan was made. Make the plan again."); onBack(); return; }
-              dispatch({ type: "putaway", id: s.id, by: who, plan });
+              dispatch({ type: "putaway", id: s.id, by: who, plan, ...(difference ? { difference } : {}) });
               toast(`${shipmentTitle(s)}: ${plan.length} put-away tasks for the workers. Stock is added as each pallet is confirmed in its slot.`);
               go(`/inbounds/pending/${s.id}`);
             }}>Confirm and send to workers</button>
@@ -160,6 +168,7 @@ function StoredSummary({ s }: { s: Shipment }) {
         </div>
         {s.status === "putaway" && <p className="muted small">Each pallet is added to stock when a worker confirms it's in its slot. <a className="link" href="#/tasks">Tasks ›</a></p>}
       </div>
+      <ReceivedCheck s={s} />
     </div>
   );
 }

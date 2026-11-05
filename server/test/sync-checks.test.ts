@@ -72,6 +72,30 @@ test("a confirmed delivery's put-away tasks hold only what the delivery says is 
   assert.deepEqual(await w.stockOf("05A-01-L1-B1"), [p1]);
 });
 
+test("what a delivery announced is kept as it was when it arrived, and confirming a different quantity needs a reason", async () => {
+  const w = await team();
+  const S = { id: "S-2", client: "Sunfield", number: "1032", supplier: "Sunfield Foods", ref: "MSCU-2", expected: "2026-10-16", status: "incoming",
+    lines: [{ key: "a", productId: "S1", cases: 60, pallet: 1, lot: "L1", bestBefore: "2027-06" }, { key: "b", productId: "S1", cases: 40, pallet: 2, lot: "L1", bestBefore: "2027-06" }] };
+  await w.seed({ "shipment:S-2": S });
+  const move = { key: "movement:M2", data: { id: "M2", at: AT, by: "Leo", type: "receive", shipmentId: "S-2", reason: "Arrived" } };
+  const arrived = { ...S, status: "pending", receivedAt: AT, receivedBy: "Leo", condition: "ok" };
+  // Announcing something other than what the delivery said
+  await w.leo.refused("receive", [{ key: "shipment:S-2", base: 1, data: { ...arrived, announced: [{ productId: "S1", cases: 90 }] } }, move]);
+  assert.equal((await w.leo.push("receive", [{ key: "shipment:S-2", base: 1, data: { ...arrived, announced: [{ productId: "S1", cases: 100 }] } }, move, audit("A3")])).ok, true);
+  const pending = { ...arrived, announced: [{ productId: "S1", cases: 100 }] };
+  // Pending edits what was received, never what was announced
+  await w.leo.refused("saveShipment", [{ key: "shipment:S-2", base: 2, data: { ...pending, announced: [{ productId: "S1", cases: 98 }] } }]);
+  const short = { ...pending, lines: [S.lines[0], { ...S.lines[1], cases: 38 }] };
+  assert.equal((await w.leo.push("saveShipment", [{ key: "shipment:S-2", base: 2, data: short }])).ok, true);
+  const plan = [{ pallet: 1, slot: "05A-01-L1-B1" }, { pallet: 2, slot: "06A-01-L1-B1" }];
+  const task = (pallet: number, to: string, cases: number) => ({ key: `task:U${pallet}`, data: { id: `U${pallet}`, kind: "putaway", status: "open", from: "RECV-FLOOR", to, shipmentId: "S-2", pallet, lines: [{ productId: "S1", cases, lot: "L1", bestBefore: "2027-06", shipmentId: "S-2" }], createdBy: "Leo", createdAt: AT } });
+  const confirmed = { ...short, status: "putaway", confirmedAt: AT, confirmedBy: "Leo", putaway: plan };
+  const tasks = [task(1, "05A-01-L1-B1", 60), task(2, "06A-01-L1-B1", 38)];
+  await w.leo.refused("putaway", [{ key: "shipment:S-2", base: 3, data: confirmed }, ...tasks]);
+  await w.leo.refused("putaway", [{ key: "shipment:S-2", base: 3, data: { ...confirmed, difference: "  " } }, ...tasks]);
+  assert.equal((await w.leo.push("putaway", [{ key: "shipment:S-2", base: 3, data: { ...confirmed, difference: "2 cases short, driver signed" } }, ...tasks, audit("A4")])).ok, true);
+});
+
 test("counts: anyone counting fills in and sends a count for review; only people who start counts reopen or close it", async () => {
   const w = await team();
   const C = { id: "count-1", name: "Rack 1", scope: ["01A"], blind: false, status: "open", startedBy: "Maya", startedAt: AT };

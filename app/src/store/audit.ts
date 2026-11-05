@@ -4,6 +4,7 @@ import { productById } from "../data/catalog";
 import type { AuditEntry, State } from "./types";
 import { strategyName } from "../outbound/plan";
 import { productChanges } from "../../../server/src/shared/products.ts";
+import { receivingDifferences } from "../../../server/src/shared/receiving.ts";
 
 type Described = Pick<AuditEntry, "area" | "action" | "pallet">;
 const pn = (id?: string | null) => { const p = id ? productById(id) : undefined; return p ? `${p.code} ${p.name}` : "a product"; };
@@ -21,7 +22,12 @@ export function describe(before: State, a: any, after: State): Described | null 
   switch (a.type) {
     case "saveShipment": return { area: "inbound", action: `${before.shipments.some(s => s.id === a.shipment.id) ? "Edited" : "Added"} delivery ${a.shipment.client} ${a.shipment.number}: ${lines(a.shipment.lines)}` };
     case "receive": return { area: "inbound", action: `Marked ${title(a.id)} arrived${a.condition === "damaged" ? " with damage" : ""}` };
-    case "putaway": return { area: "inbound", action: `Confirmed ${title(a.id)} and assigned slots: ${a.plan.map((p: { pallet: number; slot: string }) => `P${p.pallet} → ${p.slot}`).join(", ")}` };
+    case "putaway": {
+      const s = ship(a.id);
+      const diff = s ? receivingDifferences(s.announced, s.lines) : [];
+      const differs = diff.length ? `. Received differs from announced: ${diff.map(d => `${pn(d.productId)} ${d.announced} → ${d.received}`).join(", ")}. Reason: ${a.difference ?? "none given"}` : "";
+      return { area: "inbound", action: `Confirmed ${title(a.id)} and assigned slots: ${a.plan.map((p: { pallet: number; slot: string }) => `P${p.pallet} → ${p.slot}`).join(", ")}${differs}` };
+    }
     case "submitReturn": return { area: "inbound", action: `Requested return ${a.request.id} from ${a.request.store}: ${lines(a.request.items)} (${a.request.reason})` };
     case "decideReturn": return { area: "inbound", action: `${a.approve ? `Approved return ${a.id} (${a.outcome})` : `Rejected return ${a.id}`}${a.note ? `: ${a.note}` : ""}` };
     case "reset": return { area: "data", action: "Reset the sample data" };

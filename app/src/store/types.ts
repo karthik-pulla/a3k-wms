@@ -1,6 +1,7 @@
 import type { ProductText } from "../../../server/src/shared/products.ts";
 import type { Client } from "../data/catalog";
 import type { Permissions } from "../../../server/src/shared/permissions.ts";
+import type { Announced } from "../../../server/src/shared/receiving.ts";
 
 /** One product line of a shipment. Lines with the same pallet number share a pallet (a mixed pallet). */
 export interface ShipmentLine {
@@ -33,6 +34,10 @@ export interface Shipment {
   receivedAt?: string;
   receivedBy?: string;
   condition?: "ok" | "damaged";
+  /** Cases per product the delivery said were coming, kept when it was marked arrived; the lines then hold what was received */
+  announced?: Announced[];
+  /** Why what was received differs from what was announced, given when the delivery is confirmed */
+  difference?: string;
   confirmedAt?: string;
   confirmedBy?: string;
   putaway?: { pallet: number; slot: string; reason?: string }[];
@@ -124,6 +129,8 @@ export interface StoreOrder {
   source?: OrderSource;
   /** Store's PO / slip number, file name, sender */
   ref?: string;
+  /** The brand's sales order number, when the order came from its sales order / packing slip */
+  salesOrder?: string;
   sourceName?: string;
   /** Text read from the PDF or email, kept for checking the draft */
   sourceText?: string;

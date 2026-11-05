@@ -28,6 +28,7 @@ export function OrderEditor({ order }: { order?: StoreOrder }) {
   const [store, setStore] = useState(order?.store ?? "");
   const [due, setDue] = useState(order?.due ?? "");
   const [ref, setRef] = useState(order?.ref ?? "");
+  const [salesOrder, setSalesOrder] = useState(order?.salesOrder ?? "");
   const [notes, setNotes] = useState(order?.notes ?? "");
   const [lines, setLines] = useState<Line[]>(() => (order?.lines.length ? order.lines.map((l, i) => ({ key: `l${i}`, ...l })) : [{ key: "l0", productId: null, cases: 1 }]));
   const [source, setSource] = useState<{ kind: OrderSource; name?: string; text?: string; url?: string; read?: ReadOrder }>(() => ({ kind: order?.source ?? "app", name: order?.sourceName, text: order?.sourceText }));
@@ -41,6 +42,7 @@ export function OrderEditor({ order }: { order?: StoreOrder }) {
     if (r.store) setStore(r.store);
     if (r.due) setDue(r.due);
     if (r.ref) setRef(r.ref);
+    if (r.salesOrder) setSalesOrder(r.salesOrder);
     if (r.lines.length) setLines(r.lines.map((l, i) => ({ key: `r${i}`, productId: l.productId, cases: l.cases, how: l.how })));
   };
   const onPdf = async (file: File) => {
@@ -65,8 +67,8 @@ export function OrderEditor({ order }: { order?: StoreOrder }) {
     for (const l of valid) merged.set(l.productId!, (merged.get(l.productId!) ?? 0) + l.cases);
     const id = order?.id ?? nextOrderId(state.orders);
     const next: StoreOrder = {
-      ...order, id, store: store.trim(), client, due: due || undefined, ref: ref.trim() || undefined, notes: notes.trim() || undefined,
-      date: order?.date ?? today(), lines: [...merged].map(([productId, cases]) => ({ productId, cases })),
+      ...order, id, store: store.trim(), client, due: due || undefined, ref: ref.trim() || undefined, salesOrder: salesOrder.trim() || undefined, notes: notes.trim() || undefined,
+      date: order?.date ?? source.read?.date ?? today(), lines: [...merged].map(([productId, cases]) => ({ productId, cases })),
       status: "draft", source: source.kind, sourceName: source.name, sourceText: source.text || undefined,
       createdBy: order?.createdBy ?? me.name, createdAt: order?.createdAt ?? new Date().toISOString(),
     };
@@ -97,6 +99,7 @@ export function OrderEditor({ order }: { order?: StoreOrder }) {
           </label>
           <label className="fact"><span>Due date</span><input className="input" type="date" value={due} onChange={e => setDue(e.target.value)} /></label>
           <label className="fact"><span>Store's PO / slip no.</span><input className="input" value={ref} onChange={e => setRef(e.target.value)} placeholder="optional" /></label>
+          <label className="fact"><span>Brand's sales order no.</span><input className="input" value={salesOrder} onChange={e => setSalesOrder(e.target.value)} placeholder="optional" /></label>
         </div>
         <div className="field">
           <span>Products and cases</span>

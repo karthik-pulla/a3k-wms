@@ -4,6 +4,7 @@ import type { Shipment } from "../../store/types";
 import { LinesEditor } from "../../components/LinesEditor";
 import { useToast } from "../../components/Toast";
 import { go } from "../../router";
+import { SplitPallets } from "./Receiving";
 
 /** An expected delivery: edit what's coming, then mark it as arrived to move it to Pending. */
 /** canReceive: coordinators and owners confirm what arrived (the quantities); others can look */
@@ -26,8 +27,9 @@ export function IncomingDetail({ shipment: s, who, canReceive }: { shipment: Shi
       </div>
       <div className="panel glass">
         <LinesEditor lines={s.lines} client={s.client} editable onChange={lines => save({ lines })} />
+        <div className="btns"><SplitPallets lines={s.lines} onChange={lines => save({ lines })} /></div>
         <div className="panel-foot">
-          <span className="muted small">Changes save as you type. Lines with the same pallet number are one mixed pallet.</span>
+          <span className="muted small">Changes save as you type. Lines with the same pallet number are one mixed pallet. What's here when it's marked arrived is kept as what was announced.</span>
           {!arriving && (canReceive ? <button className="btn primary" disabled={!ready} onClick={() => setArriving(true)}>Mark as arrived</button>
             : <span className="muted small">A coordinator confirms the quantities when it arrives.</span>)}
         </div>

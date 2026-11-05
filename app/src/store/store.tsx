@@ -9,15 +9,16 @@ import { describe } from "./audit";
 import { canSeeClient } from "../auth/permissions";
 import { nextOrderId, planOrder, putBack, statusOf, takeFrom } from "../outbound/plan";
 import { sampleChat } from "../chat/sampleChat";
-import { countReason } from "../../../server/src/shared/counts.ts";
 import { planMatches, type PalletPlan } from "./putaway";
+import { casesByProduct } from "../../../server/src/shared/receiving.ts";
+import { countReason } from "../../../server/src/shared/counts.ts";
 
 // Saved (encrypted) on this device until the server exists. "Reset sample data" in Settings starts over.
 
 type Action =
   | { type: "saveShipment"; shipment: Shipment }
   | { type: "receive"; id: string; by: string; condition: "ok" | "damaged" }
-  | { type: "putaway"; id: string; by: string; plan: PalletPlan[] }
+  | { type: "putaway"; id: string; by: string; plan: PalletPlan[]; difference?: string }
   | { type: "submitReturn"; request: ReturnRequest }
   | { type: "decideReturn"; id: string; by: string; approve: boolean; outcome?: ReturnOutcome; note: string }
   | { type: "reset" }
@@ -102,7 +103,8 @@ function reducer(state: State, a: Action): State {
     case "receive":
       return {
         ...state,
-        shipments: state.shipments.map(s => (s.id === a.id ? { ...s, status: "pending", receivedAt: now(), receivedBy: a.by, condition: a.condition } : s)),
+        // What was announced is kept apart from here on: Pending edits only what was received
+        shipments: state.shipments.map(s => (s.id === a.id ? { ...s, status: "pending", receivedAt: now(), receivedBy: a.by, condition: a.condition, announced: casesByProduct(s.lines) } : s)),
         movements: log([{ by: a.by, type: "receive", shipmentId: a.id, reason: a.condition === "damaged" ? "Arrived with damage" : "Arrived" }]),
       };
     case "putaway": {
@@ -122,7 +124,7 @@ function reducer(state: State, a: Action): State {
         ...state,
         tasks: [...tasks, ...state.tasks],
         shipments: state.shipments.map(x => (x.id === a.id
-          ? { ...x, status: "putaway", confirmedAt: now(), confirmedBy: a.by, putaway: a.plan.map(p => ({ pallet: p.pallet, slot: p.slot, reason: p.reason })) }
+          ? { ...x, status: "putaway", confirmedAt: now(), confirmedBy: a.by, putaway: a.plan.map(p => ({ pallet: p.pallet, slot: p.slot, reason: p.reason })), ...(a.difference ? { difference: a.difference } : {}) }
           : x)),
       };
     }

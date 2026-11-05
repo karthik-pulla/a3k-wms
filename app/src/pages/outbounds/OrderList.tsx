@@ -18,7 +18,7 @@ export function OrderList() {
   const mine = useMemo(() => state.orders.filter(o => canSeeClient(me, o.client)), [state.orders, me]);
   const count = (s: Show) => mine.filter(o => (s === "all" ? true : s === "active" ? isActive(o) : statusOf(o) === s)).length;
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const list = mine.filter(o => (show === "all" ? true : show === "active" ? isActive(o) : statusOf(o) === show) && words.every(w => `${o.id} ${o.store} ${o.client} ${o.ref ?? ""}`.toLowerCase().includes(w)))
+  const list = mine.filter(o => (show === "all" ? true : show === "active" ? isActive(o) : statusOf(o) === show) && words.every(w => `${o.id} ${o.store} ${o.client} ${o.ref ?? ""} ${o.salesOrder ?? ""}`.toLowerCase().includes(w)))
     .sort((a, b) => (isActive(a) ? 0 : 1) - (isActive(b) ? 0 : 1) || (isActive(a) ? (a.due ?? "9999").localeCompare(b.due ?? "9999") : (b.shippedAt ?? b.date).localeCompare(a.shippedAt ?? a.date)));
   return (
     <div className="stack">
@@ -43,7 +43,7 @@ export function OrderRow({ o }: { o: StoreOrder }) {
     <a className="row glass order-row" href={`#/outbounds/orders/${encodeURIComponent(o.id)}`}>
       <span className="order-who">
         <span className="order-name"><b>{o.id}</b> · {o.store}</span>
-        <small>{o.client} · {o.lines.length} product{o.lines.length === 1 ? "" : "s"} · {total} cs{o.ref ? ` · PO ${o.ref}` : ""}</small>
+        <small>{o.client} · {o.lines.length} product{o.lines.length === 1 ? "" : "s"} · {total} cs{o.ref ? ` · PO ${o.ref}` : ""}{o.salesOrder ? ` · SO ${o.salesOrder}` : ""}</small>
       </span>
       <span className={`due-tag ${dueTone(o)}`}>{dueText(o)}</span>
       <span className="order-prog">{["approved", "picking", "picked"].includes(s) ? <><span className="fill-bar"><i style={{ width: `${total ? (done / total) * 100 : 0}%` }} /></span><small>{done}/{total} picked{short ? ` · ${short} short` : ""}</small></> : null}</span>

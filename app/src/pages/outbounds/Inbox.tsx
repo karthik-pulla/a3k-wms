@@ -53,7 +53,7 @@ export function Inbox() {
     for (const l of r.lines) merged.set(l.productId, (merged.get(l.productId) ?? 0) + l.cases);
     const order: StoreOrder = {
       id, store: r.store ?? m.from.replace(/<.*>/, "").trim(), client: r.client ?? route.client ?? productById(r.lines[0].productId)!.client,
-      date: new Date().toISOString().slice(0, 10), due: r.due, ref: r.ref, lines: [...merged].map(([productId, cases]) => ({ productId, cases })),
+      date: r.date ?? new Date().toISOString().slice(0, 10), due: r.due, ref: r.ref, ...(r.salesOrder ? { salesOrder: r.salesOrder } : {}), lines: [...merged].map(([productId, cases]) => ({ productId, cases })),
       status: "draft", source: "email", sourceName: `${m.subject} (from ${m.from})`, sourceText: text,
       notes: r.unread.length ? `Lines not read from the email:\n${r.unread.join("\n")}` : undefined,
       createdBy: "Order inbox", createdAt: new Date().toISOString(),

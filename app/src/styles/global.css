@@ -307,6 +307,8 @@ select.input { padding-right: 6px; }
 .input.warn { border-color: var(--warn); }
 .input.expired { background: var(--expired-bg); color: var(--expired-ink); }
 .num-in { width: 86px; text-align: right; font-variant-numeric: tabular-nums; }
+.ti-hi { display: inline-flex; align-items: center; gap: 4px; }
+.ti-hi .num-in { width: 58px; }
 .field { display: grid; gap: 6px; font-size: 13.5px; }
 .field > span:first-child { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
 .field.inline { grid-template-columns: auto minmax(0, 260px); align-items: center; gap: 10px; }

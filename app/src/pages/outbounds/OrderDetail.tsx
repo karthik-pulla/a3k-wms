@@ -118,7 +118,7 @@ export function OrderDetail({ order: o }: { order: StoreOrder }) {
       <div className="panel glass order-head">
         <div className="order-title">
           <h2>{o.id} <span className="muted">· {o.store}</span></h2>
-          <p className="muted small">{o.client}{o.ref ? ` · PO ${o.ref}` : ""} · {SOURCE_LABEL[o.source ?? "app"]}{o.sourceName ? ` (${o.sourceName})` : ""} · ordered {fmtDay(o.date)}{o.approvedBy ? ` · approved by ${o.approvedBy}` : ""}</p>
+          <p className="muted small">{o.client}{o.ref ? ` · PO ${o.ref}` : ""}{o.salesOrder ? ` · SO ${o.salesOrder}` : ""} · {SOURCE_LABEL[o.source ?? "app"]}{o.sourceName ? ` (${o.sourceName})` : ""} · ordered {fmtDay(o.date)}{o.approvedBy ? ` · approved by ${o.approvedBy}` : ""}</p>
         </div>
         <div className="order-tags">
           <span className={`status-tag ${status}`}>{STATUS_LABEL[status]}</span>

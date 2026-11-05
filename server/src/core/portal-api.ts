@@ -13,6 +13,7 @@ import type { Sql } from "./db.ts";
 import { ApiError, bad, bool, int, notFound, obj, str, username as usernameOf } from "./errors.ts";
 import { portalInviteMail } from "./mail.ts";
 import { writeSystem } from "./sync.ts";
+import { spreadOverPallets } from "../shared/pallets.ts";
 import type { Result, TenantCtx } from "./tenant-api.ts";
 import { PORTAL_LIMITS, type ClientLoginView, type InviteInfo, type LinkResult, type PortalMe, type PortalProduct, type PortalSent, type TenantPublic } from "../shared/api.ts";
 
@@ -86,8 +87,8 @@ function linesOf(v: unknown) {
 }
 
 /** The client's own active products among `ids`; any other id (another client's, or none) is refused the same way */
-async function ownProducts(q: Sql, client: string, ids: string[]): Promise<Map<string, { id: string; code: string; name: string }>> {
-  const { rows } = await q.query("SELECT id, code, name FROM products WHERE active AND client = $1 AND id = ANY($2)", [client, [...new Set(ids)]]);
+async function ownProducts(q: Sql, client: string, ids: string[]): Promise<Map<string, { id: string; code: string; name: string; per_pallet: number | null }>> {
+  const { rows } = await q.query("SELECT id, code, name, per_pallet FROM products WHERE active AND client = $1 AND id = ANY($2)", [client, [...new Set(ids)]]);
   const by = new Map(rows.map(r => [r.id as string, r]));
   if (ids.some(id => !by.has(id))) throw bad("One of the products isn't on your list. Reload the page and try again.");
   return by;
@@ -220,17 +221,17 @@ export const PORTAL_METHODS: Record<string, Method> = {
     });
     if (asked.some(l => l.pallets > l.cases)) throw bad("Each pallet needs at least one case");
     if (asked.reduce((s, l) => s + l.pallets, 0) > PORTAL_LIMITS.pallets) throw bad(`At most ${PORTAL_LIMITS.pallets} pallets in one delivery`);
-    // One line per pallet, as the warehouse records a delivery; a line's cases are shared out over its pallets
-    const lines: { key: string; productId: string; cases: number; pallet: number; lot: string; bestBefore: string }[] = [];
-    for (const l of asked) {
-      const each = Math.floor(l.cases / l.pallets), extra = l.cases % l.pallets;
-      for (let p = 0; p < l.pallets; p++) lines.push({ key: `p${lines.length + 1}`, productId: l.productId, cases: each + (p < extra ? 1 : 0), pallet: lines.length + 1, lot: l.lot, bestBefore: l.bestBefore });
-    }
     const key = await ctx.env.db.tx(async q => {
       await lockSaves(q);
       const dup = (await q.query("SELECT entity_key FROM portal_submissions WHERE account_id = $1 AND request_id = $2", [c.id, requestId])).rows[0];
       if (dup) return dup.entity_key as string;
-      const by = await ownProducts(q, c.client, lines.map(l => l.productId));
+      const by = await ownProducts(q, c.client, asked.map(l => l.productId));
+      // One line per pallet, as the warehouse records a delivery: full pallets of the product's size first when that's
+      // how many pallets the client says, otherwise the cases shared out evenly (shared/pallets.ts)
+      const lines: { key: string; productId: string; cases: number; pallet: number; lot: string; bestBefore: string }[] = [];
+      for (const l of asked) {
+        for (const cases of spreadOverPallets(l.cases, l.pallets, by.get(l.productId)?.per_pallet)) lines.push({ key: `p${lines.length + 1}`, productId: l.productId, cases, pallet: lines.length + 1, lot: l.lot, bestBefore: l.bestBefore });
+      }
       // The next delivery number (In-bounds → New delivery counts the same way), and its id "<client>-<number>"
       let n = Math.max(1000, Number((await q.query("SELECT coalesce(max(substring(data->>'number' from '^(\\d{1,9})$')::int), 0) AS n FROM entities WHERE kind = 'shipment' AND data IS NOT NULL")).rows[0].n)) + 1;
       const idOf = (num: number) => `${c.client}-${num}`.toLowerCase().replace(/[^a-z0-9-]+/g, "-");

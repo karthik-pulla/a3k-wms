@@ -6,6 +6,7 @@
 import { forbidden } from "./errors.ts";
 import { allows, type BaseRole, type Permissions } from "../shared/permissions.ts";
 import { idOf, kindOf, type Change, type Kind } from "../shared/sync.ts";
+import { casesByProduct, receivingDifferences } from "../shared/receiving.ts";
 import { countNote } from "../shared/counts.ts";
 
 export interface CheckWho { personId: string | null; base: BaseRole; perms: Permissions; clients: string[] | null }
@@ -309,7 +310,7 @@ async function orderUnpick(c: Ctx) {
 
 // ---------- Deliveries ----------
 /** What happened on the dock and at confirmation stays as it was when a delivery's details are edited */
-const SHIPMENT_FIXED = ["status", "receivedAt", "receivedBy", "condition", "confirmedAt", "confirmedBy", "putaway", "returnId"];
+const SHIPMENT_FIXED = ["status", "receivedAt", "receivedBy", "condition", "announced", "difference", "confirmedAt", "confirmedBy", "putaway", "returnId"];
 function shipment(c: Ctx): Piece {
   const p = one(c, "shipment", "delivery");
   if (!p.after || p.after.id !== p.id) throw no("A delivery needs its id");
@@ -326,7 +327,9 @@ function saveShipment(c: Ctx) {
 function receive(c: Ctx) {
   onlyKinds(c, ["shipment", "movement", "audit"]);
   const { id, before: b, after: a } = shipment(c);
-  if (!b || b.status !== "incoming" || a.status !== "pending" || !onlyChanged(b, a, ["status", "receivedAt", "receivedBy", "condition"])) throw no("Marking a delivery arrived changes only its status");
+  if (!b || b.status !== "incoming" || a.status !== "pending" || !onlyChanged(b, a, ["status", "receivedAt", "receivedBy", "condition", "announced"])) throw no("Marking a delivery arrived changes only its status");
+  // What was announced is the delivery's lines as they were when it arrived (devices from before this kept nothing)
+  if (a.announced !== undefined && !same(a.announced, casesByProduct(Array.isArray(b.lines) ? b.lines : []))) throw no("What was announced is what the delivery said before it arrived");
   for (const m of c.of("movement")) if (!m.after || m.after.type !== "receive" || m.after.shipmentId !== id) throw no("The movement log doesn't match this change");
 }
 
@@ -334,7 +337,10 @@ function receive(c: Ctx) {
 function putaway(c: Ctx) {
   onlyKinds(c, ["shipment", "task", "audit"]);
   const { id, before: s, after: a } = shipment(c);
-  if (!s || s.status !== "pending" || a.status !== "putaway" || !onlyChanged(s, a, ["status", "confirmedAt", "confirmedBy", "putaway"])) throw no("Confirming a delivery changes only its status and plan");
+  if (!s || s.status !== "pending" || a.status !== "putaway" || !onlyChanged(s, a, ["status", "confirmedAt", "confirmedBy", "putaway", "difference"])) throw no("Confirming a delivery changes only its status and plan");
+  // Received cases that differ from what was announced are confirmed with a reason
+  if (a.difference !== undefined && (typeof a.difference !== "string" || !a.difference.trim() || a.difference.length > 500)) throw no("The reason for a difference is a short text");
+  if (receivingDifferences(s.announced, Array.isArray(s.lines) ? s.lines : []).length && !a.difference) throw no("What was received differs from what was announced: give the reason");
   const plan: any[] = Array.isArray(a.putaway) ? a.putaway : [];
   const tasks = c.of("task");
   if (!tasks.length || tasks.length !== plan.length || new Set(plan.map(p => p.pallet)).size !== plan.length) throw no("Confirming a delivery makes one task per pallet");
