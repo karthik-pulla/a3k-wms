@@ -117,8 +117,12 @@ export const OPS_METHODS: Record<string, Method> = {
     if ((await ctx.platform.query("SELECT 1 FROM tenants WHERE id = $1", [id])).rows.length) throw new ApiError(409, "conflict", `There's already a warehouse called ${id}`);
     const hosts = strList(i.hosts, "Addresses", 5).map(h => h.toLowerCase());
     if (!hosts.length) throw bad("Give the warehouse at least one address");
+    // Made from a visit request (Visits → Create the warehouse): checked first, linked once the warehouse is started
+    const visitId = i.visitId === undefined || i.visitId === null ? null : Number(i.visitId);
+    if (visitId !== null && (!Number.isInteger(visitId) || !(await ctx.platform.query("SELECT 1 FROM visit_requests WHERE id = $1 AND tenant_id IS NULL", [visitId])).rows.length)) throw bad("That visit request isn't there, or already has a warehouse");
     const job = await ctx.creator.start({ id, name: str(i.name, "Name", { max: 80 }), hosts });
-    await audit(ctx.platform, o.name, "started creating a warehouse", id, { hosts, job: job.job });
+    if (visitId !== null) await ctx.platform.query("UPDATE visit_requests SET tenant_id = $2, status = 'booked', updated_at = now(), updated_by = $3 WHERE id = $1", [visitId, id, o.name]);
+    await audit(ctx.platform, o.name, "started creating a warehouse", id, { hosts, job: job.job, ...(visitId !== null ? { visit: visitId } : {}) });
     return ok(job);
   },
   "tenants.job": async (i, ctx) => { await operator(ctx); return ok(await ctx.creator.status(str(i.job, "Job", { max: 300 }))); },

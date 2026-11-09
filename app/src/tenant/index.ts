@@ -16,6 +16,8 @@ export interface Tenant {
   seed: Seed | null;
   /** Stock to start a new vault with, e.g. A3K's last stock sheets for testing on this computer (never on GitHub) */
   stock: Record<string, StockLine[]> | null;
+  /** With the server: "setup" while the warehouse is being set up (practice data allowed, the setup page), then "live" */
+  setup?: "setup" | "live";
 }
 
 // In development, hot reload runs this file again: keep the loaded warehouse (screens still use it), then reload the page
@@ -65,7 +67,7 @@ export async function loadTenant(id = tenantId()): Promise<Tenant> {
 }
 
 /** Signed in with the server: the settings and products come from the warehouse's own database */
-export function setServerTenant(t: { id: string; config: TenantConfig; products: Product[]; logos: Record<string, Logo>; seed: Seed | null }): Tenant {
+export function setServerTenant(t: { id: string; config: TenantConfig; products: Product[]; logos: Record<string, Logo>; seed: Seed | null; setup?: "setup" | "live" }): Tenant {
   if (t.config.schemaVersion !== 1) throw new Error(`This app can't read settings version ${t.config.schemaVersion}`);
   current = { ...t, layout: buildLayout(t.config.layout), stock: null };
   applyTenant(current);

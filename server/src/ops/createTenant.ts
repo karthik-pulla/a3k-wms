@@ -19,6 +19,7 @@ import { ROLE_LIMITS, migrationsDir } from "../migrate/main.ts";
 import { readMigrations } from "../migrate/files.ts";
 import { migrateDatabase } from "../migrate/runner.ts";
 import { normalizeHost } from "../tenancy.ts";
+import { startSetup } from "../core/setup.ts";
 
 /** Tenant IDs: lower-case letters, digits and dashes, starting with a letter (also the subdomain) */
 export function checkTenantId(id: string): string {
@@ -96,6 +97,8 @@ async function main() {
       // 4b. The tenant's tables (same files the migration loop runs everywhere), and its starting settings
       await migrateDatabase(tenantConn, readMigrations(join(migrationsDir(), "tenant")));
       await tenantConn.query("INSERT INTO settings (key, value, updated_by) VALUES ('config', $1, 'create-tenant')", [JSON.stringify(starterConfig(id, name))]);
+      // A new warehouse starts in setup mode (practice data allowed until it goes live)
+      await tenantConn.query("INSERT INTO settings (key, value, updated_by) VALUES ('setup', $1, 'create-tenant')", [JSON.stringify(startSetup(new Date().toISOString()))]);
     } finally {
       await tenantConn.end();
     }

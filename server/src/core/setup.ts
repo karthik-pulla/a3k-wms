@@ -1,11 +1,12 @@
 // Setting a warehouse up (onboarding, docs/multi-tenant-design.md section 8): its settings and logos as our team
 // prepared them, its products, and its opening stock. Owners do it from the Team page (Data), usually with our
 // team on site. Stock goes in through the same sync as every other change (core/sync.ts), so every device gets it.
-import type { Db } from "./db.ts";
+import type { Db, Sql } from "./db.ts";
 import { ApiError, bad } from "./errors.ts";
 import { addProducts, type ProductRow } from "./products.ts";
 import { writeSystem } from "./sync.ts";
 import { PRODUCT_LIMITS } from "../shared/products.ts";
+import { buildLayout, layoutProblems, type LayoutConfig } from "../shared/layout.ts";
 
 export const IMPORT_LIMITS = { products: 20_000, stockLines: 20_000, settingsBytes: 2_000_000, logosBytes: 6_000_000 } as const;
 
@@ -37,7 +38,17 @@ export async function setupStatus(db: Db) {
   ]);
   const by = new Map(cfg.rows.map(r => [r.key, r]));
   const when = (k: string) => (by.get(k) ? { at: new Date(by.get(k).updated_at).toISOString(), by: by.get(k).updated_by } : null);
-  return { config: when("config"), logos: when("logos"), products: products.rows[0].n, stockLocations: stock.rows[0].n, stockLines: stock.rows[0].lines, people: people.rows[0].n };
+  const c = (await db.query("SELECT value FROM settings WHERE key = 'config'")).rows[0]?.value;
+  const extra = await db.query(`SELECT
+      (SELECT count(*)::int FROM people WHERE status = 'invited') AS invited,
+      (SELECT count(*)::int FROM entities WHERE kind = 'count' AND data IS NOT NULL AND data->>'status' = 'closed') AS counts,
+      (SELECT count(*)::int FROM entities WHERE kind = 'order' AND data IS NOT NULL AND data->>'status' = 'shipped') AS shipped`).catch(() => ({ rows: [{ invited: 0, counts: 0, shipped: 0 }] }));
+  const x = extra.rows[0];
+  return {
+    config: when("config"), logos: when("logos"), products: products.rows[0].n, stockLocations: stock.rows[0].n, stockLines: stock.rows[0].lines, people: people.rows[0].n,
+    racks: Array.isArray(c?.layout?.racks) ? c.layout.racks.length : 0, clients: Array.isArray(c?.clients) ? c.clients.length : 0,
+    invited: x.invited, closedCounts: x.counts, shippedOrders: x.shipped, setup: await setupState(db),
+  };
 }
 
 /**
@@ -45,8 +56,9 @@ export async function setupStatus(db: Db) {
  * or as an owner changed them in Manage warehouse (name, racks). Once set, the slot code format is the Lattice
  * team's to change (setCodeFormat), never an owner's: every saved location depends on it.
  */
-export async function saveSettings(db: Db, by: string, input: { config?: unknown; logos?: unknown }) {
+export async function saveSettings(db: Db, by: string, input: { config?: unknown; logos?: unknown; reason?: unknown }): Promise<{ saved: string[]; layoutChanged: boolean; reason?: string }> {
   const writes: [string, unknown][] = [];
+  let layoutChanged = false, reason: string | undefined;
   if (input.config !== undefined) {
     const c = input.config;
     if (!isObj(c) || !isObj(c.layout) || !Array.isArray(c.clients) || !isObj(c.branding)) throw bad("That isn't a warehouse settings file (config.json): it needs layout, clients and branding");
@@ -54,6 +66,18 @@ export async function saveSettings(db: Db, by: string, input: { config?: unknown
     const cur = (await db.query("SELECT value FROM settings WHERE key = 'config'")).rows[0]?.value;
     if (cur?.layout?.codeFormat && same(cur.layout.codeFormat) !== same(c.layout.codeFormat))
       throw new ApiError(403, "forbidden", "The slot code format is set by the Lattice team. Ask them to change it (Manage warehouse → Racks).");
+    layoutChanged = same(cur?.layout ?? null) !== same(c.layout);
+    if (layoutChanged) {
+      // A layout that can be read, and that still has every location holding stock or promised to an open task
+      const held = await heldLocations(db);
+      const problems = layoutProblems(c.layout, held);
+      if (problems.length) throw new ApiError(409, "conflict", problems.slice(0, 8).join("; ") + (problems.length > 8 ? "; …" : ""), { problems });
+      // Once the warehouse is live, a change to racks people rely on needs a reason (security log); the first racks don't
+      if (Array.isArray(cur?.layout?.racks) && cur.layout.racks.length && (await setupState(db)).mode === "live") {
+        reason = typeof input.reason === "string" ? input.reason.trim().replace(/\s+/g, " ") : "";
+        if (reason.length < 3 || reason.length > 300) throw bad("Say why the racks changed (3–300 characters)");
+      }
+    }
     writes.push(["config", c]);
   }
   if (input.logos !== undefined) {
@@ -69,7 +93,99 @@ export async function saveSettings(db: Db, by: string, input: { config?: unknown
       await q.query("INSERT INTO settings_history (key, value, changed_by) VALUES ($1, $2, $3)", [key, JSON.stringify(value), by]);
     }
   });
-  return { saved: writes.map(w => w[0]) };
+  return { saved: writes.map(w => w[0]), layoutChanged, ...(reason ? { reason } : {}) };
+}
+
+// ---------- Layout checks (the same rules as the app's layout editor: shared/layout.ts) ----------
+/** Every location that holds stock or that an open task comes from or goes to */
+export async function heldLocations(db: Sql): Promise<string[]> {
+  const [stock, tasks] = await Promise.all([
+    db.query("SELECT substr(key, 7) AS loc FROM entities WHERE kind = 'stock' AND data IS NOT NULL AND jsonb_array_length(data) > 0"),
+    db.query("SELECT data->>'from' AS f, data->>'to' AS t FROM entities WHERE kind = 'task' AND data IS NOT NULL AND data->>'status' IN ('open', 'doing')"),
+  ]);
+  return [...new Set([...stock.rows.map(r => String(r.loc)), ...tasks.rows.flatMap(r => [r.f, r.t]).filter(Boolean).map(String)])];
+}
+
+// ---------- Setup mode (docs/multi-tenant-design.md section 8) ----------
+// A new warehouse starts in setup mode: practice deliveries, orders and stock are fine and can be cleared; going
+// live ends it for good. A warehouse with no setup record (made before this existed) is live.
+export interface SetupState { mode: "setup" | "live"; since?: string; liveAt?: string; liveBy?: string; ticks?: Record<string, { at: string; by: string }> }
+/** The setup record a new warehouse starts with (ops/createTenant.ts and the preview) */
+export const startSetup = (at: string): SetupState => ({ mode: "setup", since: at });
+export async function setupState(db: Sql): Promise<SetupState> {
+  const v = (await db.query("SELECT value FROM settings WHERE key = 'setup'")).rows[0]?.value;
+  return isObj(v) && (v.mode === "setup" || v.mode === "live") ? (v as SetupState) : { mode: "live" };
+}
+async function writeSetup(q: Sql, s: SetupState, by: string) {
+  await q.query("INSERT INTO settings (key, value, updated_by) VALUES ('setup', $1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by", [JSON.stringify(s), by]);
+  await q.query("INSERT INTO settings_history (key, value, changed_by) VALUES ('setup', $1, $2)", [JSON.stringify(s), by]);
+}
+/** Steps on the setup page that people tick themselves (the rest are worked out from the data) */
+export const SETUP_TICKS = ["survey", "labels", "training"] as const;
+export async function tickSetup(db: Db, by: string, step: unknown, done: unknown): Promise<SetupState> {
+  if (typeof step !== "string" || !(SETUP_TICKS as readonly string[]).includes(step)) throw bad("Unknown setup step");
+  return db.tx(async q => {
+    const s = await setupState(q);
+    if (s.mode !== "setup") throw new ApiError(409, "conflict", "This warehouse is already live");
+    const ticks = { ...(s.ticks ?? {}) };
+    if (done === true) ticks[step] = { at: new Date().toISOString(), by }; else delete ticks[step];
+    const next = { ...s, ticks };
+    await writeSetup(q, next, by);
+    return next;
+  });
+}
+
+/** Practice data: everything people did while learning, as opposed to the warehouse's settings, products and people */
+const PRACTICE: readonly string[] = ["order", "shipment", "task", "return", "count", "countentry", "inbox"];
+
+/**
+ * Setup mode only: starts the practice over. Stock, deliveries, orders, tasks, returns and counts go; settings,
+ * products, people and messages stay. The stock history and change log are permanent, so they say what was cleared.
+ */
+export async function clearPractice(db: Db, who: { id: string; name: string }): Promise<{ cleared: number; stockLocations: number }> {
+  return db.tx(async q => {
+    if ((await setupState(q)).mode !== "setup") throw new ApiError(409, "conflict", "Practice data can only be cleared before the warehouse goes live");
+    const { rows } = await q.query("SELECT key, kind, data FROM entities WHERE data IS NOT NULL AND (kind = ANY($1) OR kind = 'stock')", [[...PRACTICE]]);
+    const at = new Date().toISOString(), stamp = Date.parse(at).toString(36);
+    const changes: { key: string; data: unknown }[] = rows.map(r => ({ key: String(r.key), data: null }));
+    let n = 0, locations = 0;
+    for (const r of rows) {
+      if (r.kind !== "stock" || !Array.isArray(r.data) || !r.data.length) continue;
+      locations++;
+      for (const l of r.data) changes.push({ key: `movement:M-practice-${stamp}-${++n}`, data: { id: `M-practice-${stamp}-${n}`, at, by: who.name, type: "adjustment", location: String(r.key).slice(6), productId: l.productId, cases: l.cases, reason: "Practice data cleared before go-live (removed)" } });
+    }
+    changes.push({ key: `audit:A-practice-${stamp}`, data: { id: `A-practice-${stamp}`, at, byId: who.id, by: who.name, area: "data", action: `Cleared the practice data: ${rows.length} record${rows.length === 1 ? "" : "s"}, stock on ${locations} location${locations === 1 ? "" : "s"}` } });
+    await writeSystem(q, changes, who.name, "setup.clearPractice");
+    return { cleared: rows.length, stockLocations: locations };
+  });
+}
+
+/**
+ * Ends setup mode for good. With `clearActivity`, practice orders, deliveries, tasks, returns and the inbox go; the
+ * stock stays (it should be the approved go-live count) and so do counts. Needs racks and products first.
+ */
+export async function goLive(db: Db, who: { id: string; name: string }, input: { clearActivity?: unknown }): Promise<{ live: SetupState; cleared: number }> {
+  return db.tx(async q => {
+    const s = await setupState(q);
+    if (s.mode !== "setup") throw new ApiError(409, "conflict", "This warehouse is already live");
+    const cfg = (await q.query("SELECT value FROM settings WHERE key = 'config'")).rows[0]?.value;
+    if (!Array.isArray(cfg?.layout?.racks) || !cfg.layout.racks.length) throw bad("Add the racks first (Manage warehouse → Racks)");
+    if (!(await q.query("SELECT 1 FROM products WHERE active LIMIT 1")).rows.length) throw bad("Load the products first");
+    const at = new Date().toISOString(), stamp = Date.parse(at).toString(36);
+    const changes: { key: string; data: unknown }[] = [];
+    let cleared = 0;
+    if (input.clearActivity === true) {
+      const kinds = PRACTICE.filter(k => k !== "count" && k !== "countentry");
+      const { rows } = await q.query("SELECT key FROM entities WHERE data IS NOT NULL AND kind = ANY($1)", [kinds]);
+      for (const r of rows) changes.push({ key: String(r.key), data: null });
+      cleared = rows.length;
+    }
+    changes.push({ key: `audit:A-live-${stamp}`, data: { id: `A-live-${stamp}`, at, byId: who.id, by: who.name, area: "data", action: `Went live${cleared ? `, clearing ${cleared} practice record${cleared === 1 ? "" : "s"} (orders, deliveries, tasks, returns)` : ""}` } });
+    await writeSystem(q, changes, who.name, "setup.goLive");
+    const live: SetupState = { ...s, mode: "live", liveAt: at, liveBy: who.name };
+    await writeSetup(q, live, who.name);
+    return { live, cleared };
+  });
 }
 
 /** A stable id for a product that came without one (from the .xlsx template): its client and full description */
@@ -129,6 +245,13 @@ export async function importStock(db: Db, who: { id: string; name: string }, inp
       bestBefore: bb ? bb.slice(0, 7) : undefined, arrived: arrived || undefined,
     };
   });
+  // Every location must be one the warehouse has (a typo would put stock where no screen shows it)
+  const cfg = (await db.query("SELECT value FROM settings WHERE key = 'config'")).rows[0]?.value;
+  if (!isObj(cfg?.layout?.codeFormat)) throw bad("Save the warehouse's racks first: stock goes into its slots");
+  let L: ReturnType<typeof buildLayout>;
+  try { L = buildLayout(cfg.layout as LayoutConfig); } catch { throw bad("The warehouse's racks can't be read: fix them first"); }
+  const wrong = [...new Set(checked.map(l => l.location))].filter(loc => L.normalize(loc) !== loc);
+  if (wrong.length) throw bad(`Locations this warehouse doesn't have: ${wrong.slice(0, 10).join(", ")}${wrong.length > 10 ? "…" : ""}`);
   const productIds = [...new Set(checked.map(l => l.productId))];
   const known = new Set((await db.query("SELECT id FROM products WHERE active AND id = ANY($1)", [productIds])).rows.map(r => r.id));
   const unknown = productIds.filter(id => !known.has(id));

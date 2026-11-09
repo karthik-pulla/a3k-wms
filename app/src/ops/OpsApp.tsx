@@ -129,7 +129,7 @@ function Shell({ me, onSignOut }: { me: OperatorMe; onSignOut: () => void }) {
         <div className="ops-me"><span className="avatar" aria-hidden="true">{initials(me.name)}</span><span><b translate="no">{me.name}</b><small className="muted block" translate="no">@{me.username}</small></span><button className="link" onClick={onSignOut}>Sign out</button></div>
       </nav>
       <main className="ops-main">
-        {page === "visits" ? <VisitsPage /> : page === "team" ? <TeamPage me={me} /> : page === "activity" ? <ActivityPage /> : page === "errors" ? <ErrorsPage /> : page === "new" ? <NewWarehouse /> : <WarehousesPage open={page === "warehouses" ? id : undefined} />}
+        {page === "visits" ? <VisitsPage /> : page === "team" ? <TeamPage me={me} /> : page === "activity" ? <ActivityPage /> : page === "errors" ? <ErrorsPage /> : page === "new" ? <NewWarehouse visitId={id ? Number(id) : undefined} /> : <WarehousesPage open={page === "warehouses" ? id : undefined} />}
       </main>
     </div>
   );
@@ -338,12 +338,12 @@ function CodeFormatSection({ tenantId }: { tenantId: string }) {
   );
 }
 
-function RestoreForm({ tenantId, owner, onCancel, onDone }: { tenantId: string; owner: PersonView | null; onCancel: () => void; onDone: (l: LinkResult, who: string, kind: "invite" | "reset") => void }) {
+function RestoreForm({ tenantId, owner, initial, onCancel, onDone }: { tenantId: string; owner: PersonView | null; initial?: { name: string; username: string; email: string; reason: string }; onCancel?: () => void; onDone: (l: LinkResult, who: string, kind: "invite" | "reset") => void }) {
   const act = useAction();
-  const [reason, setReason] = useState("");
-  const [name, setName] = useState("");
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
+  const [reason, setReason] = useState(initial?.reason ?? "");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [username, setUsername] = useState(initial?.username ?? "");
+  const [email, setEmail] = useState(initial?.email ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ok = reason.trim().length >= 5 && (owner || (name.trim() && /^[a-z0-9][a-z0-9._-]{1,39}$/.test(username)));
@@ -367,7 +367,7 @@ function RestoreForm({ tenantId, owner, onCancel, onDone }: { tenantId: string; 
         </>}
       <label className="field"><span>Why (kept in both logs)</span><input className="input" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Lost her phone, called from the office number" /></label>
       {error && <p className="note warn" role="alert">{error}</p>}
-      <div className="btns"><button type="button" className="btn small" onClick={onCancel}>Cancel</button><button className="btn small primary" disabled={!ok || busy}>{owner ? "Send a new sign-in link" : "Invite"}</button></div>
+      <div className="btns">{onCancel && <button type="button" className="btn small" onClick={onCancel}>Cancel</button>}<button className="btn small primary" disabled={!ok || busy}>{owner ? "Send a new sign-in link" : "Invite"}</button></div>
     </form>
   );
 }
@@ -401,9 +401,14 @@ function AskSupport({ tenantId, emergency, onCancel, onDone }: { tenantId: strin
 }
 
 // ---------- New warehouse ----------
-function NewWarehouse() {
+function NewWarehouse({ visitId }: { visitId?: number }) {
   const act = useAction();
+  const visits = useApiData<VisitView[]>(visitId ? "visits.list" : null);
+  const visit = visitId ? visits.data?.find(v => v.id === visitId) ?? null : null;
   const [name, setName] = useState("");
+  const [invited, setInvited] = useState<{ link: LinkResult; who: string } | null>(null);
+  // From a visit request: its company name, once the list has loaded
+  useEffect(() => { if (visit) setName(n => n || visit.company); }, [visit]);
   const [id, setId] = useState("");
   const [touched, setTouched] = useState(false);
   const [job, setJob] = useState<string | null>(null);
@@ -424,13 +429,14 @@ function NewWarehouse() {
     e.preventDefault();
     if (!ok) return;
     setError(null);
-    const r = await act<{ job: string }>("tenants.create", { id: slug, name: name.trim(), hosts: [host] });
+    const r = await act<{ job: string }>("tenants.create", { id: slug, name: name.trim(), hosts: [host], ...(visit ? { visitId: visit.id } : {}) });
     if (!r.ok) { setError(r.error); return; }
     setJob(r.value.job); void poll(r.value.job);
   };
   return (
     <>
-      <header className="ops-head"><div><h1>New warehouse</h1><p className="muted">After the contract is signed. Creates its own database, login, encryption key and address; then invite its first owner.</p></div></header>
+      <header className="ops-head"><div><h1>New warehouse</h1><p className="muted">After the contract is signed. Creates its own database, login, encryption key and address; then invite its first owner. It starts in setup mode, with the owner's "Get started" steps.</p></div></header>
+      {visit && <section className="panel glass ops-new"><p className="small">From the visit request of <b translate="no">{visit.name}</b> ({visit.company}, {visit.email}).{visit.tenantId ? ` It already has a warehouse: ${visit.tenantId}.` : ""}</p></section>}
       <section className="panel glass ops-new">
         {!job ? (
           <form className="form-stack" onSubmit={submit}>
@@ -444,7 +450,16 @@ function NewWarehouse() {
           <div className="form-stack">
             <p><b>{state?.state === "done" ? "Created." : state?.state === "failed" ? "It didn't work." : "Creating…"}</b> {state?.detail ?? ""}</p>
             {state?.state === "failed" && <p className="muted small">Nothing half-made is left behind: fix the problem (the task's log has details) and try again.</p>}
-            {state?.state === "done" && <><p className="muted small">Next: open it in Warehouses and invite its first owner. The setup checklist is there too.</p><a className="btn primary" href={`#/warehouses/${slug}`}>Open {name.trim()}</a></>}
+            {state?.state === "done" && <>
+              {invited
+                ? <LinkPanel link={invited.link.link} emailed={invited.link.emailed} who={invited.who} kind="invite" onClose={() => setInvited(null)} />
+                : <>
+                  <p className="muted small">Next: invite its first owner. They get a link to choose a password and connect their phone.</p>
+                  <RestoreForm tenantId={slug} owner={null} onDone={(link, who) => setInvited({ link, who })}
+                    initial={visit ? { name: visit.name, email: visit.email, username: visit.email.split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 40), reason: `First owner, from visit request ${visit.id}` } : undefined} />
+                </>}
+              <a className="btn" href={`#/warehouses/${slug}`}>Open {name.trim()}</a>
+            </>}
           </div>
         )}
       </section>
@@ -523,14 +538,18 @@ function VisitsPage() {
                   {open === v.id && (
                     <div className="visit-detail" onClick={e => e.stopPropagation()}>
                       {v.when && <p className="small">When suits: {v.when}</p>}
+                      <VisitFacts v={v} />
                       {v.message && <p className="small visit-message">{v.message}</p>}
+                      {v.tenantId
+                        ? <p className="small">Warehouse: <a className="link" href={`#/warehouses/${v.tenantId}`} translate="no">{v.tenantId}</a></p>
+                        : <div className="btns"><a className="btn small primary" href={`#/new/${v.id}`}>Create the warehouse</a><span className="muted small">After the visit and the signed contract.</span></div>}
                       <label className="field"><span>Status</span><select className="input" value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value as VisitView["status"] })}>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
                       <label className="field"><span>Notes</span><textarea className="input" rows={3} value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })} /></label>
                       <div className="btns"><button className="btn small" onClick={() => setOpen(null)}>Cancel</button><button className="btn small primary" onClick={() => void save(v.id)}>Save</button></div>
                     </div>
                   )}
                 </td>
-                <td translate="no">{[v.location, v.size].filter(Boolean).join(" · ") || "—"}</td>
+                <td translate="no">{[v.location, v.size || v.details.positions, v.details.racks ? `${v.details.racks} racks` : ""].filter(Boolean).join(" · ") || "—"}</td>
                 <td>{STATUS[v.status]}{v.updatedBy ? <span className="muted small"><br />{v.updatedBy}</span> : null}</td>
               </tr>
             ))}</tbody>
@@ -538,6 +557,19 @@ function VisitsPage() {
         )}
       </section>
     </>
+  );
+}
+
+/** The intake's answers about the warehouse (core/site.ts INTAKE) */
+const INTAKE_LABELS: Record<string, string> = { role: "Role", racks: "Racks", positions: "Pallet positions", staff: "People on the floor", clients: "Brands or clients", products: "Products", system: "Tracks stock with", start: "Wants to start" };
+function VisitFacts({ v }: { v: VisitView }) {
+  const facts = Object.entries(INTAKE_LABELS).filter(([k]) => (v.details as Record<string, unknown>)[k]);
+  if (!facts.length && !v.details.orders?.length) return null;
+  return (
+    <dl className="facts visit-facts">
+      {facts.map(([k, label]) => <div className="fact" key={k}><dt>{label}</dt><dd translate="no">{String((v.details as Record<string, unknown>)[k])}</dd></div>)}
+      {!!v.details.orders?.length && <div className="fact"><dt>Orders arrive by</dt><dd>{v.details.orders.join(", ")}</dd></div>}
+    </dl>
   );
 }
 

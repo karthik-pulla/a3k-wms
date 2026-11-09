@@ -7,7 +7,9 @@ import { accept, browser, fails, ownerSignedIn } from "./warehouse.ts";
 
 const A3K = join(import.meta.dirname, "../../app/public/tenants/a3k");
 const json = (f: string) => JSON.parse(readFileSync(join(A3K, f), "utf8"));
-const CONFIG = { branding: { appTitle: "Bravo Warehouse", mark: "BW" }, layout: { racks: [] }, clients: [{ id: "Sunfield", name: "Sunfield" }, { id: "Lotus", name: "Lotus" }] };
+const FMT = { slot: "{face}-{col}-L{level}-B{bay}", floor: "{face}-FLOOR-P{n}", areaSpot: "{area}-P{n}", rackDigits: 2, colDigits: 2, spotDigits: 2, acceptUnpadded: true };
+const LAYOUT = { codeFormat: FMT, shapes: { standard: { levels: [1, 2, 3, 4], bays: 2 } }, defaultShape: "standard", racks: [{ id: "1", sides: "AB", columns: 2 }], areas: [{ id: "RECEIVING", name: "Receiving dock" }], receivingArea: "RECEIVING" };
+const CONFIG = { branding: { appTitle: "Bravo Warehouse", mark: "BW" }, layout: LAYOUT, clients: [{ id: "Sunfield", name: "Sunfield" }, { id: "Lotus", name: "Lotus" }] };
 
 test("A3K loads as a warehouse: its settings, logos and all 480 products from the team's files", async () => {
   const w = await ownerSignedIn();
@@ -83,11 +85,11 @@ test("only owners set the warehouse up, with their password again", async () => 
 test("the slot code format is the Lattice team's: owners can't change it, the team can until stock is saved", async () => {
   const w = await ownerSignedIn();
   const fmt = { slot: "{face}-{col}-L{level}-B{bay}", floor: "{face}-FLOOR-P{n}", areaSpot: "{area}-{n}", rackDigits: 2, colDigits: 2, spotDigits: 2, acceptUnpadded: true };
-  const config = { ...CONFIG, layout: { racks: [], codeFormat: fmt } };
+  const config = { ...CONFIG, layout: { ...LAYOUT, codeFormat: fmt } };
   await w.owner.call("setup.saveSettings", { config });
   // The owner may change the name or racks, never the codes
   assert.deepEqual((await w.owner.call("setup.saveSettings", { config: { ...config, branding: { appTitle: "Bravo North", mark: "BN" } } })).saved, ["config"]);
-  await fails(w.owner.call("setup.saveSettings", { config: { ...config, layout: { racks: [], codeFormat: { ...fmt, slot: "{face}{col}{level}{bay}" } } } }), "forbidden");
+  await fails(w.owner.call("setup.saveSettings", { config: { ...config, layout: { ...LAYOUT, codeFormat: { ...fmt, slot: "{face}{col}{level}{bay}" } } } }), "forbidden");
   // The team (ops console → setCodeFormat): checked, then saved while there's no stock
   const { setCodeFormat, codeFormatProblems } = await import("../src/core/setup.ts");
   assert.ok(codeFormatProblems({ ...fmt, slot: "{face}-{col}" }).some(p => p.includes("{level}")));
@@ -101,4 +103,75 @@ test("the slot code format is the Lattice team's: owners can't change it, the te
   await w.owner.call("setup.importStock", { lines: [{ location: "01A-01-1-1", productId: "S1", cases: 4 }] }).catch(() => null);
   await w.owner.call("sync.push", { clientId: "device-test-9999", clientSeq: 1, type: "stock/adjust", at: "2026-10-16T12:00:00.000Z", changes: [{ key: "stock:X-1", base: 0, data: [{ productId: "S1", cases: 1 }] }] });
   await assert.rejects(setCodeFormat(w.db, "Ops", fmt), /already has stock/);
+});
+
+test("a layout change never strands stock: the server refuses racks, columns or levels that hold stock or an open task", async () => {
+  const w = await ownerSignedIn();
+  await w.owner.call("setup.saveSettings", { config: CONFIG });
+  await w.owner.call("setup.importProducts", { products: [{ id: "S1", client: "Sunfield", code: "1001", name: "Rice" }] });
+  // Stock only goes where the warehouse has a location
+  await fails(w.owner.call("setup.importStock", { lines: [{ location: "01A-09-L1-B1", productId: "S1", cases: 3 }] }), "bad-request");
+  await w.owner.call("setup.importStock", { lines: [{ location: "01B-02-L4-B2", productId: "S1", cases: 3 }, { location: "RECEIVING-P01", productId: "S1", cases: 1 }] });
+  const conflict = async (layout: unknown, what: RegExp) => assert.rejects(w.owner.call("setup.saveSettings", { config: { ...CONFIG, layout } }), (e: any) => e.code === "conflict" && what.test(e.message));
+  await conflict({ ...LAYOUT, racks: [] }, /01B-02-L4-B2/);                                            // the rack
+  await conflict({ ...LAYOUT, racks: [{ id: "1", sides: "A", columns: 2 }] }, /01B-02-L4-B2/);          // its side
+  await conflict({ ...LAYOUT, racks: [{ id: "1", sides: "AB", columns: 1 }] }, /01B-02-L4-B2/);         // the column
+  await conflict({ ...LAYOUT, shapes: { standard: { levels: [1, 2, 3], bays: 2 } } }, /no longer exist/); // the level
+  await conflict({ ...LAYOUT, areas: [{ id: "DOCK", name: "Dock" }], receivingArea: "DOCK" }, /RECEIVING-P01/); // the floor area
+  // Mistakes the app couldn't draw
+  await conflict({ ...LAYOUT, racks: [{ id: "1", sides: "AB", columns: 2 }, { id: "01", sides: "C", columns: 1 }] }, /listed twice/);
+  await conflict({ ...LAYOUT, racks: [{ id: "1", sides: "AB", columns: 2, columnShapes: { "2": "tall" } }] }, /unknown column type/);
+  await conflict({ ...LAYOUT, receivingArea: "NOWHERE" }, /receiving/);
+  // Adding is always fine, and so is a column type exception that keeps the stocked slot
+  const grown = { ...LAYOUT, shapes: { ...LAYOUT.shapes, top: { levels: [3, 4], bays: 3 } }, racks: [{ id: "1", sides: "AB", columns: 3, columnShapes: { "2": "top" } }, { id: "2", sides: "A", columns: 4 }] };
+  assert.equal((await w.owner.call("setup.saveSettings", { config: { ...CONFIG, layout: grown }, reason: "Rack 2 added" })).layoutChanged, true);
+});
+
+test("setup mode: ticks, starting the practice over, and going live for good", async () => {
+  const w = await ownerSignedIn();
+  const { startSetup } = await import("../src/core/setup.ts");
+  await w.db.query("INSERT INTO settings (key, value, updated_by) VALUES ('setup', $1, 'test')", [JSON.stringify(startSetup("2026-11-01T00:00:00.000Z"))]);
+  assert.equal((await w.owner.call("tenant.config")).setup, "setup");
+  await fails(w.owner.call("setup.goLive", {}), "bad-request"); // no racks yet
+  await w.owner.call("setup.saveSettings", { config: CONFIG });
+  await fails(w.owner.call("setup.goLive", {}), "bad-request"); // no products yet
+  await w.owner.call("setup.importProducts", { products: [{ id: "S1", client: "Sunfield", code: "1001", name: "Rice" }] });
+  assert.equal((await w.owner.call("setup.tick", { step: "labels", done: true })).ticks.labels.by, "Maya");
+  await fails(w.owner.call("setup.tick", { step: "anything", done: true }), "bad-request");
+  // Practice: stock and an order, then start over
+  await w.owner.call("setup.importStock", { lines: [{ location: "01A-01-L1-B1", productId: "S1", cases: 8 }] });
+  await w.owner.call("sync.push", { clientId: "device-test-0001", clientSeq: 1, type: "order/save", at: "2026-11-02T12:00:00.000Z", changes: [{ key: "order:SO-1", base: 0, data: { id: "SO-1", status: "draft", client: "Sunfield", store: "Practice", lines: [] } }] }).catch(() => null);
+  const r = await w.owner.call("setup.clearPractice", {});
+  assert.equal(r.stockLocations, 1);
+  const status = await w.owner.call("setup.status");
+  assert.equal(status.stockLocations, 0);
+  assert.equal(status.setup.mode, "setup");
+  const rows = (await w.owner.call("sync.pull", { since: 0 })).rows;
+  assert.ok(rows.some((x: any) => x.key.startsWith("movement:M-practice-") && /Practice data cleared/.test(x.data.reason)), "the stock history says what was cleared");
+  assert.ok(rows.some((x: any) => x.key.startsWith("audit:") && /Cleared the practice data/.test(x.data.action)));
+  // The go-live count's stock stays; then setup mode ends for good
+  await w.owner.call("setup.importStock", { lines: [{ location: "01A-01-L1-B1", productId: "S1", cases: 5 }] });
+  const live = await w.owner.call("setup.goLive", { clearActivity: true });
+  assert.equal(live.live.mode, "live");
+  assert.equal((await w.owner.call("setup.status")).stockLocations, 1);
+  assert.equal((await w.owner.call("tenant.config")).setup, "live");
+  await fails(w.owner.call("setup.goLive", {}), "conflict");
+  await fails(w.owner.call("setup.clearPractice", {}), "conflict");
+  // Live: changing the racks needs a reason, which goes in the security log
+  const more = { ...LAYOUT, racks: [...LAYOUT.racks, { id: "2", sides: "A", columns: 1 }] };
+  await fails(w.owner.call("setup.saveSettings", { config: { ...CONFIG, layout: more } }), "bad-request");
+  await w.owner.call("setup.saveSettings", { config: { ...CONFIG, layout: more }, reason: "New rack 2 installed" });
+  const log = await w.owner.call("security.list");
+  assert.ok(log.entries.some((e: any) => e.action === "changed the racks and saved the warehouse settings" && e.detail?.reason === "New rack 2 installed"));
+  // A warehouse made before setup mode existed counts as live
+  const old = await ownerSignedIn();
+  assert.equal((await old.owner.call("tenant.config")).setup, "live");
+});
+
+test("only owners clear practice data or go live", async () => {
+  const w = await ownerSignedIn();
+  const inv = await w.owner.call("people.invite", { name: "Leo", username: "leo", roleId: "coordinator" });
+  const leo = browser(w.ctx);
+  await accept(leo, inv.link);
+  for (const m of ["setup.clearPractice", "setup.goLive", "setup.tick"]) await fails(leo.call(m, { step: "labels", done: true }), "forbidden");
 });

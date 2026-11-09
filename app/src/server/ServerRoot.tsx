@@ -42,9 +42,9 @@ export default function ServerRoot() {
   /** Signed in: the warehouse's settings and products from its database, then the app */
   const open = useCallback(async (me: Me) => {
     // The server says which warehouse this is (the preview: the one the app was built for)
-    const [{ config, logos }, products, seed] = await Promise.all([api("tenant.config"), api("tenant.products"), preview ? fetchSeed() : Promise.resolve(null)]);
+    const [{ config, logos, setup }, products, seed] = await Promise.all([api("tenant.config"), api("tenant.products"), preview ? fetchSeed() : Promise.resolve(null)]);
     if (!config) throw new Error("This warehouse has no settings yet. The WMS team sets them up during onboarding.");
-    setServerTenant({ id: me.tenant.id || tenantId(), config, products, logos: logos ?? {}, seed });
+    setServerTenant({ id: me.tenant.id || tenantId(), config, products, logos: logos ?? {}, seed, setup: setup === "setup" ? "setup" : "live" });
     // Loaded only now: these read the settings when they load
     const [{ sampleState: rawSample, emptyState: rawEmpty }, { SyncEngine }, { idbStorage }, { syncReduce, migrate }, { blankState, diff }, { deviceId }, { groupsFor }] = await Promise.all([
       import("../store/sample"), import("../sync/engine"), import("../sync/idb"), import("../store/store"), import("../sync/entities"), import("../sync/context"), import("../auth/accountUser"),

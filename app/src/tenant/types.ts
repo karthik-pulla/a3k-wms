@@ -11,51 +11,8 @@ export interface ClientConfig {
   defaultSupplier?: string;
 }
 
-/** One kind of column: which levels it has (L1 is the bottom beam) and how many bays (pallets side by side) per level. */
-export interface ColumnShape { levels: number[]; bays: number }
-
-export interface RackConfig {
-  /** As people say it: "6", "0", "D6", "1518". Numbers up to `codeFormat.rackDigits` digits are zero-padded in codes ("06") */
-  id: string;
-  /** Shown in place of "Rack 06", e.g. "Door 6", "Junction 15/18" */
-  name?: string;
-  /** Each letter is one side of the rack, e.g. "AB" */
-  sides: string;
-  columns: number;
-  /** Column shape for every column (default: layout.defaultShape) */
-  shape?: string;
-  /** Columns with another shape, by column number, e.g. { "12": "top" } */
-  columnShapes?: Record<string, string>;
-  /** A small rack bridging two others (shown apart on maps) */
-  junction?: boolean;
-}
-
-export interface AreaConfig { id: string; name: string }
-
-export interface LayoutConfig {
-  codeFormat: {
-    /** Tokens: {face} (rack + side), {col}, {level}, {bay} */
-    slot: string;
-    /** A floor spot in front of a rack side. Tokens: {face}, {n} */
-    floor: string;
-    /** A spot in a named floor area; must start with {area}. The area's ID alone is also a valid location. Tokens: {area}, {n} */
-    areaSpot: string;
-    /** Rack numbers with at most this many digits are zero-padded to it ("6" → "06") */
-    rackDigits: number;
-    colDigits: number;
-    spotDigits: number;
-    /** Also read codes typed without the padding ("6B-8-L3-B1") */
-    acceptUnpadded: boolean;
-  };
-  shapes: Record<string, ColumnShape>;
-  defaultShape: string;
-  /** In the order they're shown and walked */
-  racks: RackConfig[];
-  /** Floor areas with no racks (coolers, lanes, the receiving floor) */
-  areas: AreaConfig[];
-  /** Where delivered pallets wait before put-away (an area ID) */
-  receivingArea: string;
-}
+export type { ColumnShape, RackConfig, AreaConfig, LayoutConfig } from "../../../server/src/shared/layout.ts";
+import type { LayoutConfig } from "../../../server/src/shared/layout.ts";
 
 /** One label sheet, in millimetres */
 export interface LabelSheetConfig {

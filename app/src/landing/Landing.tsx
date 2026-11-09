@@ -285,33 +285,65 @@ function Visit() {
   );
 }
 
+const ORDER_WAYS: [string, string][] = [["email", "Email"], ["pdf", "PDF order slips"], ["phone", "Phone"], ["paper", "Paper"], ["portal", "A website or portal"], ["edi", "EDI"]];
+const SYSTEMS = ["Google Sheets or Excel", "Paper", "Another WMS", "Accounting software (QuickBooks…)", "Something else"];
+const STARTS = ["As soon as possible", "Within 1–3 months", "In 3–6 months", "Just looking"];
+
+/** "Book a visit": a short intake in three steps, so our team plans the visit (and the setup) before driving out */
 function VisitForm() {
-  const [f, setF] = useState({ name: "", company: "", email: "", message: "", website: "" });
+  const [f, setF] = useState({ name: "", company: "", email: "", phone: "", role: "", location: "", racks: "", positions: "", staff: "", clients: "", products: "", system: "", orders: [] as string[], start: "", when: "", message: "", website: "" });
+  const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
+  type Field = Exclude<keyof typeof f, "orders">;
+  const set = (k: Field) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim());
-  const ok = f.name.trim().length >= 2 && f.company.trim().length >= 2 && emailOk;
+  const contactOk = f.name.trim().length >= 2 && f.company.trim().length >= 2 && emailOk;
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ok || busy) return;
+    if (step < 2) { if (contactOk) setStep(step + 1); return; }
+    if (!contactOk || busy) return;
     setBusy(true); setError(null);
-    try { await siteApi("visit.request", f); setDone(true); }
+    const { racks, positions, staff, clients, products, system, orders, start, role, ...base } = f;
+    try { await siteApi("visit.request", { ...base, size: positions, details: { role, racks, positions, staff, clients, products, system, orders, start } }); setDone(true); }
     catch (err) { setError(err instanceof ApiCallError ? err.message : "Couldn't send it. Try again in a moment."); }
     finally { setBusy(false); }
   };
-  if (done) return <p className="lp-done" role="status">Thank you. We'll be in touch to find a day.</p>;
+  if (done) return <p className="lp-done" role="status">Thank you. We'll be in touch to find a day, and we'll come ready for your racks.</p>;
+  const input = (k: Field, label: string, extra: React.InputHTMLAttributes<HTMLInputElement> = {}) => <input className="input" aria-label={label} placeholder={label} value={f[k]} onChange={set(k)} {...extra} />;
   return (
     <form className="lp-form" onSubmit={submit} noValidate>
-      <input className="input" aria-label="Your name" placeholder="Your name" autoComplete="name" value={f.name} onChange={set("name")} />
-      <input className="input" aria-label="Warehouse or company" placeholder="Warehouse or company" autoComplete="organization" value={f.company} onChange={set("company")} />
-      <input className={`input${f.email && !emailOk ? " invalid" : ""}`} aria-label="Email" placeholder="Email" type="email" autoComplete="email" value={f.email} onChange={set("email")} />
-      <textarea className="input" aria-label="Anything we should know (optional)" placeholder="Anything we should know (optional)" rows={3} value={f.message} onChange={set("message")} />
+      <p className="lp-small lp-steps" aria-live="polite">Step {step + 1} of 3 · {["About you", "Your warehouse", "The visit"][step]}</p>
+      {step === 0 && <>
+        {input("name", "Your name", { autoComplete: "name" })}
+        {input("company", "Warehouse or company", { autoComplete: "organization" })}
+        <input className={`input${f.email && !emailOk ? " invalid" : ""}`} aria-label="Email" placeholder="Email" type="email" autoComplete="email" value={f.email} onChange={set("email")} />
+        {input("phone", "Phone (optional)", { type: "tel", autoComplete: "tel" })}
+        {input("role", "Your role (optional), e.g. owner, manager")}
+      </>}
+      {step === 1 && <>
+        {input("location", "Where the warehouse is (town or address)")}
+        <div className="lp-two">{input("racks", "Number of racks", { inputMode: "numeric" })}{input("positions", "Pallet positions (roughly)")}</div>
+        <div className="lp-two">{input("staff", "People on the floor", { inputMode: "numeric" })}{input("clients", "Brands or clients you store")}</div>
+        {input("products", "Products (SKUs), roughly")}
+        <select className="input" aria-label="How stock is tracked today" value={f.system} onChange={set("system")}><option value="">How do you track stock today?</option>{SYSTEMS.map(s => <option key={s} value={s}>{s}</option>)}</select>
+        <fieldset className="lp-checks"><legend className="lp-small">How do orders arrive?</legend>
+          {ORDER_WAYS.map(([id, label]) => <label key={id}><input type="checkbox" checked={f.orders.includes(id)} onChange={e => setF({ ...f, orders: e.target.checked ? [...f.orders, id] : f.orders.filter(x => x !== id) })} /> {label}</label>)}
+        </fieldset>
+      </>}
+      {step === 2 && <>
+        <select className="input" aria-label="When you'd like to start" value={f.start} onChange={set("start")}><option value="">When would you like to start?</option>{STARTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
+        {input("when", "Good days and times for a visit")}
+        <textarea className="input" aria-label="Anything we should know (optional)" placeholder="Anything we should know (optional)" rows={3} value={f.message} onChange={set("message")} />
+      </>}
       {/* Left empty by people; bots fill it in */}
       <label className="landing-hp" aria-hidden="true">Website<input tabIndex={-1} autoComplete="off" value={f.website} onChange={set("website")} /></label>
       {error && <p className="note warn" role="alert">{error}</p>}
-      <button className="btn primary" disabled={!ok || busy}>{busy ? "Sending…" : "Send"}</button>
+      <div className="lp-actions">
+        {step > 0 && <button type="button" className="btn" onClick={() => setStep(step - 1)}>Back</button>}
+        <button className="btn primary" disabled={!contactOk || busy}>{step < 2 ? "Next" : busy ? "Sending…" : "Send"}</button>
+      </div>
     </form>
   );
 }

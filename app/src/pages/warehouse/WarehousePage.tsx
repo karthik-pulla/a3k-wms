@@ -428,7 +428,7 @@ export function LogTab() {
           <tbody>{entries.map(e => (
             <tr key={e.id} className={/fail|wrong|turned off|emergency/.test(e.action) ? "warn" : undefined}>
               <td className="muted nowrap">{new Date(e.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</td>
-              <td translate="no">{e.actor}</td><td translate="no">{e.action}</td><td className="muted" translate="no">{e.target ?? ""}</td>
+              <td translate="no">{e.actor}</td><td translate="no">{e.action}</td><td className="muted" translate="no">{[e.target, typeof e.detail?.reason === "string" ? `Reason: ${e.detail.reason}` : ""].filter(Boolean).join(" · ")}</td>
             </tr>
           ))}</tbody>
         </table>

@@ -10,7 +10,7 @@ import { ApiError, bad, bool, email as emailOf, forbidden, int, notFound, obj, s
 import { inviteMail, type Mailer } from "./mail.ts";
 import { allows, cleanPermissions, effective, roleProblems, type Action, type BaseRole, type Permissions } from "../shared/permissions.ts";
 import { directory, pull, push, writeSystem, type SyncWho } from "./sync.ts";
-import { codeFormatStatus, importProducts, importStock, saveSettings, setCodeFormat, setupStatus } from "./setup.ts";
+import { clearPractice, codeFormatStatus, goLive, importProducts, importStock, saveSettings, setCodeFormat, setupState, setupStatus, tickSetup } from "./setup.ts";
 import { cleanProductText, productChanges, productEditProblems, PRODUCT_LIMITS, type ProductText } from "../shared/products.ts";
 import { clientLoginViews, portalEnv, portalLink } from "./portal-api.ts";
 import type { ClientLoginView, GrantView, InviteInfo, LinkResult, LogView, Me, PersonView, RequestView, RoleView, TenantPublic } from "../shared/api.ts";
@@ -45,6 +45,9 @@ interface Actor {
   base: BaseRole;
   perms: Permissions;
 }
+
+/** Who did it, for the stock history and change log: the person, or our team's support session */
+const whoOf = (a: Actor) => ({ id: a.person?.id ?? `support:${a.support?.grantId ?? "?"}`, name: a.name });
 
 async function actor(ctx: TenantCtx): Promise<Actor> {
   const s = await getSession(ctx.env, ctx.token);
@@ -229,7 +232,8 @@ export const TENANT_METHODS: Record<string, Method> = {
     await actor(ctx);
     const { rows } = await ctx.env.db.query("SELECT key, value FROM settings WHERE key IN ('config', 'logos')");
     const by = new Map(rows.map(r => [r.key, r.value]));
-    return ok({ config: by.get("config") ?? null, logos: by.get("logos") ?? {} });
+    // Whether it's still being set up (practice data allowed): every screen shows it
+    return ok({ config: by.get("config") ?? null, logos: by.get("logos") ?? {}, setup: (await setupState(ctx.env.db)).mode });
   },
   "tenant.products": async (_i, ctx) => {
     await actor(ctx);
@@ -266,8 +270,25 @@ export const TENANT_METHODS: Record<string, Method> = {
   "setup.status": async (_i, ctx) => { must(await actor(ctx), "manage-settings"); return ok(await setupStatus(ctx.env.db)); },
   "setup.saveSettings": async (i, ctx) => {
     const a = await actor(ctx); must(a, "manage-settings"); needConfirmed(ctx.env, a.session);
-    const r = await saveSettings(ctx.env.db, a.name, { config: i.config, logos: i.logos });
-    await log(ctx, ctx.env.db, { actor: a.name, action: "saved the warehouse settings", detail: { what: r.saved } });
+    const r = await saveSettings(ctx.env.db, a.name, { config: i.config, logos: i.logos, reason: i.reason });
+    await log(ctx, ctx.env.db, { actor: a.name, action: r.layoutChanged ? "changed the racks and saved the warehouse settings" : "saved the warehouse settings", detail: { what: r.saved, ...(r.reason ? { reason: r.reason } : {}) } });
+    return ok(r);
+  },
+  // Setup mode: the setup page's own ticks, starting the practice over, and going live (owners, password again)
+  "setup.tick": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-settings");
+    return ok(await tickSetup(ctx.env.db, a.name, i.step, i.done));
+  },
+  "setup.clearPractice": async (_i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-settings"); needConfirmed(ctx.env, a.session);
+    const r = await clearPractice(ctx.env.db, whoOf(a));
+    await log(ctx, ctx.env.db, { actor: a.name, action: "cleared the practice data", detail: r });
+    return ok(r);
+  },
+  "setup.goLive": async (i, ctx) => {
+    const a = await actor(ctx); must(a, "manage-settings"); needConfirmed(ctx.env, a.session);
+    const r = await goLive(ctx.env.db, whoOf(a), { clearActivity: i.clearActivity });
+    await log(ctx, ctx.env.db, { actor: a.name, action: "took the warehouse live", detail: { cleared: r.cleared } });
     return ok(r);
   },
   "setup.importProducts": async (i, ctx) => {
@@ -278,7 +299,7 @@ export const TENANT_METHODS: Record<string, Method> = {
   },
   "setup.importStock": async (i, ctx) => {
     const a = await actor(ctx); must(a, "manage-settings"); needConfirmed(ctx.env, a.session);
-    const r = await importStock(ctx.env.db, { id: a.person!.id, name: a.name }, { lines: i.lines, replace: i.replace });
+    const r = await importStock(ctx.env.db, whoOf(a), { lines: i.lines, replace: i.replace });
     await log(ctx, ctx.env.db, { actor: a.name, action: "loaded the opening stock", detail: r });
     return ok(r);
   },

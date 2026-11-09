@@ -13,11 +13,12 @@ import { LogsPage } from "../logs/LogsPage";
 import { WarehouseTab } from "./WarehouseTab";
 import { RacksTab } from "./RacksTab";
 import { ClientsTab } from "./ClientsTab";
+import { SetupGuide } from "./SetupGuide";
 import { useStore } from "../../store/store";
 import { warehouseName } from "../../store/warehouse";
 import type { GrantView, RequestView } from "../../../../server/src/shared/api.ts";
 
-const NAMES: Record<string, string> = { warehouse: "Warehouse", people: "People", racks: "Racks", clients: "Clients and carriers", logs: "Logs", support: "Support access", setup: "Setup" };
+const NAMES: Record<string, string> = { start: "Get started", warehouse: "Warehouse", people: "People", racks: "Racks", clients: "Clients and carriers", logs: "Logs", support: "Support access", setup: "Setup" };
 
 export function ManagePage({ parts }: { parts: string[] }) {
   const { me } = useSession();
@@ -25,12 +26,15 @@ export function ManagePage({ parts }: { parts: string[] }) {
   const { kind, me: serverMe } = useIdentity();
   const server = kind === "server";
   const people = server && !!serverMe?.can["manage-people"];
-  const [tab = "warehouse", sub] = parts;
+  // While the warehouse is being set up, owners (and our onboarding team) start on the setup steps
+  const settingUp = server && tenant().setup === "setup";
+  const [tab = settingUp ? "start" : "warehouse", sub] = parts;
   const requests = useApiData<RequestView[]>(people ? "requests.list" : null);
   const support = useApiData<GrantView[]>(people ? "support.list" : null);
   if (!can(me, "manage-settings")) return <main className="section"><div className="panel glass"><p>Managing the warehouse is for owners.</p>{can(me, "view-logs") && <a className="link" href="#/logs">Logs ›</a>}</div></main>;
   const waiting = (support.data ?? []).filter(g => g.status === "requested" || g.status === "active").length;
   const tabs = [
+    ...(settingUp ? [{ id: "start", label: "Get started" }] : []),
     { id: "warehouse", label: "Warehouse" }, { id: "people", label: "People", badge: requests.data?.length ?? 0 }, { id: "racks", label: "Racks" },
     { id: "clients", label: "Clients" }, { id: "logs", label: "Logs" },
     ...(people ? [{ id: "support", label: "Support", badge: waiting }, { id: "setup", label: "Setup" }] : []),
@@ -44,7 +48,8 @@ export function ManagePage({ parts }: { parts: string[] }) {
           <p className="crumb"><span translate="no">{warehouseName(state)}</span> · {NAMES[current]}</p>
         </header>
         <div className="team-body">
-          {current === "warehouse" ? <WarehouseTab />
+          {current === "start" ? <SetupGuide />
+            : current === "warehouse" ? <WarehouseTab />
             : current === "racks" ? <RacksTab />
             : current === "clients" ? <ClientsTab />
             : current === "logs" ? <>

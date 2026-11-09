@@ -54,6 +54,12 @@ test("a visit request is kept for the console and emailed to the team", async ()
   assert.deepEqual([v.company, v.email, v.size, v.when, v.status], ["Ridge Cold Store", "ravi@ridge.example", "2,000–5,000", "Weekday mornings", "new"]);
   assert.equal(s.mail.sent[0].to, "team@wms.example");
   assert.match(s.mail.sent[0].subject, /^Rackwise: visit request from Ridge Cold Store/);
+  // The intake's answers: kept when known, unknown ones and order ways dropped
+  await s.post("wms.example", "visit.request", { ...VISIT, details: { racks: "24", staff: "8", system: "Google Sheets", orders: ["email", "pdf", "fax"], favourite: "x" } }, "198.51.100.8");
+  const withDetails = (await listVisits(s.platform)).find(x => x.details.racks);
+  assert.deepEqual(withDetails?.details, { racks: "24", staff: "8", system: "Google Sheets", orders: ["email", "pdf"] });
+  assert.equal(withDetails?.tenantId, null);
+  assert.match(s.mail.sent.at(-1)!.text, /Number of racks: 24/);
   const done = await updateVisit(s.platform, "Sam", { id: v.id, status: "booked", notes: "Tuesday 10am" });
   assert.deepEqual([done.status, done.notes, done.updatedBy], ["booked", "Tuesday 10am", "Sam"]);
   await assert.rejects(updateVisit(s.platform, "Sam", { id: v.id, status: "maybe" }));

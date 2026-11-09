@@ -227,3 +227,15 @@ test("the console's own sign-in is separate: a warehouse login doesn't work ther
   assert.equal(created.job, "job-citycold");
   await fails(o.call("tenants.create", { id: "bravo", name: "Again", hosts: ["x.wms.test"] }), "conflict");
 });
+
+test("a warehouse made from a visit request is linked to it, once", async () => {
+  const o = await ops();
+  const { requestVisit, listVisits } = await import("../src/core/site.ts");
+  await requestVisit(o.platform, { name: "Ravi Patel", company: "Ridge Cold Store", email: "ravi@ridge.example" }, { mailer: o.mail, productName: "Lattice" });
+  const [v] = await listVisits(o.platform);
+  await fails(o.call("tenants.create", { id: "ridge", name: "Ridge", hosts: ["ridge.wms.test"], visitId: 999 }), "bad-request");
+  await o.call("tenants.create", { id: "ridge", name: "Ridge Cold Store", hosts: ["ridge.wms.test"], visitId: v.id });
+  const [after] = await listVisits(o.platform);
+  assert.deepEqual([after.tenantId, after.status], ["ridge", "booked"]);
+  await fails(o.call("tenants.create", { id: "ridge-two", name: "Again", hosts: ["ridge2.wms.test"], visitId: v.id }), "bad-request");
+});

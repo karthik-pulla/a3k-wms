@@ -18,6 +18,7 @@ import { callPortal, portalEnv, portalLink } from "../../../server/src/core/port
 import { totpAt, totpCounter, unseal } from "../../../server/src/core/crypto.ts";
 import { addProducts, type ProductRow } from "../../../server/src/core/products.ts";
 import { writeSystem } from "../../../server/src/core/sync.ts";
+import { startSetup } from "../../../server/src/core/setup.ts";
 import { requestVisit } from "../../../server/src/core/site.ts";
 import { tenantId } from "../tenant";
 import { DEMO_LOGINS } from "./demo";
@@ -302,7 +303,10 @@ export async function previewOps(method: string, input: Record<string, unknown>)
         // Creating a warehouse in the preview: a new PGlite database with the starter settings
         async start(t) {
           const config = { ...Object.values(starter)[0], tenant: { ...Object.values(starter)[0].tenant, id: t.id, name: t.name }, branding: { appTitle: t.name, mark: t.name.split(/\s+/).map(w => w[0]).join("").slice(0, 3).toUpperCase() } };
-          e.tenants.set(t.id, await openTenantDb(t.id, true, config, []));
+          const db = await openTenantDb(t.id, true, config, []);
+          // A new warehouse starts in setup mode, as on the real server (ops/createTenant.ts)
+          await db.query("INSERT INTO settings (key, value, updated_by) VALUES ('setup', $1, 'preview') ON CONFLICT (key) DO NOTHING", [JSON.stringify(startSetup(new Date().toISOString()))]);
+          e.tenants.set(t.id, db);
           await e.platform.query("INSERT INTO tenants (id, name, status, db_name, db_user, db_host, db_direct_host) VALUES ($1, $2, 'setup', $3, $3, 'preview', 'preview')", [t.id, t.name, `t_${t.id}`]);
           for (const h of t.hosts) await e.platform.query("INSERT INTO domains (host, tenant_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [h, t.id]);
           return { job: `preview-${t.id}` };
